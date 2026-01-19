@@ -80,6 +80,114 @@
       </section>
 
       <section class="section">
+        <h2>菜单配置</h2>
+
+        <!-- 选择文本菜单 -->
+        <div class="menu-config-group">
+          <h3>选择文本菜单</h3>
+          <p class="help-text">拖拽排序，点击开关启用/禁用菜单项</p>
+          <div class="menu-items-list" id="selectionMenuList">
+            <!-- 动态渲染菜单项 -->
+          </div>
+          <button class="btn btn-secondary btn-add-item" id="addSelectionItem">
+            <span class="btn-icon">+</span>
+            添加自定义项
+          </button>
+        </div>
+
+        <!-- 全局菜单 -->
+        <div class="menu-config-group">
+          <h3>全局菜单</h3>
+          <p class="help-text">拖拽排序，点击开关启用/禁用菜单项</p>
+          <div class="menu-items-list" id="globalMenuList">
+            <!-- 动态渲染菜单项 -->
+          </div>
+          <button class="btn btn-secondary btn-add-item" id="addGlobalItem">
+            <span class="btn-icon">+</span>
+            添加自定义项
+          </button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>截图设置</h2>
+        <div class="form-group checkbox-group" style="margin-top: 0; padding-top: 0; border-top: none;">
+          <label class="toggle-label">
+            <span class="toggle-text">自动保存截图</span>
+            <span class="toggle-switch">
+              <input type="checkbox" id="screenshotSaveToFile" checked>
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+          <p class="help-text">截图后自动保存到下载文件夹</p>
+        </div>
+        <div class="form-group checkbox-group">
+          <label class="toggle-label">
+            <span class="toggle-text">复制到剪贴板</span>
+            <span class="toggle-switch">
+              <input type="checkbox" id="screenshotCopyToClipboard">
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+          <p class="help-text">截图后自动复制到剪贴板</p>
+        </div>
+        <div class="form-group checkbox-group">
+          <label class="toggle-label">
+            <span class="toggle-text">启用 AI 分析</span>
+            <span class="toggle-switch">
+              <input type="checkbox" id="screenshotEnableAI" checked>
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+          <p class="help-text">在截图面板中显示"问AI"和"描述图片"按钮</p>
+        </div>
+        <div class="form-group">
+          <label for="screenshotDefaultAIAction">默认 AI 操作</label>
+          <select id="screenshotDefaultAIAction">
+            <option value="none">无</option>
+            <option value="ask">询问 AI</option>
+            <option value="describe">描述图片</option>
+          </select>
+          <p class="help-text">截图后自动执行的 AI 操作</p>
+        </div>
+
+        <div class="subsection">
+          <h3>图像生成设置</h3>
+          <div class="form-group checkbox-group" style="margin-top: 0; padding-top: 0; border-top: none;">
+            <label class="toggle-label">
+              <span class="toggle-text">启用 AI 生图</span>
+              <span class="toggle-switch">
+                <input type="checkbox" id="screenshotEnableImageGen">
+                <span class="toggle-slider"></span>
+              </span>
+            </label>
+            <p class="help-text">在截图面板中显示"AI生图"按钮</p>
+          </div>
+          <div class="form-group" id="imageGenProviderGroup">
+            <label for="imageGenProvider">图像生成服务</label>
+            <select id="imageGenProvider">
+              <option value="openai">OpenAI DALL-E</option>
+              <option value="custom">自定义</option>
+            </select>
+            <p class="help-text">使用 OpenAI 需要配置 API Key</p>
+          </div>
+          <div class="form-group" id="customImageGenUrlGroup" style="display: none;">
+            <label for="customImageGenUrl">自定义生图 API URL</label>
+            <input type="text" id="customImageGenUrl" placeholder="https://api.example.com/v1/images/generations">
+            <p class="help-text">支持 OpenAI 兼容格式的图像生成 API</p>
+          </div>
+          <div class="form-group" id="imageSizeGroup">
+            <label for="imageSize">生成图片尺寸</label>
+            <select id="imageSize">
+              <option value="1024x1024">1024 × 1024 (方形)</option>
+              <option value="1792x1024">1792 × 1024 (横向)</option>
+              <option value="1024x1792">1024 × 1792 (纵向)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
         <h2>快捷键</h2>
         <div class="form-group">
           <label>当前快捷键</label>
@@ -114,6 +222,51 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- Custom Menu Item Modal -->
+  <div class="modal-overlay" id="customItemModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">添加自定义菜单项</h3>
+        <button class="modal-close" id="modalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>图标</label>
+          <div class="icon-picker" id="iconPicker">
+            <!-- Icons will be rendered dynamically -->
+          </div>
+          <input type="hidden" id="selectedIcon" value="">
+        </div>
+        <div class="form-group">
+          <label for="customItemLabel">名称</label>
+          <input type="text" id="customItemLabel" placeholder="菜单项名称" maxlength="10">
+        </div>
+        <div class="form-group">
+          <label for="customItemAction">操作类型</label>
+          <select id="customItemAction">
+            <option value="customAI">自定义 AI 提示</option>
+            <option value="openUrl">打开链接</option>
+            <option value="copyText">复制文本</option>
+          </select>
+        </div>
+        <div class="form-group" id="customPromptGroup">
+          <label for="customPrompt">AI 提示词</label>
+          <textarea id="customPrompt" placeholder="请帮我...{text}..." rows="3"></textarea>
+          <p class="help-text">{text} 会被替换为选中的文本</p>
+        </div>
+        <div class="form-group" id="customUrlGroup" style="display: none;">
+          <label for="customUrl">链接地址</label>
+          <input type="text" id="customUrl" placeholder="https://...">
+          <p class="help-text">{text} 会被替换为选中的文本</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelCustomItem">取消</button>
+        <button class="btn btn-primary" id="saveCustomItem">保存</button>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="index.js"></script>
 </body>

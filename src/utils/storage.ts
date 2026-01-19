@@ -40,3 +40,11 @@ export async function getGlobalMenuItems(): Promise<MenuItem[]> {
   const data = await getStorageData();
   return data.globalMenuItems;
 }
+
+export async function saveSelectionMenuItems(items: MenuItem[]): Promise<void> {
+  await saveStorageData({ selectionMenuItems: items });
+}
+
+export async function saveGlobalMenuItems(items: MenuItem[]): Promise<void> {
+  await saveStorageData({ globalMenuItems: items });
+}

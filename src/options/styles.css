@@ -49,6 +49,16 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 
+.subsection {
+  @apply mt-6 pt-5;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.subsection h3 {
+  @apply text-sm font-medium mb-4;
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .form-group {
   @apply mb-5;
 }
@@ -253,4 +263,243 @@ body {
 
 .toast.error {
   border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Menu Configuration Styles */
+.menu-config-group {
+  @apply mb-6;
+}
+
+.menu-config-group:last-child {
+  @apply mb-0;
+}
+
+.menu-config-group h3 {
+  @apply text-sm font-medium mb-2;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.menu-items-list {
+  @apply flex flex-col gap-2 mb-4;
+}
+
+.menu-item-config {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-lg;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.15s ease;
+  cursor: grab;
+}
+
+.menu-item-config:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.menu-item-config.dragging {
+  @apply opacity-50;
+  cursor: grabbing;
+}
+
+.menu-item-config.drag-over {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.drag-handle {
+  @apply text-sm cursor-grab;
+  color: rgba(255, 255, 255, 0.3);
+  user-select: none;
+  letter-spacing: 1px;
+}
+
+.drag-handle:hover {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.item-icon {
+  @apply flex items-center justify-center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.item-label {
+  @apply flex-1 text-sm font-medium;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.item-action {
+  @apply text-xs px-2 py-0.5 rounded;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.item-actions {
+  @apply flex items-center gap-2;
+}
+
+.item-btn {
+  @apply p-1.5 rounded cursor-pointer border-none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  transition: all 0.15s ease;
+}
+
+.item-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.item-btn.delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* Small Toggle Switch for menu items */
+.toggle-switch.small {
+  width: 36px;
+  height: 20px;
+}
+
+.toggle-switch.small .toggle-slider::before {
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+}
+
+.toggle-switch.small input:checked + .toggle-slider::before {
+  transform: translateX(16px);
+}
+
+/* Add Item Button */
+.btn-add-item {
+  @apply w-full flex items-center justify-center gap-2;
+  border-style: dashed;
+}
+
+.btn-add-item .btn-icon {
+  @apply text-lg font-light;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  @apply fixed inset-0 flex items-center justify-center;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+
+.modal-overlay.show {
+  @apply opacity-100 visible;
+}
+
+.modal-content {
+  @apply w-full max-w-md mx-4 rounded-xl;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  transform: scale(0.95) translateY(-10px);
+  transition: transform 0.2s ease;
+}
+
+.modal-overlay.show .modal-content {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  @apply flex items-center justify-between px-5 py-4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.modal-header h3 {
+  @apply text-base font-semibold;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.modal-close {
+  @apply flex items-center justify-center w-8 h-8 rounded-full cursor-pointer border-none;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 20px;
+  transition: all 0.15s ease;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.modal-body {
+  @apply px-5 py-4;
+}
+
+.modal-body .form-group {
+  @apply mb-4;
+}
+
+.modal-body .form-group:last-child {
+  @apply mb-0;
+}
+
+.modal-body textarea {
+  @apply w-full px-3.5 py-2.5 rounded-lg text-sm text-white resize-none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.modal-body textarea:focus {
+  @apply outline-none border-blue-500;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.modal-footer {
+  @apply flex justify-end gap-3 px-5 py-4;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Icon Picker */
+.icon-picker {
+  @apply flex flex-wrap gap-2 p-3 rounded-lg;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.icon-option {
+  @apply flex items-center justify-center w-9 h-9 rounded-lg cursor-pointer;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.15s ease;
+}
+
+.icon-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.icon-option.selected {
+  @apply border-blue-500;
+  background: rgba(59, 130, 246, 0.2);
+  color: #fff;
+}
+
+.icon-option svg {
+  width: 18px;
+  height: 18px;
 }

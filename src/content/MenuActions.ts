@@ -1,18 +1,32 @@
-import { MenuItem, MenuConfig, Message } from '../types';
+import { MenuItem, MenuConfig, Message, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG } from '../types';
 import {
   callAI,
+  callVisionAI,
+  generateImage,
   getTranslatePrompt,
   getSummarizePrompt,
   getExplainPrompt,
   getRewritePrompt,
   getCodeExplainPrompt,
   getSummarizePagePrompt,
+  getDescribeImagePrompt,
+  getAskImagePrompt,
   OnChunkCallback,
 } from '../utils/ai';
+import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
+import { ScreenshotPanel } from './ScreenshotPanel';
+
+export interface ScreenshotFlowCallbacks {
+  onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+}
 
 export class MenuActions {
   private selectedText: string = '';
   private config: MenuConfig;
+  private screenshotSelector: ScreenshotSelector | null = null;
+  private screenshotPanel: ScreenshotPanel | null = null;
+  private currentScreenshotDataUrl: string = '';
+  private flowCallbacks: ScreenshotFlowCallbacks | null = null;
 
   constructor(config: MenuConfig) {
     this.config = config;
@@ -24,6 +38,10 @@ export class MenuActions {
 
   public setConfig(config: MenuConfig): void {
     this.config = config;
+  }
+
+  public setFlowCallbacks(callbacks: ScreenshotFlowCallbacks): void {
+    this.flowCallbacks = callbacks;
   }
 
   public async execute(
@@ -56,7 +74,7 @@ export class MenuActions {
       case 'history':
         return this.handleHistory();
       case 'screenshot':
-        return this.handleScreenshot();
+        return this.handleScreenshotFlow();
       case 'bookmark':
         return this.handleBookmark();
       case 'newTab':
@@ -203,12 +221,196 @@ export class MenuActions {
     return { type: 'redirect', url: 'chrome://history' };
   }
 
-  private async handleScreenshot(): Promise<{ type: string; result?: string }> {
+  private handleScreenshotFlow(): { type: string; result: string } {
+    // Start the screenshot selection flow
+    this.screenshotSelector = new ScreenshotSelector();
+    this.screenshotSelector.show({
+      onSelect: async (area: SelectionArea | null) => {
+        await this.captureAndShowPanel(area);
+      },
+      onCancel: () => {
+        this.flowCallbacks?.onToast('截图已取消', 'info');
+      },
+    });
+    return { type: 'silent', result: '' };
+  }
+
+  private async captureAndShowPanel(area: SelectionArea | null): Promise<void> {
     try {
-      await chrome.runtime.sendMessage({ type: 'SCREENSHOT' } as Message);
-      return { type: 'success', result: '截图已保存' };
-    } catch {
-      return { type: 'error', result: '截图失败' };
+      // Capture the visible tab
+      const response = await chrome.runtime.sendMessage({
+        type: 'CAPTURE_VISIBLE_TAB',
+      } as Message);
+
+      if (!response?.success || !response.dataUrl) {
+        this.flowCallbacks?.onToast('截图失败', 'error');
+        return;
+      }
+
+      let finalDataUrl = response.dataUrl;
+
+      // If area is specified, crop the image
+      if (area) {
+        finalDataUrl = await this.cropImage(response.dataUrl, area);
+      }
+
+      this.currentScreenshotDataUrl = finalDataUrl;
+      const screenshotConfig = this.config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
+
+      // Show the screenshot panel
+      this.screenshotPanel = new ScreenshotPanel();
+      this.screenshotPanel.show(finalDataUrl, {
+        onSave: () => this.saveScreenshot(),
+        onCopy: () => this.copyScreenshotToClipboard(),
+        onAskAI: (question) => this.askAIAboutImage(question),
+        onDescribe: () => this.describeImage(),
+        onGenerateImage: (prompt) => this.generateImageFromPrompt(prompt),
+        onClose: () => {
+          this.screenshotPanel = null;
+        },
+      }, screenshotConfig);
+
+    } catch (error) {
+      this.flowCallbacks?.onToast(`截图失败: ${error}`, 'error');
+    }
+  }
+
+  private async cropImage(dataUrl: string, area: SelectionArea): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+
+        // Account for device pixel ratio
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = area.width * dpr;
+        canvas.height = area.height * dpr;
+
+        ctx.drawImage(
+          img,
+          area.x * dpr,
+          area.y * dpr,
+          area.width * dpr,
+          area.height * dpr,
+          0,
+          0,
+          area.width * dpr,
+          area.height * dpr
+        );
+
+        const screenshotConfig = this.config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
+        resolve(canvas.toDataURL('image/png', screenshotConfig.imageQuality));
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = dataUrl;
+    });
+  }
+
+  private async saveScreenshot(): Promise<void> {
+    try {
+      const filename = `screenshot-${Date.now()}.png`;
+      await chrome.runtime.sendMessage({
+        type: 'DOWNLOAD_IMAGE',
+        payload: { dataUrl: this.currentScreenshotDataUrl, filename },
+      } as Message);
+      this.flowCallbacks?.onToast('截图已保存', 'success');
+    } catch (error) {
+      this.flowCallbacks?.onToast(`保存失败: ${error}`, 'error');
+    }
+  }
+
+  private async copyScreenshotToClipboard(): Promise<void> {
+    try {
+      const response = await fetch(this.currentScreenshotDataUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+      this.flowCallbacks?.onToast('已复制到剪贴板', 'success');
+    } catch (error) {
+      this.flowCallbacks?.onToast(`复制失败: ${error}`, 'error');
+    }
+  }
+
+  private async askAIAboutImage(question: string): Promise<void> {
+    if (!this.screenshotPanel) return;
+
+    this.screenshotPanel.showLoading('AI 正在分析...');
+
+    const prompt = getAskImagePrompt(question);
+    const response = await callVisionAI(
+      this.currentScreenshotDataUrl,
+      prompt,
+      this.config,
+      (chunk, fullText) => {
+        this.screenshotPanel?.streamUpdate(chunk, fullText);
+      }
+    );
+
+    if (response.success && response.result) {
+      this.screenshotPanel.showResult('AI 回答', response.result);
+    } else {
+      this.screenshotPanel.showResult('错误', response.error || 'AI 请求失败');
+    }
+  }
+
+  private async describeImage(): Promise<void> {
+    if (!this.screenshotPanel) return;
+
+    this.screenshotPanel.showLoading('AI 正在描述图片...');
+
+    const prompt = getDescribeImagePrompt();
+    const response = await callVisionAI(
+      this.currentScreenshotDataUrl,
+      prompt,
+      this.config,
+      (chunk, fullText) => {
+        this.screenshotPanel?.streamUpdate(chunk, fullText);
+      }
+    );
+
+    if (response.success && response.result) {
+      this.screenshotPanel.showResult('图片描述', response.result);
+    } else {
+      this.screenshotPanel.showResult('错误', response.error || 'AI 请求失败');
+    }
+  }
+
+  private async generateImageFromPrompt(prompt: string): Promise<void> {
+    if (!this.screenshotPanel) return;
+
+    const screenshotConfig = this.config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
+
+    if (!screenshotConfig.enableImageGen) {
+      this.screenshotPanel.showResult('错误', '请先在设置中启用 AI 生图功能');
+      return;
+    }
+
+    this.screenshotPanel.showLoading('正在生成图片...');
+
+    // First describe the current image to get context
+    const describeResponse = await callVisionAI(
+      this.currentScreenshotDataUrl,
+      '用简洁的英文描述这张图片的主要内容和风格特征，不超过100词。',
+      this.config
+    );
+
+    const imageContext = describeResponse.success ? describeResponse.result : '';
+    const fullPrompt = imageContext
+      ? `Based on this context: "${imageContext}". User request: ${prompt}`
+      : prompt;
+
+    const response = await generateImage(fullPrompt, this.config, screenshotConfig);
+
+    if (response.success && response.imageUrl) {
+      this.screenshotPanel.showGeneratedImage(response.imageUrl);
+    } else {
+      this.screenshotPanel.showResult('错误', response.error || '图像生成失败');
     }
   }
 

@@ -15,7 +15,8 @@
     "clipboardWrite",
     "clipboardRead",
     "bookmarks",
-    "scripting"
+    "scripting",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"

@@ -26,6 +26,10 @@ class TheCircle {
   constructor() {
     this.radialMenu = new RadialMenu();
     this.menuActions = new MenuActions(DEFAULT_CONFIG);
+    // Set up flow callbacks for screenshot and other async operations
+    this.menuActions.setFlowCallbacks({
+      onToast: (message, type) => this.showToast(message, type),
+    });
     this.init();
   }
 
@@ -210,6 +214,7 @@ class TheCircle {
       } else if (result.type === 'info') {
         this.showToast(result.result || '', 'info');
       }
+      // 'silent' and 'redirect' types don't show toast
     }
   }
 

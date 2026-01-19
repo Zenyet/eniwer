@@ -34,6 +34,12 @@ async function handleMessage(message: Message): Promise<unknown> {
     case 'SCREENSHOT':
       return handleScreenshot();
 
+    case 'CAPTURE_VISIBLE_TAB':
+      return handleCaptureVisibleTab();
+
+    case 'DOWNLOAD_IMAGE':
+      return handleDownloadImage(message.payload as { dataUrl: string; filename: string });
+
     case 'ADD_BOOKMARK':
       return handleAddBookmark(message.payload as { title: string; url: string });
 
@@ -103,17 +109,41 @@ async function handleNewTab(): Promise<{ success: boolean }> {
   }
 }
 
-async function handleScreenshot(): Promise<{ success: boolean; dataUrl?: string }> {
+async function handleScreenshot(): Promise<{ success: boolean; dataUrl?: string; error?: string }> {
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab();
-    // Download the screenshot
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = `screenshot-${Date.now()}.png`;
-    link.click();
+    // Download the screenshot using chrome.downloads API
+    const filename = `screenshot-${Date.now()}.png`;
+    await chrome.downloads.download({
+      url: dataUrl,
+      filename: filename,
+      saveAs: false,
+    });
     return { success: true, dataUrl };
-  } catch {
-    return { success: false };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+async function handleCaptureVisibleTab(): Promise<{ success: boolean; dataUrl?: string; error?: string }> {
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab();
+    return { success: true, dataUrl };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+async function handleDownloadImage(payload: { dataUrl: string; filename: string }): Promise<{ success: boolean; error?: string }> {
+  try {
+    await chrome.downloads.download({
+      url: payload.dataUrl,
+      filename: payload.filename,
+      saveAs: false,
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
   }
 }
 

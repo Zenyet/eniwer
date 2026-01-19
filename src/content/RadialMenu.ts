@@ -35,15 +35,29 @@ export class RadialMenu {
       this.hide();
     }
 
-    this.menuItems = items;
+    // Filter enabled items and sort by order
+    this.menuItems = items
+      .filter(item => item.enabled !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
     this.onSelect = onSelect;
     this.centerX = x;
     this.centerY = y;
     this.selectedIndex = -1;
     this.isVisible = true;
 
-    // Calculate dynamic radius based on viewport size
-    this.radius = Math.min(120, (Math.min(window.innerWidth, window.innerHeight) - 100) / 2);
+    // Calculate dynamic radius based on viewport size and item count
+    const baseRadius = Math.min(120, (Math.min(window.innerWidth, window.innerHeight) - 100) / 2);
+    // Reduce radius for fewer items to maintain a circular appearance
+    // With fewer items, a smaller radius keeps them closer together
+    const itemCount = this.menuItems.length;
+    if (itemCount <= 4) {
+      this.radius = baseRadius * 0.75;
+    } else if (itemCount <= 6) {
+      this.radius = baseRadius * 0.85;
+    } else {
+      this.radius = baseRadius;
+    }
 
     this.createOverlay();
     this.createMenu();
@@ -328,9 +342,14 @@ export class RadialMenu {
       itemEl.style.setProperty('--x', `${x}px`);
       itemEl.style.setProperty('--y', `${y}px`);
       itemEl.style.transform = `translate(${x}px, ${y}px)`;
+
+      // Use customIcon/customLabel if available
+      const displayIcon = item.customIcon || item.icon;
+      const displayLabel = item.customLabel || item.label;
+
       itemEl.innerHTML = `
-        <span class="thecircle-item-icon">${item.icon}</span>
-        <span class="thecircle-item-label">${item.label}</span>
+        <span class="thecircle-item-icon">${displayIcon}</span>
+        <span class="thecircle-item-label">${displayLabel}</span>
       `;
 
       this.container!.appendChild(itemEl);
@@ -394,19 +413,29 @@ export class RadialMenu {
 
     this.selectedIndex = index;
 
+    // Get center element
+    const center = this.container?.querySelector('.thecircle-center');
+
     // Highlight current item
     if (index >= 0 && index < this.menuItems.length) {
       const currentItem = this.container?.querySelector(`[data-index="${index}"]`);
       currentItem?.classList.add('thecircle-item-selected');
 
+      // Show center
+      center?.classList.add('thecircle-center-visible');
+
       // Update center label
       const centerLabel = this.container?.querySelector('.thecircle-center-label');
       const centerIcon = this.container?.querySelector('.thecircle-center-icon');
       if (centerLabel && centerIcon) {
-        centerLabel.textContent = this.menuItems[index].label;
-        centerIcon.innerHTML = this.menuItems[index].icon;
+        const item = this.menuItems[index];
+        centerLabel.textContent = item.customLabel || item.label;
+        centerIcon.innerHTML = item.customIcon || item.icon;
       }
     } else {
+      // Hide center
+      center?.classList.remove('thecircle-center-visible');
+
       // Reset center
       const centerLabel = this.container?.querySelector('.thecircle-center-label');
       const centerIcon = this.container?.querySelector('.thecircle-center-icon');

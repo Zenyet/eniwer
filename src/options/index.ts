@@ -1,14 +1,12 @@
 import './styles.css';
-import { getStorageData, saveConfig, saveSelectionMenuItems, saveGlobalMenuItems } from '../utils/storage';
-import { DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, DEFAULT_SCREENSHOT_CONFIG, MenuConfig, MenuItem, CustomMenuItem, ScreenshotConfig } from '../types';
+import { getStorageData, saveConfig, saveGlobalMenuItems } from '../utils/storage';
+import { DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SCREENSHOT_CONFIG, MenuConfig, MenuItem, CustomMenuItem, ScreenshotConfig } from '../types';
 import { icons, IconName } from '../icons';
 
 // Track current menu items state
-let selectionMenuItems: MenuItem[] = [];
 let globalMenuItems: MenuItem[] = [];
 
 // Modal state
-let currentMenuType: 'selection' | 'global' = 'selection';
 let editingItemId: string | null = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -21,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const apiKeyHelpText = document.getElementById('apiKeyHelpText') as HTMLParagraphElement;
   const useStreamingEl = document.getElementById('useStreaming') as HTMLInputElement;
   const preferredLanguageEl = document.getElementById('preferredLanguage') as HTMLSelectElement;
+  const popoverPositionEl = document.getElementById('popoverPosition') as HTMLSelectElement;
   const themeEl = document.getElementById('theme') as HTMLSelectElement;
   const saveBtn = document.getElementById('saveBtn');
   const resetBtn = document.getElementById('resetBtn');
@@ -46,11 +45,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const data = await getStorageData();
   const config = data.config;
   const screenshotConfig = config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
-  selectionMenuItems = data.selectionMenuItems;
   globalMenuItems = data.globalMenuItems;
 
   // Ensure all items have enabled and order fields (migration)
-  selectionMenuItems = migrateMenuItems(selectionMenuItems, DEFAULT_SELECTION_MENU);
   globalMenuItems = migrateMenuItems(globalMenuItems, DEFAULT_GLOBAL_MENU);
 
   apiProviderEl.value = config.apiProvider;
@@ -59,6 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   customModelEl.value = config.customModel || '';
   useStreamingEl.checked = config.useStreaming ?? true;
   preferredLanguageEl.value = config.preferredLanguage;
+  popoverPositionEl.value = config.popoverPosition || 'above';
   themeEl.value = config.theme;
   currentShortcut = config.shortcut || 'Alt+Tab';
   updateShortcutDisplay(currentShortcut);
@@ -76,21 +74,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   toggleImageGenProviderUI(screenshotConfig.imageGenProvider);
 
   // Render menu configuration
-  renderMenuList('selectionMenuList', selectionMenuItems);
   renderMenuList('globalMenuList', globalMenuItems);
 
   // Setup modal
   setupModal();
 
-  // Setup add item buttons
-  document.getElementById('addSelectionItem')?.addEventListener('click', () => {
-    currentMenuType = 'selection';
-    editingItemId = null;
-    openModal('添加自定义菜单项');
-  });
-
+  // Setup add item button
   document.getElementById('addGlobalItem')?.addEventListener('click', () => {
-    currentMenuType = 'global';
     editingItemId = null;
     openModal('添加自定义菜单项');
   });
@@ -233,13 +223,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       customModel: customModelEl.value || undefined,
       useStreaming: useStreamingEl.checked,
       preferredLanguage: preferredLanguageEl.value,
+      popoverPosition: popoverPositionEl.value as 'above' | 'below',
       theme: themeEl.value as MenuConfig['theme'],
       shortcut: currentShortcut,
       screenshot: newScreenshotConfig,
     };
 
     await saveConfig(newConfig);
-    await saveSelectionMenuItems(selectionMenuItems);
     await saveGlobalMenuItems(globalMenuItems);
     showToast('设置已保存', 'success');
   });
@@ -247,7 +237,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Reset settings
   resetBtn?.addEventListener('click', async () => {
     await saveConfig(DEFAULT_CONFIG);
-    await saveSelectionMenuItems(DEFAULT_SELECTION_MENU);
     await saveGlobalMenuItems(DEFAULT_GLOBAL_MENU);
 
     apiProviderEl.value = DEFAULT_CONFIG.apiProvider;
@@ -256,6 +245,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     customModelEl.value = '';
     useStreamingEl.checked = DEFAULT_CONFIG.useStreaming;
     preferredLanguageEl.value = DEFAULT_CONFIG.preferredLanguage;
+    popoverPositionEl.value = DEFAULT_CONFIG.popoverPosition || 'above';
     themeEl.value = DEFAULT_CONFIG.theme;
     currentShortcut = DEFAULT_CONFIG.shortcut;
     updateShortcutDisplay(currentShortcut);
@@ -273,9 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleImageGenProviderUI(DEFAULT_SCREENSHOT_CONFIG.imageGenProvider);
 
     // Reset menu items
-    selectionMenuItems = [...DEFAULT_SELECTION_MENU];
     globalMenuItems = [...DEFAULT_GLOBAL_MENU];
-    renderMenuList('selectionMenuList', selectionMenuItems);
     renderMenuList('globalMenuList', globalMenuItems);
 
     showToast('已重置为默认设置', 'success');
@@ -396,12 +384,10 @@ function updateOrderFromDOM(listId: string) {
   if (!list) return;
 
   const items = list.querySelectorAll('.menu-item-config');
-  const isSelection = listId === 'selectionMenuList';
-  const menuItems = isSelection ? selectionMenuItems : globalMenuItems;
 
   items.forEach((item, index) => {
     const id = (item as HTMLElement).dataset.id;
-    const menuItem = menuItems.find(m => m.id === id);
+    const menuItem = globalMenuItems.find(m => m.id === id);
     if (menuItem) {
       menuItem.order = index;
     }
@@ -414,14 +400,12 @@ function setupToggleListeners(listId: string) {
   if (!list) return;
 
   const toggles = list.querySelectorAll('.toggle-switch input');
-  const isSelection = listId === 'selectionMenuList';
-  const menuItems = isSelection ? selectionMenuItems : globalMenuItems;
 
   toggles.forEach(toggle => {
     toggle.addEventListener('change', (e) => {
       const input = e.target as HTMLInputElement;
       const id = input.dataset.id;
-      const menuItem = menuItems.find(m => m.id === id);
+      const menuItem = globalMenuItems.find(m => m.id === id);
       if (menuItem) {
         menuItem.enabled = input.checked;
       }
@@ -434,17 +418,13 @@ function setupItemButtons(listId: string) {
   const list = document.getElementById(listId);
   if (!list) return;
 
-  const isSelection = listId === 'selectionMenuList';
-
   // Edit buttons
   list.querySelectorAll('.item-btn.edit').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = (btn as HTMLElement).dataset.id;
       if (id) {
-        currentMenuType = isSelection ? 'selection' : 'global';
         editingItemId = id;
-        const menuItems = isSelection ? selectionMenuItems : globalMenuItems;
-        const item = menuItems.find(m => m.id === id) as CustomMenuItem;
+        const item = globalMenuItems.find(m => m.id === id) as CustomMenuItem;
         if (item) {
           openModal('编辑自定义菜单项', item);
         }
@@ -457,13 +437,8 @@ function setupItemButtons(listId: string) {
     btn.addEventListener('click', () => {
       const id = (btn as HTMLElement).dataset.id;
       if (id) {
-        if (isSelection) {
-          selectionMenuItems = selectionMenuItems.filter(m => m.id !== id);
-          renderMenuList('selectionMenuList', selectionMenuItems);
-        } else {
-          globalMenuItems = globalMenuItems.filter(m => m.id !== id);
-          renderMenuList('globalMenuList', globalMenuItems);
-        }
+        globalMenuItems = globalMenuItems.filter(m => m.id !== id);
+        renderMenuList('globalMenuList', globalMenuItems);
         showToast('菜单项已删除');
       }
     });
@@ -523,12 +498,11 @@ function setupModal() {
       return;
     }
 
-    const menuItems = currentMenuType === 'selection' ? selectionMenuItems : globalMenuItems;
     const iconSvg = icons[selectedIcon as IconName];
 
     if (editingItemId) {
       // Update existing item
-      const item = menuItems.find(m => m.id === editingItemId) as CustomMenuItem;
+      const item = globalMenuItems.find(m => m.id === editingItemId) as CustomMenuItem;
       if (item) {
         item.icon = iconSvg;
         item.label = label;
@@ -545,24 +519,16 @@ function setupModal() {
         label: label,
         action: action,
         enabled: true,
-        order: menuItems.length,
+        order: globalMenuItems.length,
         isCustom: true,
         customPrompt: action === 'customAI' ? prompt : undefined,
       };
 
-      if (currentMenuType === 'selection') {
-        selectionMenuItems.push(newItem);
-      } else {
-        globalMenuItems.push(newItem);
-      }
+      globalMenuItems.push(newItem);
     }
 
     // Re-render the list
-    if (currentMenuType === 'selection') {
-      renderMenuList('selectionMenuList', selectionMenuItems);
-    } else {
-      renderMenuList('globalMenuList', globalMenuItems);
-    }
+    renderMenuList('globalMenuList', globalMenuItems);
 
     closeModal();
     showToast(editingItemId ? '菜单项已更新' : '菜单项已添加', 'success');

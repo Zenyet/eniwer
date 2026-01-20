@@ -1,26 +1,71 @@
-import { Message, MenuConfig } from '../types';
+import {
+  Message,
+  MenuConfig,
+  ScreenshotConfig,
+  AIRequestPayload,
+  AIVisionRequestPayload,
+  AIImageGenRequestPayload,
+} from '../types';
 import {
   callAI,
+  callVisionAI,
+  generateImage,
   getTranslatePrompt,
   getSummarizePrompt,
   getExplainPrompt,
   getRewritePrompt,
   getCodeExplainPrompt,
   getSummarizePagePrompt,
-} from '../utils/ai';
+} from './ai-handler';
 
 // Handle messages from content script
-chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
-  handleMessage(message)
+chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
+  handleMessage(message, sender)
     .then(sendResponse)
     .catch((error) => sendResponse({ success: false, error: String(error) }));
   return true; // Keep the message channel open for async response
 });
 
-async function handleMessage(message: Message): Promise<unknown> {
+// Handle port connections for streaming
+const activeAbortControllers = new Map<chrome.runtime.Port, AbortController>();
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'ai-stream') {
+    const abortController = new AbortController();
+    activeAbortControllers.set(port, abortController);
+
+    // Handle port disconnect - abort request
+    port.onDisconnect.addListener(() => {
+      const controller = activeAbortControllers.get(port);
+      if (controller) {
+        controller.abort();
+        activeAbortControllers.delete(port);
+      }
+    });
+
+    port.onMessage.addListener(async (message: Message) => {
+      const signal = abortController.signal;
+      if (message.type === 'AI_REQUEST') {
+        await handleStreamingAIRequest(port, message.payload as AIRequestPayload, signal);
+      } else if (message.type === 'AI_VISION_REQUEST') {
+        await handleStreamingVisionRequest(port, message.payload as AIVisionRequestPayload, signal);
+      }
+      // Clean up after request completes
+      activeAbortControllers.delete(port);
+    });
+  }
+});
+
+async function handleMessage(message: Message, _sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (message.type) {
     case 'AI_REQUEST':
-      return handleAIRequest(message.payload as { action: string; text: string; config: MenuConfig });
+      return handleAIRequest(message.payload as AIRequestPayload);
+
+    case 'AI_VISION_REQUEST':
+      return handleVisionRequest(message.payload as AIVisionRequestPayload);
+
+    case 'AI_IMAGE_GEN_REQUEST':
+      return handleImageGenRequest(message.payload as AIImageGenRequestPayload);
 
     case 'GET_TABS':
       return handleGetTabs();
@@ -51,35 +96,126 @@ async function handleMessage(message: Message): Promise<unknown> {
   }
 }
 
-async function handleAIRequest(payload: { action: string; text: string; config: MenuConfig }): Promise<{ success: boolean; result?: string; error?: string }> {
-  const { action, text, config } = payload;
+// Non-streaming AI request handler
+async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: boolean; result?: string; error?: string }> {
+  const { action, text, config, systemPrompt: customPrompt } = payload;
 
   let systemPrompt: string;
 
-  switch (action) {
-    case 'translate':
-      systemPrompt = getTranslatePrompt(config.preferredLanguage || 'zh-CN');
-      break;
-    case 'summarize':
-      systemPrompt = getSummarizePrompt();
-      break;
-    case 'explain':
-      systemPrompt = getExplainPrompt();
-      break;
-    case 'rewrite':
-      systemPrompt = getRewritePrompt();
-      break;
-    case 'codeExplain':
-      systemPrompt = getCodeExplainPrompt();
-      break;
-    case 'summarizePage':
-      systemPrompt = getSummarizePagePrompt();
-      break;
-    default:
-      return { success: false, error: 'Unknown AI action' };
+  // Use custom prompt if provided
+  if (customPrompt) {
+    systemPrompt = customPrompt;
+  } else {
+    switch (action) {
+      case 'translate':
+        systemPrompt = getTranslatePrompt(config.preferredLanguage || 'zh-CN');
+        break;
+      case 'summarize':
+        systemPrompt = getSummarizePrompt();
+        break;
+      case 'explain':
+        systemPrompt = getExplainPrompt();
+        break;
+      case 'rewrite':
+        systemPrompt = getRewritePrompt();
+        break;
+      case 'codeExplain':
+        systemPrompt = getCodeExplainPrompt();
+        break;
+      case 'summarizePage':
+        systemPrompt = getSummarizePagePrompt();
+        break;
+      default:
+        return { success: false, error: 'Unknown AI action' };
+    }
   }
 
   return callAI(text, systemPrompt, config);
+}
+
+// Streaming AI request handler
+async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRequestPayload, signal: AbortSignal): Promise<void> {
+  const { action, text, config, requestId, systemPrompt: customPrompt } = payload;
+
+  let systemPrompt: string;
+
+  // Use custom prompt if provided
+  if (customPrompt) {
+    systemPrompt = customPrompt;
+  } else {
+    switch (action) {
+      case 'translate':
+        systemPrompt = getTranslatePrompt(config.preferredLanguage || 'zh-CN');
+        break;
+      case 'summarize':
+        systemPrompt = getSummarizePrompt();
+        break;
+      case 'explain':
+        systemPrompt = getExplainPrompt();
+        break;
+      case 'rewrite':
+        systemPrompt = getRewritePrompt();
+        break;
+      case 'codeExplain':
+        systemPrompt = getCodeExplainPrompt();
+        break;
+      case 'summarizePage':
+        systemPrompt = getSummarizePagePrompt();
+        break;
+      default:
+        port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: 'Unknown AI action' } });
+        return;
+    }
+  }
+
+  try {
+    const result = await callAI(text, systemPrompt, config, (chunk, fullText) => {
+      if (!signal.aborted) {
+        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText } });
+      }
+    }, signal);
+
+    if (!signal.aborted) {
+      port.postMessage({ type: 'AI_STREAM_END', payload: { requestId, ...result } });
+    }
+  } catch (error) {
+    if (!signal.aborted) {
+      port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: String(error) } });
+    }
+  }
+}
+
+// Non-streaming vision request handler
+async function handleVisionRequest(payload: AIVisionRequestPayload): Promise<{ success: boolean; result?: string; error?: string }> {
+  const { imageDataUrl, prompt, config } = payload;
+  return callVisionAI(imageDataUrl, prompt, config);
+}
+
+// Streaming vision request handler
+async function handleStreamingVisionRequest(port: chrome.runtime.Port, payload: AIVisionRequestPayload, signal: AbortSignal): Promise<void> {
+  const { imageDataUrl, prompt, config, requestId } = payload;
+
+  try {
+    const result = await callVisionAI(imageDataUrl, prompt, config, (chunk, fullText) => {
+      if (!signal.aborted) {
+        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText } });
+      }
+    }, signal);
+
+    if (!signal.aborted) {
+      port.postMessage({ type: 'AI_STREAM_END', payload: { requestId, ...result } });
+    }
+  } catch (error) {
+    if (!signal.aborted) {
+      port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: String(error) } });
+    }
+  }
+}
+
+// Image generation request handler
+async function handleImageGenRequest(payload: AIImageGenRequestPayload): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+  const { prompt, config, screenshotConfig } = payload;
+  return generateImage(prompt, config, screenshotConfig);
 }
 
 async function handleGetTabs(): Promise<{ success: boolean; tabs?: chrome.tabs.Tab[] }> {

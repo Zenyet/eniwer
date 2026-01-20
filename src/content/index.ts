@@ -1,8 +1,11 @@
-import './styles.css';
 import { RadialMenu } from './RadialMenu';
 import { MenuActions } from './MenuActions';
+import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
+import { abortAllRequests } from '../utils/ai';
+import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow } from './ShadowHost';
+import styles from './styles.css?inline';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -14,6 +17,7 @@ interface ToastItem {
 class TheCircle {
   private radialMenu: RadialMenu;
   private menuActions: MenuActions;
+  private selectionPopover: SelectionPopover;
   private selectionMenuItems: MenuItem[] = DEFAULT_SELECTION_MENU;
   private globalMenuItems: MenuItem[] = DEFAULT_GLOBAL_MENU;
   private config: MenuConfig = DEFAULT_CONFIG;
@@ -22,10 +26,12 @@ class TheCircle {
   private readonly DOUBLE_TAP_DELAY = 300; // ms
   private activeToasts: ToastItem[] = [];
   private readonly MAX_TOASTS = 4;
+  private currentSelectedText: string = '';
 
   constructor() {
     this.radialMenu = new RadialMenu();
     this.menuActions = new MenuActions(DEFAULT_CONFIG);
+    this.selectionPopover = new SelectionPopover();
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
       onToast: (message, type) => this.showToast(message, type),
@@ -34,11 +40,16 @@ class TheCircle {
   }
 
   private async init(): Promise<void> {
+    // Initialize Shadow DOM and load styles
+    getShadowRoot();
+    loadStyles(styles);
+
     await this.loadConfig();
     this.setupKeyboardShortcut();
     this.setupMessageListener();
     this.setupStorageListener();
-    console.log('The Circle: Initialized');
+    this.setupSelectionListener();
+    console.log('The Circle: Initialized with Shadow DOM');
   }
 
   private async loadConfig(): Promise<void> {
@@ -60,6 +71,113 @@ class TheCircle {
         this.menuActions.setConfig(this.config);
       }
     });
+  }
+
+  private setupSelectionListener(): void {
+    let selectionTimeout: number | null = null;
+
+    document.addEventListener('mouseup', (e) => {
+      // Ignore if clicking on our popover
+      const path = e.composedPath() as HTMLElement[];
+      for (const el of path) {
+        if (el instanceof HTMLElement && el.classList?.contains('thecircle-selection-popover')) {
+          return;
+        }
+      }
+
+      // Clear any pending timeout
+      if (selectionTimeout) {
+        clearTimeout(selectionTimeout);
+      }
+
+      // Small delay to let selection finalize
+      selectionTimeout = window.setTimeout(() => {
+        const selection = window.getSelection();
+        const selectedText = selection?.toString().trim() || '';
+
+        if (selectedText && selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+
+          // Store selected text for later use
+          this.currentSelectedText = selectedText;
+
+          // Get popover position from config (default to 'above')
+          const position: PopoverPosition = this.config.popoverPosition || 'above';
+
+          // Show the selection popover
+          this.selectionPopover.show(rect, {
+            onTranslate: () => this.handleSelectionTranslate(),
+          }, position);
+        } else {
+          // No selection, hide popover
+          this.selectionPopover.hide();
+          this.currentSelectedText = '';
+        }
+      }, 10);
+    });
+
+    // Hide popover when clicking elsewhere (but not on the popover itself)
+    document.addEventListener('mousedown', (e) => {
+      const path = e.composedPath() as HTMLElement[];
+      for (const el of path) {
+        if (el instanceof HTMLElement && el.classList?.contains('thecircle-selection-popover')) {
+          return;
+        }
+      }
+
+      // Only hide if there's no ongoing selection
+      if (!window.getSelection()?.toString().trim()) {
+        this.selectionPopover.hide();
+      }
+    });
+  }
+
+  private async handleSelectionTranslate(): Promise<void> {
+    if (!this.currentSelectedText) return;
+
+    // Find the translate menu item from selection menu
+    const translateItem = this.selectionMenuItems.find(item => item.action === 'translate');
+    if (!translateItem) {
+      this.showToast('翻译功能未配置', 'error');
+      return;
+    }
+
+    // Set the selected text for menu actions
+    this.menuActions.setSelectedText(this.currentSelectedText);
+
+    // Show the radial menu result panel for AI response
+    const selection = window.getSelection();
+    let selectionRect: DOMRect | null = null;
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      selectionRect = range.getBoundingClientRect();
+    }
+
+    // Position radial menu at selection center but hidden (only show result panel)
+    const x = selectionRect ? selectionRect.left + selectionRect.width / 2 : window.innerWidth / 2;
+    const y = selectionRect ? selectionRect.bottom + 20 : window.innerHeight / 2;
+
+    // Pass selection info to RadialMenu for result panel positioning
+    this.radialMenu.setSelectionInfo(selectionRect);
+
+    // Show result panel directly (skip menu)
+    this.radialMenu.showResultOnly(x, y, translateItem.label);
+
+    // Create streaming callback for typewriter effect
+    const onChunk = this.config.useStreaming
+      ? (chunk: string, fullText: string) => {
+          this.radialMenu.streamUpdate(chunk, fullText);
+        }
+      : undefined;
+
+    const result = await this.menuActions.execute(translateItem, onChunk);
+
+    if (result.type === 'error') {
+      this.radialMenu.showResult('错误', result.result || '未知错误');
+    } else if (!this.config.useStreaming && result.type === 'ai') {
+      this.radialMenu.updateResult(result.result || '');
+    }
   }
 
   private setupKeyboardShortcut(): void {
@@ -141,39 +259,18 @@ class TheCircle {
   }
 
   private showMenu(): void {
-    const selection = window.getSelection();
-    const selectedText = selection?.toString().trim() || '';
+    // Hide selection popover when opening radial menu
+    this.selectionPopover.hide();
 
-    let x: number;
-    let y: number;
-    let selectionRect: DOMRect | null = null;
+    // Always use global menu items (selection-based actions now handled by popover)
+    const menuItems = this.globalMenuItems;
 
-    // If text is selected, get position from selection
-    if (selectedText && selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      selectionRect = range.getBoundingClientRect();
-      // Position menu below the selected text
-      x = selectionRect.left + selectionRect.width / 2;
-      y = selectionRect.bottom + 20;
+    // Center in viewport
+    const x = window.innerWidth / 2;
+    const y = window.innerHeight / 2;
 
-      // Ensure menu stays within viewport
-      if (y + 200 > window.innerHeight) {
-        y = selectionRect.top - 20;
-      }
-      if (x < 150) x = 150;
-      if (x > window.innerWidth - 150) x = window.innerWidth - 150;
-    } else {
-      // No selection, center in viewport
-      x = window.innerWidth / 2;
-      y = window.innerHeight / 2;
-    }
-
-    // Choose menu based on whether text is selected
-    const menuItems = selectedText ? this.selectionMenuItems : this.globalMenuItems;
-    this.menuActions.setSelectedText(selectedText);
-
-    // Pass selection info to RadialMenu for result panel positioning
-    this.radialMenu.setSelectionInfo(selectedText ? selectionRect : null);
+    // Clear selection info for result panel positioning
+    this.radialMenu.setSelectionInfo(null);
 
     this.radialMenu.show(x, y, menuItems, async (item) => {
       await this.handleMenuAction(item);
@@ -247,7 +344,7 @@ class TheCircle {
       const oldest = this.activeToasts.shift();
       if (oldest) {
         clearTimeout(oldest.timeoutId);
-        oldest.element.remove();
+        removeFromShadow(oldest.element);
       }
     }
 
@@ -258,7 +355,7 @@ class TheCircle {
       <span class="thecircle-toast-message">${message}</span>
     `;
 
-    document.body.appendChild(toast);
+    appendToShadow(toast);
 
     // Update positions of all toasts
     this.updateToastPositions();
@@ -287,7 +384,7 @@ class TheCircle {
 
       toastElement.classList.add('thecircle-toast-exit');
       setTimeout(() => {
-        toastElement.remove();
+        removeFromShadow(toastElement);
         this.updateToastPositions();
       }, 200);
     }

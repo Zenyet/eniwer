@@ -1,8 +1,20 @@
 /* The Circle - Radial Menu Styles */
 /* Apple Liquid Glass Design */
 
-/* CSS Custom Properties for Liquid Glass */
-:root {
+/* CSS Custom Properties for Liquid Glass - use :host for Shadow DOM */
+:host {
+  --glass-bg: rgba(255, 255, 255, 0.18);
+  --glass-bg-hover: rgba(255, 255, 255, 0.28);
+  --glass-border: rgba(255, 255, 255, 0.25);
+  --glass-border-hover: rgba(255, 255, 255, 0.4);
+  --glass-shadow: rgba(0, 0, 0, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.5);
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+}
+
+/* Also set on container for fallback */
+#thecircle-container {
   --glass-bg: rgba(255, 255, 255, 0.18);
   --glass-bg-hover: rgba(255, 255, 255, 0.28);
   --glass-border: rgba(255, 255, 255, 0.25);
@@ -29,13 +41,21 @@
 }
 
 @keyframes thecircle-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes thecircle-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* Menu Container */
@@ -45,7 +65,9 @@
   pointer-events: none;
   transform: translate(-50%, -50%) scale(0.8);
   opacity: 0;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease-out;
+  transition:
+    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.2s ease-out;
 }
 
 .thecircle-menu-visible {
@@ -105,7 +127,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-primary);
   max-width: 70px;
   position: relative;
@@ -141,14 +164,30 @@
 }
 
 /* Staggered entry animation for each menu item */
-.thecircle-item:nth-child(2) { animation-delay: 0.02s; }
-.thecircle-item:nth-child(3) { animation-delay: 0.04s; }
-.thecircle-item:nth-child(4) { animation-delay: 0.06s; }
-.thecircle-item:nth-child(5) { animation-delay: 0.08s; }
-.thecircle-item:nth-child(6) { animation-delay: 0.10s; }
-.thecircle-item:nth-child(7) { animation-delay: 0.12s; }
-.thecircle-item:nth-child(8) { animation-delay: 0.14s; }
-.thecircle-item:nth-child(9) { animation-delay: 0.16s; }
+.thecircle-item:nth-child(2) {
+  animation-delay: 0.02s;
+}
+.thecircle-item:nth-child(3) {
+  animation-delay: 0.04s;
+}
+.thecircle-item:nth-child(4) {
+  animation-delay: 0.06s;
+}
+.thecircle-item:nth-child(5) {
+  animation-delay: 0.08s;
+}
+.thecircle-item:nth-child(6) {
+  animation-delay: 0.1s;
+}
+.thecircle-item:nth-child(7) {
+  animation-delay: 0.12s;
+}
+.thecircle-item:nth-child(8) {
+  animation-delay: 0.14s;
+}
+.thecircle-item:nth-child(9) {
+  animation-delay: 0.16s;
+}
 
 @keyframes thecircle-item-in {
   from {
@@ -198,7 +237,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-primary);
   max-width: 60px;
   position: relative;
@@ -222,14 +262,15 @@
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: thecircle-slide-in 0.25s ease-out;
   overflow: hidden;
 }
 
 /* Panel top highlight */
 .thecircle-result-panel::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 5%;
@@ -329,7 +370,7 @@
   background: rgba(0, 0, 0, 0.2);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
   font-size: 13px;
 }
 
@@ -360,7 +401,7 @@
 /* Gradient mask scroll indicators */
 .thecircle-result-content-wrapper::before,
 .thecircle-result-content-wrapper::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   right: 8px;
@@ -373,12 +414,20 @@
 
 .thecircle-result-content-wrapper::before {
   top: 0;
-  background: linear-gradient(to bottom, rgba(30, 30, 30, 0.9) 0%, transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    rgba(30, 30, 30, 0.9) 0%,
+    transparent 100%
+  );
 }
 
 .thecircle-result-content-wrapper::after {
   bottom: 0;
-  background: linear-gradient(to top, rgba(30, 30, 30, 0.9) 0%, transparent 100%);
+  background: linear-gradient(
+    to top,
+    rgba(30, 30, 30, 0.9) 0%,
+    transparent 100%
+  );
 }
 
 .thecircle-result-content-wrapper.has-scroll-top::before {
@@ -407,12 +456,15 @@
 }
 
 @keyframes thecircle-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Skeleton loading */
 .thecircle-skeleton {
-  background: linear-gradient(90deg,
+  background: linear-gradient(
+    90deg,
     rgba(255, 255, 255, 0.1) 25%,
     rgba(255, 255, 255, 0.2) 50%,
     rgba(255, 255, 255, 0.1) 75%
@@ -433,8 +485,12 @@
 }
 
 @keyframes thecircle-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .thecircle-result-actions {
@@ -481,7 +537,7 @@
   justify-content: center;
 }
 
-/* Toast notification - Liquid Glass */
+/* Toast notification - Dark solid background for visibility */
 .thecircle-toast {
   position: fixed;
   left: 50%;
@@ -490,15 +546,16 @@
   padding: 12px 20px;
   font-size: 14px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(30, 30, 30, 0.95);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: var(--text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.95);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    0 4px 16px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
   animation: thecircle-toast-in 0.25s ease-out;
   display: flex;
   align-items: center;
@@ -506,10 +563,18 @@
 }
 
 /* Toast stacking support */
-.thecircle-toast[data-index="0"] { bottom: 24px; }
-.thecircle-toast[data-index="1"] { bottom: 74px; }
-.thecircle-toast[data-index="2"] { bottom: 124px; }
-.thecircle-toast[data-index="3"] { bottom: 174px; }
+.thecircle-toast[data-index="0"] {
+  bottom: 24px;
+}
+.thecircle-toast[data-index="1"] {
+  bottom: 74px;
+}
+.thecircle-toast[data-index="2"] {
+  bottom: 124px;
+}
+.thecircle-toast[data-index="3"] {
+  bottom: 174px;
+}
 
 /* Toast type colors */
 .thecircle-toast-success {
@@ -647,7 +712,8 @@
   border-radius: 9999px;
   color: var(--text-primary);
   font-size: 14px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   transition: opacity 0.2s ease;
 }
@@ -667,7 +733,7 @@
 .thecircle-screenshot-selection {
   position: fixed;
   border: 2px solid #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
+  background: transparent;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
@@ -681,8 +747,59 @@
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   pointer-events: none;
+}
+
+/* Screenshot Toolbar Styles */
+.thecircle-screenshot-toolbar {
+  position: fixed;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: thecircle-fade-in 0.15s ease-out;
+  z-index: 2147483647;
+}
+
+.thecircle-screenshot-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.thecircle-screenshot-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.thecircle-screenshot-toolbar-btn-primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.thecircle-screenshot-toolbar-btn-primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 /* Screenshot Panel Styles */
@@ -697,7 +814,8 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 16px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: thecircle-slide-in 0.25s ease-out;
   overflow: hidden;
 }
@@ -896,7 +1014,7 @@
   background: rgba(255, 255, 255, 0.1);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
   font-size: 13px;
 }
 
@@ -920,4 +1038,129 @@
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Stop/Abort Button Styles */
+.thecircle-stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.thecircle-stop-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.thecircle-stop-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Loading with stop button */
+.thecircle-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.thecircle-loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.thecircle-loading-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Selection Popover - Quick action on text selection */
+.thecircle-selection-popover {
+  position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  animation: thecircle-popover-in 0.15s ease-out;
+}
+
+/* Arrow removed - popover is now circular */
+
+.thecircle-selection-popover-exit {
+  animation: thecircle-popover-out 0.15s ease-out forwards;
+}
+
+@keyframes thecircle-popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes thecircle-popover-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.thecircle-selection-popover-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.thecircle-selection-popover-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.thecircle-selection-popover-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(0.95);
+}
+
+.thecircle-selection-popover-btn svg {
+  width: 18px;
+  height: 18px;
 }

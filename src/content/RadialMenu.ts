@@ -1,5 +1,7 @@
 import { MenuItem } from '../types';
 import { icons } from '../icons';
+import { appendToShadow, removeFromShadow } from './ShadowHost';
+import { abortAllRequests } from '../utils/ai';
 
 export class RadialMenu {
   private container: HTMLElement | null = null;
@@ -13,6 +15,8 @@ export class RadialMenu {
   private resultPanel: HTMLElement | null = null;
   private selectionRect: DOMRect | null = null;
   private radius: number = 120;
+  private isLoading: boolean = false;
+  private onStopCallback: (() => void) | null = null;
 
   constructor() {
     this.handleMouseMove = this.handleMouseMove.bind(this);
@@ -71,35 +75,65 @@ export class RadialMenu {
     if (this.overlay) {
       this.overlay.classList.add('thecircle-fade-out');
       setTimeout(() => {
-        this.overlay?.remove();
-        this.overlay = null;
-        this.container = null;
+        if (this.overlay) {
+          removeFromShadow(this.overlay);
+          this.overlay = null;
+          this.container = null;
+        }
       }, 200);
     }
   }
 
+  // Show only the result panel without the radial menu (for popover-triggered actions)
+  public showResultOnly(x: number, y: number, title: string): void {
+    this.centerX = x;
+    this.centerY = y;
+    this.showResult(title, '', true);
+  }
+
   public hideResultPanel(): void {
+    // Abort any active requests when closing result panel
+    if (this.isLoading) {
+      abortAllRequests();
+      this.isLoading = false;
+    }
+
     if (this.resultPanel) {
       this.resultPanel.classList.add('thecircle-fade-out');
       setTimeout(() => {
-        this.resultPanel?.remove();
-        this.resultPanel = null;
+        if (this.resultPanel) {
+          removeFromShadow(this.resultPanel);
+          this.resultPanel = null;
+        }
       }, 200);
     }
+  }
+
+  public setOnStop(callback: () => void): void {
+    this.onStopCallback = callback;
   }
 
   public showResult(title: string, content: string, isLoading: boolean = false): void {
     this.hideResultPanel();
+    this.isLoading = isLoading;
 
     this.resultPanel = document.createElement('div');
     this.resultPanel.className = 'thecircle-result-panel';
 
     // Use skeleton loading instead of spinner when loading
     const loadingContent = isLoading
-      ? `<div class="thecircle-skeleton thecircle-skeleton-line" style="width: 100%"></div>
-         <div class="thecircle-skeleton thecircle-skeleton-line" style="width: 90%"></div>
-         <div class="thecircle-skeleton thecircle-skeleton-line" style="width: 75%"></div>
-         <div class="thecircle-skeleton thecircle-skeleton-line" style="width: 60%"></div>`
+      ? `<div class="thecircle-loading-container">
+           <div class="thecircle-loading-row">
+             <div class="thecircle-spinner"></div>
+             <span class="thecircle-loading-text">正在思考...</span>
+           </div>
+           <button class="thecircle-stop-btn" data-action="stop">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+               <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+             </svg>
+             终止
+           </button>
+         </div>`
       : content;
 
     this.resultPanel.innerHTML = `
@@ -115,7 +149,7 @@ export class RadialMenu {
       ${!isLoading ? this.createCopyButtonHTML() : ''}
     `;
 
-    document.body.appendChild(this.resultPanel);
+    appendToShadow(this.resultPanel);
 
     // Position based on selection or center
     const rect = this.resultPanel.getBoundingClientRect();
@@ -153,6 +187,17 @@ export class RadialMenu {
     // Event listeners
     const closeBtn = this.resultPanel.querySelector('.thecircle-result-close');
     closeBtn?.addEventListener('click', () => this.hideResultPanel());
+
+    // Stop button listener
+    if (isLoading) {
+      const stopBtn = this.resultPanel.querySelector('[data-action="stop"]');
+      stopBtn?.addEventListener('click', () => {
+        abortAllRequests();
+        this.isLoading = false;
+        this.onStopCallback?.();
+        this.hideResultPanel();
+      });
+    }
 
     // Setup copy button
     this.setupCopyButton(content);
@@ -237,6 +282,7 @@ export class RadialMenu {
   }
 
   public updateResult(content: string): void {
+    this.isLoading = false;
     if (this.resultPanel) {
       const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
       if (contentEl) {
@@ -250,11 +296,41 @@ export class RadialMenu {
 
   // Stream update for typewriter effect
   public streamUpdate(_chunk: string, fullText: string): void {
+    this.isLoading = true;
     if (this.resultPanel) {
       const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
       if (contentEl) {
-        // Use textContent for streaming to avoid HTML parsing issues, then format
-        contentEl.innerHTML = this.formatStreamContent(fullText);
+        // Check if still showing loading, replace with content + stop button
+        if (contentEl.querySelector('.thecircle-loading-container')) {
+          contentEl.innerHTML = `
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+              <button class="thecircle-stop-btn" data-action="stop">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                </svg>
+                终止
+              </button>
+            </div>
+            <div class="thecircle-stream-content"></div>
+          `;
+          // Setup stop button
+          const stopBtn = contentEl.querySelector('[data-action="stop"]');
+          stopBtn?.addEventListener('click', () => {
+            abortAllRequests();
+            this.isLoading = false;
+            // Remove stop button
+            stopBtn.parentElement?.remove();
+          });
+        }
+
+        // Update stream content
+        const streamContent = contentEl.querySelector('.thecircle-stream-content');
+        if (streamContent) {
+          streamContent.innerHTML = this.formatStreamContent(fullText);
+        } else {
+          // Fallback if no stream content container
+          contentEl.innerHTML = this.formatStreamContent(fullText);
+        }
         // Auto scroll to bottom
         contentEl.scrollTop = contentEl.scrollHeight;
       }
@@ -309,7 +385,7 @@ export class RadialMenu {
   private createOverlay(): void {
     this.overlay = document.createElement('div');
     this.overlay.className = 'thecircle-overlay';
-    document.body.appendChild(this.overlay);
+    appendToShadow(this.overlay);
   }
 
   private createMenu(): void {
@@ -540,9 +616,21 @@ export class RadialMenu {
   private handleClick(e: MouseEvent): void {
     if (!this.isVisible) return;
 
-    // Check if clicked on a menu item
-    const target = e.target as HTMLElement;
-    const itemEl = target.closest('.thecircle-item');
+    // Use composedPath to get the actual target inside Shadow DOM
+    const path = e.composedPath() as HTMLElement[];
+    let itemEl: HTMLElement | null = null;
+    let isInsideMenu = false;
+
+    for (const el of path) {
+      if (el instanceof HTMLElement) {
+        if (el.classList?.contains('thecircle-item')) {
+          itemEl = el;
+        }
+        if (el.classList?.contains('thecircle-menu')) {
+          isInsideMenu = true;
+        }
+      }
+    }
 
     if (itemEl) {
       const index = parseInt(itemEl.getAttribute('data-index') || '-1');
@@ -550,7 +638,7 @@ export class RadialMenu {
         this.selectedIndex = index;
         this.executeSelection();
       }
-    } else if (!target.closest('.thecircle-menu')) {
+    } else if (!isInsideMenu) {
       // Clicked outside menu, close it
       this.hide();
     }

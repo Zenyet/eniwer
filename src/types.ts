@@ -38,6 +38,7 @@ export interface MenuConfig {
   customModel?: string;
   useStreaming: boolean;
   screenshot?: ScreenshotConfig;
+  popoverPosition?: 'above' | 'below';
 }
 
 export interface StorageData {
@@ -64,6 +65,7 @@ export const DEFAULT_CONFIG: MenuConfig = {
   apiProvider: 'groq',
   useStreaming: true,
   screenshot: DEFAULT_SCREENSHOT_CONFIG,
+  popoverPosition: 'above',
 };
 
 export const DEFAULT_SELECTION_MENU: MenuItem[] = [
@@ -92,6 +94,11 @@ export type MessageType =
   | 'TOGGLE_MENU'
   | 'AI_REQUEST'
   | 'AI_RESPONSE'
+  | 'AI_VISION_REQUEST'
+  | 'AI_IMAGE_GEN_REQUEST'
+  | 'AI_STREAM_CHUNK'
+  | 'AI_STREAM_END'
+  | 'AI_STREAM_ERROR'
   | 'OPEN_URL'
   | 'GET_TABS'
   | 'SWITCH_TAB'
@@ -105,4 +112,26 @@ export type MessageType =
 export interface Message {
   type: MessageType;
   payload?: unknown;
+}
+
+// AI Request payload types
+export interface AIRequestPayload {
+  action: string;
+  text: string;
+  config: MenuConfig;
+  requestId?: string;
+  systemPrompt?: string; // For custom prompts
+}
+
+export interface AIVisionRequestPayload {
+  imageDataUrl: string;
+  prompt: string;
+  config: MenuConfig;
+  requestId?: string;
+}
+
+export interface AIImageGenRequestPayload {
+  prompt: string;
+  config: MenuConfig;
+  screenshotConfig: ScreenshotConfig;
 }

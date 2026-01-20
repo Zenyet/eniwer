@@ -1,5 +1,7 @@
 import { icons } from '../icons';
 import { MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG } from '../types';
+import { appendToShadow, removeFromShadow } from './ShadowHost';
+import { abortAllRequests } from '../utils/ai';
 
 export interface ScreenshotPanelCallbacks {
   onSave: () => void;
@@ -17,6 +19,7 @@ export class ScreenshotPanel {
   private config: ScreenshotConfig = DEFAULT_SCREENSHOT_CONFIG;
   private isShowingInput: boolean = false;
   private inputMode: 'ask' | 'generate' = 'ask';
+  private isLoading: boolean = false;
 
   constructor() {}
 
@@ -32,17 +35,26 @@ export class ScreenshotPanel {
   }
 
   public hide(): void {
+    // Abort any active requests when closing
+    if (this.isLoading) {
+      abortAllRequests();
+      this.isLoading = false;
+    }
+
     if (this.panel) {
       this.panel.classList.add('thecircle-screenshot-panel-exit');
       setTimeout(() => {
-        this.panel?.remove();
-        this.panel = null;
+        if (this.panel) {
+          removeFromShadow(this.panel);
+          this.panel = null;
+        }
       }, 200);
     }
   }
 
   public showLoading(title: string): void {
     if (!this.panel) return;
+    this.isLoading = true;
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
     if (actionsArea) {
@@ -51,12 +63,29 @@ export class ScreenshotPanel {
           <div class="thecircle-spinner"></div>
           <span>${title}</span>
         </div>
+        <div style="display: flex; justify-content: center; margin-top: 12px;">
+          <button class="thecircle-stop-btn" data-action="stop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+            终止
+          </button>
+        </div>
       `;
+
+      // Setup stop button
+      const stopBtn = actionsArea.querySelector('[data-action="stop"]');
+      stopBtn?.addEventListener('click', () => {
+        abortAllRequests();
+        this.isLoading = false;
+        this.resetActions();
+      });
     }
   }
 
   public showResult(title: string, content: string): void {
     if (!this.panel) return;
+    this.isLoading = false;
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
     if (actionsArea) {
@@ -99,6 +128,7 @@ export class ScreenshotPanel {
 
   public showGeneratedImage(imageUrl: string): void {
     if (!this.panel) return;
+    this.isLoading = false;
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
     if (actionsArea) {
@@ -135,8 +165,70 @@ export class ScreenshotPanel {
 
   public streamUpdate(chunk: string, fullText: string): void {
     if (!this.panel) return;
+    this.isLoading = true;
 
-    const resultContent = this.panel.querySelector('.thecircle-screenshot-result-content');
+    const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
+    if (!actionsArea) return;
+
+    // Check if we need to transition from loading to streaming
+    const loadingEl = actionsArea.querySelector('.thecircle-screenshot-loading');
+    if (loadingEl) {
+      actionsArea.innerHTML = `
+        <div class="thecircle-screenshot-result">
+          <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+            <button class="thecircle-stop-btn" data-action="stop">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+              </svg>
+              终止
+            </button>
+          </div>
+          <div class="thecircle-screenshot-result-content"></div>
+          <div class="thecircle-screenshot-result-actions">
+            <button class="thecircle-screenshot-btn thecircle-screenshot-btn-secondary" data-action="copy-result">
+              ${icons.copy}
+              <span>复制</span>
+            </button>
+            <button class="thecircle-screenshot-btn thecircle-screenshot-btn-secondary" data-action="back">
+              <span>返回</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Setup stop button
+      const stopBtn = actionsArea.querySelector('[data-action="stop"]');
+      stopBtn?.addEventListener('click', () => {
+        abortAllRequests();
+        this.isLoading = false;
+        stopBtn.parentElement?.remove();
+      });
+
+      // Setup copy button
+      const copyBtn = actionsArea.querySelector('[data-action="copy-result"]');
+      copyBtn?.addEventListener('click', () => {
+        const contentEl = actionsArea.querySelector('.thecircle-screenshot-result-content');
+        if (contentEl) {
+          navigator.clipboard.writeText(contentEl.textContent || '');
+          const span = copyBtn.querySelector('span');
+          if (span) {
+            const originalText = span.textContent;
+            span.textContent = '已复制!';
+            setTimeout(() => {
+              span.textContent = originalText;
+            }, 1500);
+          }
+        }
+      });
+
+      // Setup back button
+      const backBtn = actionsArea.querySelector('[data-action="back"]');
+      backBtn?.addEventListener('click', () => {
+        this.resetActions();
+      });
+    }
+
+    const resultContent = actionsArea.querySelector('.thecircle-screenshot-result-content');
     if (resultContent) {
       resultContent.innerHTML = this.formatContent(fullText);
       resultContent.scrollTop = resultContent.scrollHeight;
@@ -153,6 +245,7 @@ export class ScreenshotPanel {
 
   private resetActions(): void {
     if (!this.panel) return;
+    this.isLoading = false;
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
     if (actionsArea) {
@@ -178,7 +271,7 @@ export class ScreenshotPanel {
       </div>
     `;
 
-    document.body.appendChild(this.panel);
+    appendToShadow(this.panel);
 
     // Position panel in center
     this.positionPanel();

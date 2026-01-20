@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Circle</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <div class="logo">◉</div>
+      <h1>The Circle</h1>
+    </div>
+
+    <div class="popup-content">
+      <div class="shortcut-hint" id="shortcutHint">
+        <!-- 动态填充快捷键 -->
+      </div>
+
+      <div class="quick-actions">
+        <button class="action-btn" id="openMenu">
+          <span class="action-icon">◉</span>
+          打开菜单
+        </button>
+        <button class="action-btn" id="openSettings">
+          <span class="action-icon">⚙️</span>
+          设置
+        </button>
+      </div>
+    </div>
+
+    <div class="popup-footer">
+      <span class="version">v1.0.0</span>
+      <a href="https://github.com/Zenyet/thecircle" target="_blank" class="github-link">GitHub</a>
+    </div>
+  </div>
+
+  <script type="module" src="index.js"></script>
+</body>
+</html>

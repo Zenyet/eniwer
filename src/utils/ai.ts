@@ -1,34 +1,6 @@
-import { MenuConfig, ScreenshotConfig } from '../types';
-
-// Provider configurations
-interface ProviderConfig {
-  apiUrl: string;
-  model: string;
-  visionModel?: string;
-}
-
-const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
-  groq: {
-    apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.2-90b-vision-preview',
-    visionModel: 'llama-3.2-90b-vision-preview',
-  },
-  openai: {
-    apiUrl: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4o-mini',
-    visionModel: 'gpt-4o-mini',
-  },
-  anthropic: {
-    apiUrl: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-3-5-sonnet-20241022',
-    visionModel: 'claude-3-5-sonnet-20241022',
-  },
-  gemini: {
-    apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-    model: 'gemini-1.5-flash',
-    visionModel: 'gemini-1.5-flash',
-  },
-};
+// AI API wrapper for content scripts
+// All requests are routed through background script for security
+import { MenuConfig, ScreenshotConfig, Message } from '../types';
 
 interface AIResponse {
   success: boolean;
@@ -38,344 +10,262 @@ interface AIResponse {
 
 export type OnChunkCallback = (chunk: string, fullText: string) => void;
 
+// Active request tracking for cancellation
+interface ActiveRequest {
+  port: chrome.runtime.Port;
+  requestId: string;
+}
+
+const activeRequests = new Map<string, ActiveRequest>();
+
+// Generate unique request ID
+function generateRequestId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// Abort a specific request
+export function abortRequest(requestId: string): void {
+  const request = activeRequests.get(requestId);
+  if (request) {
+    try {
+      request.port.disconnect();
+    } catch {
+      // Port may already be disconnected
+    }
+    activeRequests.delete(requestId);
+  }
+}
+
+// Abort all active requests
+export function abortAllRequests(): void {
+  for (const [requestId, request] of activeRequests) {
+    try {
+      request.port.disconnect();
+    } catch {
+      // Port may already be disconnected
+    }
+    activeRequests.delete(requestId);
+  }
+}
+
+// Text AI call - routes to background
 export async function callAI(
   prompt: string,
   systemPrompt: string,
   config: MenuConfig,
   onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const provider = config.apiProvider;
+): Promise<AIResponse & { requestId?: string }> {
   const useStreaming = config.useStreaming && !!onChunk;
 
-  // Validate API key requirement
-  if (provider !== 'groq' && !config.apiKey) {
-    return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
+  if (useStreaming) {
+    return callStreamingAI('AI_REQUEST', {
+      action: 'custom',
+      text: prompt,
+      systemPrompt,
+      config,
+    }, onChunk);
   }
 
-  // For custom provider, validate URL and model
-  if (provider === 'custom') {
-    if (!config.customApiUrl || !config.customModel) {
-      return { success: false, error: '请配置自定义 API URL 和模型名称' };
-    }
-  }
-
-  try {
-    switch (provider) {
-      case 'anthropic':
-        return await callAnthropicAPI(prompt, systemPrompt, config, useStreaming, onChunk);
-      case 'gemini':
-        return await callGeminiAPI(prompt, systemPrompt, config, useStreaming, onChunk);
-      case 'groq':
-      case 'openai':
-      case 'custom':
-      default:
-        return await callOpenAICompatibleAPI(prompt, systemPrompt, config, useStreaming, onChunk);
-    }
-  } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
-  }
-}
-
-// OpenAI compatible API (for Groq, OpenAI, and custom providers)
-async function callOpenAICompatibleAPI(
-  prompt: string,
-  systemPrompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const provider = config.apiProvider;
-  let apiUrl: string;
-  let model: string;
-  let apiKey = config.apiKey;
-
-  if (provider === 'custom') {
-    apiUrl = config.customApiUrl!;
-    model = config.customModel!;
-  } else {
-    const providerConfig = PROVIDER_CONFIGS[provider];
-    apiUrl = providerConfig.apiUrl;
-    model = providerConfig.model;
-  }
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+  // Non-streaming: use simple message
+  const response = await chrome.runtime.sendMessage({
+    type: 'AI_REQUEST',
+    payload: {
+      action: 'custom',
+      text: prompt,
+      systemPrompt,
+      config,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 2048,
-      stream: useStreaming,
-    }),
-  });
+  } as Message);
 
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processOpenAIStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.choices?.[0]?.message?.content;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
+  return response as AIResponse;
 }
 
-async function processOpenAIStream(
-  response: Response,
+// Vision AI call - routes to background
+export async function callVisionAI(
+  imageDataUrl: string,
+  prompt: string,
+  config: MenuConfig,
+  onChunk?: OnChunkCallback
+): Promise<AIResponse & { requestId?: string }> {
+  const useStreaming = config.useStreaming && !!onChunk;
+
+  if (useStreaming) {
+    return callStreamingVisionAI(imageDataUrl, prompt, config, onChunk);
+  }
+
+  // Non-streaming: use simple message
+  const response = await chrome.runtime.sendMessage({
+    type: 'AI_VISION_REQUEST',
+    payload: {
+      imageDataUrl,
+      prompt,
+      config,
+    },
+  } as Message);
+
+  return response as AIResponse;
+}
+
+// Image generation - routes to background
+export async function generateImage(
+  prompt: string,
+  config: MenuConfig,
+  screenshotConfig: ScreenshotConfig
+): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
+  const response = await chrome.runtime.sendMessage({
+    type: 'AI_IMAGE_GEN_REQUEST',
+    payload: {
+      prompt,
+      config,
+      screenshotConfig,
+    },
+  } as Message);
+
+  return response as { success: boolean; imageUrl?: string; error?: string };
+}
+
+// Streaming AI request using port connection
+async function callStreamingAI(
+  type: string,
+  payload: { action: string; text: string; systemPrompt?: string; config: MenuConfig },
   onChunk: OnChunkCallback
-): Promise<AIResponse> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return { success: false, error: '无法读取流' };
-  }
+): Promise<AIResponse & { requestId: string }> {
+  return new Promise((resolve) => {
+    const requestId = generateRequestId();
+    const port = chrome.runtime.connect({ name: 'ai-stream' });
 
-  const decoder = new TextDecoder();
-  let fullText = '';
+    // Track active request
+    activeRequests.set(requestId, { port, requestId });
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              fullText += content;
-              onChunk(content, fullText);
-            }
-          } catch {
-            // Skip invalid JSON lines
-          }
-        }
+    const cleanup = () => {
+      activeRequests.delete(requestId);
+      try {
+        port.onMessage.removeListener(messageHandler);
+      } catch {
+        // Listener may already be removed
       }
-    }
+    };
 
-    if (fullText) {
-      return { success: true, result: fullText };
-    }
-    return { success: false, error: 'AI 无响应' };
-  } finally {
-    reader.releaseLock();
-  }
-}
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; success?: boolean; result?: string; error?: string } }) => {
+      if (message.payload?.requestId !== requestId) return;
 
-// Anthropic API
-async function callAnthropicAPI(
-  prompt: string,
-  systemPrompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const providerConfig = PROVIDER_CONFIGS.anthropic;
-
-  const response = await fetch(providerConfig.apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey!,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: providerConfig.model,
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-      stream: useStreaming,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processAnthropicStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.content?.[0]?.text;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
-}
-
-async function processAnthropicStream(
-  response: Response,
-  onChunk: OnChunkCallback
-): Promise<AIResponse> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return { success: false, error: '无法读取流' };
-  }
-
-  const decoder = new TextDecoder();
-  let fullText = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              const content = parsed.delta.text;
-              fullText += content;
-              onChunk(content, fullText);
-            }
-          } catch {
-            // Skip invalid JSON lines
-          }
-        }
+      if (message.type === 'AI_STREAM_CHUNK') {
+        onChunk(message.payload.chunk || '', message.payload.fullText || '');
+      } else if (message.type === 'AI_STREAM_END') {
+        cleanup();
+        port.disconnect();
+        resolve({
+          success: message.payload.success || false,
+          result: message.payload.result,
+          error: message.payload.error,
+          requestId,
+        });
+      } else if (message.type === 'AI_STREAM_ERROR') {
+        cleanup();
+        port.disconnect();
+        resolve({
+          success: false,
+          error: message.payload.error || 'Unknown error',
+          requestId,
+        });
       }
-    }
+    };
 
-    if (fullText) {
-      return { success: true, result: fullText };
-    }
-    return { success: false, error: 'AI 无响应' };
-  } finally {
-    reader.releaseLock();
-  }
-}
+    // Handle port disconnect (abort)
+    port.onDisconnect.addListener(() => {
+      cleanup();
+      resolve({
+        success: false,
+        error: '请求已取消',
+        requestId,
+      });
+    });
 
-// Gemini API
-async function callGeminiAPI(
-  prompt: string,
-  systemPrompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const providerConfig = PROVIDER_CONFIGS.gemini;
-  const endpoint = useStreaming ? 'streamGenerateContent' : 'generateContent';
-  const apiUrl = `${providerConfig.apiUrl}/${providerConfig.model}:${endpoint}?key=${config.apiKey}${useStreaming ? '&alt=sse' : ''}`;
+    port.onMessage.addListener(messageHandler);
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            { text: `${systemPrompt}\n\n${prompt}` },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 2048,
+    port.postMessage({
+      type,
+      payload: {
+        ...payload,
+        requestId,
       },
-    }),
+    });
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processGeminiStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
 }
 
-async function processGeminiStream(
-  response: Response,
+// Streaming vision AI request using port connection
+async function callStreamingVisionAI(
+  imageDataUrl: string,
+  prompt: string,
+  config: MenuConfig,
   onChunk: OnChunkCallback
-): Promise<AIResponse> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return { success: false, error: '无法读取流' };
-  }
+): Promise<AIResponse & { requestId: string }> {
+  return new Promise((resolve) => {
+    const requestId = generateRequestId();
+    const port = chrome.runtime.connect({ name: 'ai-stream' });
 
-  const decoder = new TextDecoder();
-  let fullText = '';
+    // Track active request
+    activeRequests.set(requestId, { port, requestId });
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-
-          try {
-            const parsed = JSON.parse(data);
-            const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (content) {
-              fullText += content;
-              onChunk(content, fullText);
-            }
-          } catch {
-            // Skip invalid JSON lines
-          }
-        }
+    const cleanup = () => {
+      activeRequests.delete(requestId);
+      try {
+        port.onMessage.removeListener(messageHandler);
+      } catch {
+        // Listener may already be removed
       }
-    }
+    };
 
-    if (fullText) {
-      return { success: true, result: fullText };
-    }
-    return { success: false, error: 'AI 无响应' };
-  } finally {
-    reader.releaseLock();
-  }
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; success?: boolean; result?: string; error?: string } }) => {
+      if (message.payload?.requestId !== requestId) return;
+
+      if (message.type === 'AI_STREAM_CHUNK') {
+        onChunk(message.payload.chunk || '', message.payload.fullText || '');
+      } else if (message.type === 'AI_STREAM_END') {
+        cleanup();
+        port.disconnect();
+        resolve({
+          success: message.payload.success || false,
+          result: message.payload.result,
+          error: message.payload.error,
+          requestId,
+        });
+      } else if (message.type === 'AI_STREAM_ERROR') {
+        cleanup();
+        port.disconnect();
+        resolve({
+          success: false,
+          error: message.payload.error || 'Unknown error',
+          requestId,
+        });
+      }
+    };
+
+    // Handle port disconnect (abort)
+    port.onDisconnect.addListener(() => {
+      cleanup();
+      resolve({
+        success: false,
+        error: '请求已取消',
+        requestId,
+      });
+    });
+
+    port.onMessage.addListener(messageHandler);
+
+    port.postMessage({
+      type: 'AI_VISION_REQUEST',
+      payload: {
+        imageDataUrl,
+        prompt,
+        config,
+        requestId,
+      },
+    });
+  });
 }
 
+// Prompt helpers - kept here for content script usage
 export function getTranslatePrompt(targetLang: string): string {
   return `You are a professional translator. Translate the following text to ${targetLang}. Only output the translation, nothing else.`;
 }
@@ -400,331 +290,6 @@ export function getSummarizePagePrompt(): string {
   return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in the same language as the content.`;
 }
 
-// Vision API for image analysis
-export async function callVisionAI(
-  imageDataUrl: string,
-  prompt: string,
-  config: MenuConfig,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const provider = config.apiProvider;
-  const useStreaming = config.useStreaming && !!onChunk;
-
-  // Validate API key requirement
-  if (provider !== 'groq' && !config.apiKey) {
-    return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
-  }
-
-  try {
-    switch (provider) {
-      case 'anthropic':
-        return await callAnthropicVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk);
-      case 'gemini':
-        return await callGeminiVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk);
-      case 'groq':
-      case 'openai':
-      default:
-        return await callOpenAIVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk);
-    }
-  } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
-  }
-}
-
-// OpenAI compatible Vision API
-async function callOpenAIVisionAPI(
-  imageDataUrl: string,
-  prompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const provider = config.apiProvider;
-  const providerConfig = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
-  const apiUrl = providerConfig.apiUrl;
-  const model = providerConfig.visionModel || providerConfig.model;
-  const apiKey = config.apiKey;
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageDataUrl,
-              },
-            },
-          ],
-        },
-      ],
-      max_tokens: 2048,
-      stream: useStreaming,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processOpenAIStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.choices?.[0]?.message?.content;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
-}
-
-// Anthropic Vision API
-async function callAnthropicVisionAPI(
-  imageDataUrl: string,
-  prompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const providerConfig = PROVIDER_CONFIGS.anthropic;
-
-  // Extract base64 data and media type from data URL
-  const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
-    return { success: false, error: '无效的图片数据格式' };
-  }
-  const [, mediaType, base64Data] = match;
-
-  const response = await fetch(providerConfig.apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.apiKey!,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: providerConfig.visionModel || providerConfig.model,
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64Data,
-              },
-            },
-            { type: 'text', text: prompt },
-          ],
-        },
-      ],
-      stream: useStreaming,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processAnthropicStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.content?.[0]?.text;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
-}
-
-// Gemini Vision API
-async function callGeminiVisionAPI(
-  imageDataUrl: string,
-  prompt: string,
-  config: MenuConfig,
-  useStreaming: boolean,
-  onChunk?: OnChunkCallback
-): Promise<AIResponse> {
-  const providerConfig = PROVIDER_CONFIGS.gemini;
-  const model = providerConfig.visionModel || providerConfig.model;
-  const endpoint = useStreaming ? 'streamGenerateContent' : 'generateContent';
-  const apiUrl = `${providerConfig.apiUrl}/${model}:${endpoint}?key=${config.apiKey}${useStreaming ? '&alt=sse' : ''}`;
-
-  // Extract base64 data and media type from data URL
-  const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) {
-    return { success: false, error: '无效的图片数据格式' };
-  }
-  const [, mimeType, base64Data] = match;
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              inline_data: {
-                mime_type: mimeType,
-                data: base64Data,
-              },
-            },
-            { text: prompt },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
-  }
-
-  if (useStreaming && onChunk) {
-    return await processGeminiStream(response, onChunk);
-  }
-
-  const data = await response.json();
-  const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (result) {
-    return { success: true, result };
-  }
-
-  return { success: false, error: 'AI 无响应' };
-}
-
-// Image generation API
-export async function generateImage(
-  prompt: string,
-  config: MenuConfig,
-  screenshotConfig: ScreenshotConfig
-): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
-  const provider = screenshotConfig.imageGenProvider;
-
-  if (provider === 'openai') {
-    return await callOpenAIImageGeneration(prompt, config, screenshotConfig);
-  } else if (provider === 'custom' && screenshotConfig.customImageGenUrl) {
-    return await callCustomImageGeneration(prompt, screenshotConfig);
-  }
-
-  return { success: false, error: '请配置图像生成服务' };
-}
-
-// OpenAI DALL-E image generation
-async function callOpenAIImageGeneration(
-  prompt: string,
-  config: MenuConfig,
-  screenshotConfig: ScreenshotConfig
-): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
-  if (!config.apiKey) {
-    return { success: false, error: '请配置 OpenAI API Key' };
-  }
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: prompt,
-        n: 1,
-        size: screenshotConfig.imageSize,
-        response_format: 'url',
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      return { success: false, error: `API 错误: ${error}` };
-    }
-
-    const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
-
-    if (imageUrl) {
-      return { success: true, imageUrl };
-    }
-
-    return { success: false, error: '图像生成失败' };
-  } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
-  }
-}
-
-// Custom image generation API
-async function callCustomImageGeneration(
-  prompt: string,
-  screenshotConfig: ScreenshotConfig
-): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
-  if (!screenshotConfig.customImageGenUrl) {
-    return { success: false, error: '请配置自定义图像生成 API URL' };
-  }
-
-  try {
-    const response = await fetch(screenshotConfig.customImageGenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        size: screenshotConfig.imageSize,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      return { success: false, error: `API 错误: ${error}` };
-    }
-
-    const data = await response.json();
-    // Try common response formats
-    const imageUrl = data.data?.[0]?.url || data.url || data.image_url || data.result;
-
-    if (imageUrl) {
-      return { success: true, imageUrl };
-    }
-
-    return { success: false, error: '图像生成失败' };
-  } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
-  }
-}
-
-// Helper prompts for vision
 export function getDescribeImagePrompt(): string {
   return `请详细描述这张图片的内容，包括：
 1. 主要元素和对象

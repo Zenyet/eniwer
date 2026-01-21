@@ -14,6 +14,7 @@ export class SelectionPopover {
   private currentRange: Range | null = null;
   private preferredPosition: PopoverPosition = "above";
   private scrollHandler: (() => void) | null = null;
+  private rafId: number | null = null;
 
   constructor() {}
 
@@ -59,7 +60,13 @@ export class SelectionPopover {
 
   private setupScrollListener(): void {
     this.scrollHandler = () => {
-      this.updatePosition();
+      // 使用 rAF 节流，确保每帧最多更新一次
+      if (this.rafId === null) {
+        this.rafId = requestAnimationFrame(() => {
+          this.updatePosition();
+          this.rafId = null;
+        });
+      }
     };
     // 监听 window 和 document 的滚动事件（捕获阶段以获取所有滚动）
     window.addEventListener("scroll", this.scrollHandler, true);
@@ -69,6 +76,11 @@ export class SelectionPopover {
     if (this.scrollHandler) {
       window.removeEventListener("scroll", this.scrollHandler, true);
       this.scrollHandler = null;
+    }
+    // 取消待执行的 rAF
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
     }
   }
 

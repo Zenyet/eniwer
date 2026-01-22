@@ -3,8 +3,7 @@ import { MenuActions } from './MenuActions';
 import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
-import { abortAllRequests } from '../utils/ai';
-import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow } from './ShadowHost';
+import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow, getShadowHost } from './ShadowHost';
 import './styles.css';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -73,6 +72,9 @@ class TheCircle {
       this.menuActions.setConfig(data.config);
       this.selectionMenuItems = data.selectionMenuItems;
       this.globalMenuItems = data.globalMenuItems;
+      
+      // Apply the loaded theme
+      this.applyTheme(this.config.theme);
     } catch (error) {
       console.error('The Circle: Failed to load config', error);
     }
@@ -83,19 +85,71 @@ class TheCircle {
       if (changes.thecircle_config) {
         this.config = { ...this.config, ...changes.thecircle_config.newValue };
         this.menuActions.setConfig(this.config);
+        this.applyTheme(this.config.theme);
       }
     });
+  }
+
+  private applyTheme(theme: 'dark' | 'light' | 'system'): void {
+    const host = getShadowHost();
+    const container = host.shadowRoot?.getElementById('thecircle-container');
+    
+    console.log('The Circle: Applying theme:', theme);
+
+    // Remove existing theme classes from both host and container
+    const removeClasses = ['dark', 'light'];
+    host.classList.remove(...removeClasses);
+    container?.classList.remove(...removeClasses);
+
+    if (theme === 'dark') {
+      host.classList.add('dark');
+      container?.classList.add('dark');
+    } else if (theme === 'light') {
+      host.classList.add('light');
+      container?.classList.add('light');
+    } else if (theme === 'system') {
+      // Check system preference
+      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      
+      const updateSystemTheme = (e: MediaQueryListEvent | MediaQueryList) => {
+        // Remove classes first to avoid conflicts
+        host.classList.remove(...removeClasses);
+        container?.classList.remove(...removeClasses);
+        
+        if (e.matches) {
+          host.classList.add('dark');
+          container?.classList.add('dark');
+        } else {
+          host.classList.add('light');
+          container?.classList.add('light');
+        }
+      };
+
+      // Initial check
+      updateSystemTheme(darkModeQuery);
+
+      // Listen for changes
+      // Note: We might want to store this listener to remove it later if theme changes away from 'system'
+      // But for simplicity in this context, adding a new one is acceptable as applyTheme cleans classes.
+      // A more robust solution would track the listener.
+      darkModeQuery.onchange = updateSystemTheme;
+    }
   }
 
   private setupSelectionListener(): void {
     let selectionTimeout: number | null = null;
 
     document.addEventListener('mouseup', (e) => {
-      // Ignore if clicking on our popover
+      // Ignore if clicking on our UI elements
       const path = e.composedPath() as HTMLElement[];
       for (const el of path) {
-        if (el instanceof HTMLElement && el.classList?.contains('thecircle-selection-popover')) {
-          return;
+        if (el instanceof HTMLElement) {
+          if (el.classList?.contains('thecircle-selection-popover') ||
+              el.classList?.contains('thecircle-result-panel') ||
+              el.classList?.contains('thecircle-menu') ||
+              el.classList?.contains('thecircle-toast')) {
+            return;
+          }
         }
       }
 
@@ -131,12 +185,17 @@ class TheCircle {
       }, 10);
     });
 
-    // Hide popover when clicking elsewhere (but not on the popover itself)
+    // Hide popover when clicking elsewhere (but not on our UI elements)
     document.addEventListener('mousedown', (e) => {
       const path = e.composedPath() as HTMLElement[];
       for (const el of path) {
-        if (el instanceof HTMLElement && el.classList?.contains('thecircle-selection-popover')) {
-          return;
+        if (el instanceof HTMLElement) {
+          if (el.classList?.contains('thecircle-selection-popover') ||
+              el.classList?.contains('thecircle-result-panel') ||
+              el.classList?.contains('thecircle-menu') ||
+              el.classList?.contains('thecircle-toast')) {
+            return;
+          }
         }
       }
 
@@ -179,7 +238,12 @@ class TheCircle {
     this.radialMenu.setSelectionInfo(selectionRect);
 
     // Show result panel directly (skip menu)
-    this.radialMenu.showResultOnly(x, y, translateItem.label);
+    // Use showResult directly to pass options
+    this.radialMenu.showResult(translateItem.label, '', {
+      isLoading: true,
+      originalText: this.currentSelectedText,
+      type: 'translate'
+    });
 
     // Create streaming callback for typewriter effect
     const onChunk = this.config.useStreaming
@@ -250,6 +314,8 @@ class TheCircle {
   }
 
   private matchShortcut(e: KeyboardEvent, shortcut: string): boolean {
+    if (!e.key) return false;
+
     const parts = shortcut.split('+');
     const key = parts[parts.length - 1];
 
@@ -299,7 +365,11 @@ class TheCircle {
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
 
     if (aiActions.includes(item.action)) {
-      this.radialMenu.showResult(item.label, '', true);
+      this.radialMenu.showResult(item.label, '', {
+        isLoading: true,
+        originalText: this.currentSelectedText || window.getSelection()?.toString() || '',
+        type: item.action === 'translate' ? 'translate' : 'general'
+      });
 
       // Create streaming callback for typewriter effect
       const onChunk = this.config.useStreaming
@@ -357,13 +427,13 @@ class TheCircle {
   private showToast(message: string, type: ToastType = 'info'): void {
     const toast = document.createElement('div');
     const typeClasses = {
-      success: 'border-l-[3px] border-l-green-500/80',
-      error: 'border-l-[3px] border-l-red-500/80',
-      warning: 'border-l-[3px] border-l-yellow-500/80',
-      info: 'border-l-[3px] border-l-blue-500/80'
+      success: 'thecircle-toast-success',
+      error: 'thecircle-toast-error',
+      warning: 'thecircle-toast-warning',
+      info: 'thecircle-toast-info'
     }[type];
 
-    toast.className = `fixed left-1/2 -translate-x-1/2 z-[2147483647] px-[20px] py-[12px] text-[14px] rounded-full bg-[#1e1e1e]/95 backdrop-blur-[20px] border border-white/15 text-white/95 font-sans shadow-[0_4px_16px_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.1)] animate-[thecircle-toast-in_0.25s_ease-out] flex items-center gap-[10px] thecircle-toast ${typeClasses}`;
+    toast.className = `thecircle-toast ${typeClasses}`;
 
     // Limit active toasts
     if (this.activeToasts.length >= this.MAX_TOASTS) {
@@ -380,14 +450,7 @@ class TheCircle {
     toast.setAttribute('data-index', String(index));
 
     const iconEl = document.createElement('div');
-    iconEl.className = 'w-[18px] h-[18px] flex items-center justify-center shrink-0 thecircle-toast-icon';
-    const iconColors = {
-      success: 'text-[#22c55e]',
-      error: 'text-[#ef4444]',
-      warning: 'text-[#eab308]',
-      info: 'text-[#3b82f6]'
-    }[type];
-    iconEl.classList.add(iconColors);
+    iconEl.className = 'thecircle-toast-icon';
 
     iconEl.innerHTML = this.getToastIcon(type);
 

@@ -135,6 +135,11 @@ export class MenuActions {
     text: string,
     onChunk?: OnChunkCallback
   ): Promise<{ type: string; result?: string }> {
+    const validationError = this.validateAIConfig();
+    if (validationError) {
+      return { type: 'error', result: validationError };
+    }
+
     let systemPrompt: string;
 
     switch (action) {
@@ -171,6 +176,28 @@ export class MenuActions {
     } catch (error) {
       return { type: 'error', result: `请求失败: ${error}` };
     }
+  }
+
+  private validateAIConfig(): string | null {
+    const { apiProvider, apiKey, customApiUrl, customModel } = this.config;
+
+    if (apiProvider === 'custom') {
+      if (!customApiUrl) return '请在设置中配置自定义 API 地址';
+      if (!customModel) return '请在设置中配置自定义模型名称';
+    } else {
+      // Standard providers need a key
+      if (!apiKey) {
+        const providerNames: Record<string, string> = {
+          openai: 'OpenAI',
+          anthropic: 'Anthropic',
+          gemini: 'Google Gemini',
+          groq: 'Groq'
+        };
+        const name = providerNames[apiProvider] || apiProvider;
+        return `请在设置中配置 ${name} API Key`;
+      }
+    }
+    return null;
   }
 
   private handleSearch(): { type: string; url: string } {
@@ -340,6 +367,12 @@ export class MenuActions {
   private async askAIAboutImage(question: string): Promise<void> {
     if (!this.screenshotPanel) return;
 
+    const validationError = this.validateAIConfig();
+    if (validationError) {
+      this.screenshotPanel.showResult('错误', validationError);
+      return;
+    }
+
     this.screenshotPanel.showLoading('AI 正在分析...');
 
     const prompt = getAskImagePrompt(question);
@@ -361,6 +394,12 @@ export class MenuActions {
 
   private async describeImage(): Promise<void> {
     if (!this.screenshotPanel) return;
+
+    const validationError = this.validateAIConfig();
+    if (validationError) {
+      this.screenshotPanel.showResult('错误', validationError);
+      return;
+    }
 
     this.screenshotPanel.showLoading('AI 正在描述图片...');
 
@@ -389,6 +428,18 @@ export class MenuActions {
     if (!screenshotConfig.enableImageGen) {
       this.screenshotPanel.showResult('错误', '请先在设置中启用 AI 生图功能');
       return;
+    }
+
+    if (screenshotConfig.imageGenProvider === 'openai') {
+      if (!this.config.apiKey) {
+        this.screenshotPanel.showResult('错误', '使用 OpenAI 生图需要配置 API Key');
+        return;
+      }
+    } else if (screenshotConfig.imageGenProvider === 'custom') {
+      if (!screenshotConfig.customImageGenUrl) {
+        this.screenshotPanel.showResult('错误', '请配置自定义生图 API 地址');
+        return;
+      }
     }
 
     this.screenshotPanel.showLoading('正在生成图片...');

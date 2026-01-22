@@ -3,6 +3,12 @@ import { icons } from '../icons';
 import { appendToShadow, removeFromShadow } from './ShadowHost';
 import { abortAllRequests } from '../utils/ai';
 
+export interface ShowResultOptions {
+  isLoading?: boolean;
+  originalText?: string;
+  type?: 'translate' | 'general';
+}
+
 export class RadialMenu {
   private container: HTMLElement | null = null;
   private overlay: HTMLElement | null = null;
@@ -18,6 +24,12 @@ export class RadialMenu {
   private isLoading: boolean = false;
   private onStopCallback: (() => void) | null = null;
   private onClose: (() => void) | null = null;
+  
+  // State for comparison view
+  private originalText: string = '';
+  private currentTranslatedText: string = '';
+  private isComparisonMode: boolean = false;
+  private resultType: 'translate' | 'general' = 'general';
 
   constructor() {
     this.handleMouseMove = this.handleMouseMove.bind(this);
@@ -74,11 +86,27 @@ export class RadialMenu {
     this.detachEventListeners();
 
     if (this.overlay) {
-      this.overlay.classList.add('thecircle-fade-out');
+      const overlayToRemove = this.overlay;
+      overlayToRemove.classList.add('thecircle-fade-out');
+      
+      // If we're closing completely (not just replacing), remove container too
+      // But container logic is tricky if we're reopening. 
+      // Actually container is just for menu items? 
+      // Looking at createMenu(), it creates this.container.
+      // So we should capture container too.
+      const containerToRemove = this.container;
+      
       setTimeout(() => {
-        if (this.overlay) {
-          removeFromShadow(this.overlay);
+        removeFromShadow(overlayToRemove);
+        if (containerToRemove) {
+          removeFromShadow(containerToRemove);
+        }
+        
+        // Only clear references if they haven't been replaced by a new show() call
+        if (this.overlay === overlayToRemove) {
           this.overlay = null;
+        }
+        if (this.container === containerToRemove) {
           this.container = null;
         }
       }, 200);
@@ -101,11 +129,14 @@ export class RadialMenu {
 
     if (this.resultPanel) {
       this.resultPanel.classList.add('thecircle-fade-out');
+      const panelToRemove = this.resultPanel;
       setTimeout(() => {
-        if (this.resultPanel) {
-          removeFromShadow(this.resultPanel);
-          this.resultPanel = null;
-          this.onClose?.();
+        if (panelToRemove) {
+          removeFromShadow(panelToRemove);
+          if (this.resultPanel === panelToRemove) {
+            this.resultPanel = null;
+            this.onClose?.();
+          }
         }
       }, 200);
     }
@@ -119,8 +150,27 @@ export class RadialMenu {
     this.onClose = callback;
   }
 
-  public showResult(title: string, content: string, isLoading: boolean = false): void {
-    this.hideResultPanel();
+  public showResult(title: string, content: string, options: boolean | ShowResultOptions = false): void {
+    const isLoading = typeof options === 'boolean' ? options : (options.isLoading || false);
+    
+    // Reset state
+    if (typeof options === 'object') {
+      this.originalText = options.originalText || '';
+      this.resultType = options.type || 'general';
+    } else {
+      this.originalText = '';
+      this.resultType = 'general';
+    }
+    this.currentTranslatedText = content;
+    this.isComparisonMode = false;
+    
+    // If we have an existing panel, remove it immediately to avoid overlap/race conditions
+    // This is especially important when switching from "Loading" to "Error" quickly
+    if (this.resultPanel) {
+      removeFromShadow(this.resultPanel);
+      this.resultPanel = null;
+    }
+    
     this.isLoading = isLoading;
 
     this.resultPanel = document.createElement('div');
@@ -153,6 +203,14 @@ export class RadialMenu {
     `;
 
     appendToShadow(this.resultPanel);
+
+    // Initial render if not loading or has content
+    if (!isLoading) {
+      this.renderContent();
+    }
+    
+    // Update footer actions immediately to show Compare button if needed
+    this.ensureFooterActions(isLoading, content);
 
     // Position based on selection or center
     const rect = this.resultPanel.getBoundingClientRect();
@@ -189,7 +247,11 @@ export class RadialMenu {
 
     // Event listeners
     const closeBtn = this.resultPanel.querySelector('.thecircle-result-close');
-    closeBtn?.addEventListener('click', () => this.hideResultPanel());
+    closeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent event bubbling
+      e.preventDefault();
+      this.hideResultPanel();
+    });
 
     // Stop button listener
     if (isLoading) {
@@ -207,8 +269,83 @@ export class RadialMenu {
     // Setup copy button
     this.setupCopyButton(content);
 
+    // Setup drag behavior
+    this.setupDragBehavior();
+
     // Setup scroll indicators
     this.setupScrollIndicators();
+  }
+
+  private setupDragBehavior(): void {
+    if (!this.resultPanel) return;
+
+    const header = this.resultPanel.querySelector('.thecircle-result-header') as HTMLElement;
+    if (!header) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      // Don't start drag if clicking close button
+      if ((e.target as HTMLElement).closest('.thecircle-result-close')) return;
+      
+      // Stop event propagation to prevent popover logic from interfering
+      e.stopPropagation();
+
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = this.resultPanel!.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      header.style.cursor = 'grabbing';
+      
+      // Prevent text selection during drag
+      e.preventDefault();
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !this.resultPanel) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Calculate new position
+      let newLeft = initialLeft + dx;
+      let newTop = initialTop + dy;
+
+      // Boundary checks (keep at least 20px visible)
+      const rect = this.resultPanel.getBoundingClientRect();
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      if (newLeft + rect.width < 20) newLeft = 20 - rect.width;
+      if (newLeft > windowWidth - 20) newLeft = windowWidth - 20;
+      if (newTop < 0) newTop = 0;
+      if (newTop > windowHeight - 20) newTop = windowHeight - 20;
+
+      this.resultPanel.style.left = `${newLeft}px`;
+      this.resultPanel.style.top = `${newTop}px`;
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+      if (header) {
+        header.style.cursor = 'move';
+      }
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    header.addEventListener('mousedown', onMouseDown);
   }
 
   private createStopButtonHTML(): string {
@@ -263,7 +400,7 @@ export class RadialMenu {
     if (iconEl && textEl) {
       btn.classList.add('copied');
       iconEl.innerHTML = this.getCheckIcon();
-      textEl.textContent = '已复制!';
+      textEl.textContent = '已复制';
 
       setTimeout(() => {
         btn.classList.remove('copied');
@@ -297,12 +434,9 @@ export class RadialMenu {
 
   public updateResult(content: string): void {
     this.isLoading = false;
+    this.currentTranslatedText = content;
     if (this.resultPanel) {
-      const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
-      if (contentEl) {
-        contentEl.innerHTML = this.formatStreamContent(content);
-      }
-
+      this.renderContent();
       this.ensureFooterActions(false, content);
       this.setupScrollIndicators();
     }
@@ -311,31 +445,81 @@ export class RadialMenu {
   // Stream update for typewriter effect
   public streamUpdate(_chunk: string, fullText: string): void {
     this.isLoading = true;
+    this.currentTranslatedText = fullText;
     if (this.resultPanel) {
-      const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
-      if (contentEl) {
-        // Check if still showing loading, replace with content + stop button
-        if (contentEl.querySelector('.thecircle-loading-container')) {
-          contentEl.innerHTML = `
-            <div class="thecircle-stream-content"></div>
-          `;
-          
-          // Ensure stop button is visible in footer
-          this.ensureFooterActions(true, fullText);
-        }
-
-        // Update stream content
-        const streamContent = contentEl.querySelector('.thecircle-stream-content');
-        if (streamContent) {
-          streamContent.innerHTML = this.formatStreamContent(fullText);
-        } else {
-          // Fallback if no stream content container
-          contentEl.innerHTML = this.formatStreamContent(fullText);
-        }
-        // Auto scroll removed as per user request
-        // contentEl.scrollTop = contentEl.scrollHeight;
-      }
+      this.renderContent();
+      // Ensure stop button is visible in footer
+      this.ensureFooterActions(true, fullText);
     }
+  }
+  
+  private renderContent(): void {
+    if (!this.resultPanel) return;
+    
+    const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
+    if (!contentEl) return;
+
+    // Remove loading if present
+    if (contentEl.querySelector('.thecircle-loading-container')) {
+       // Just clear it, content will be set below
+       contentEl.innerHTML = '';
+    }
+
+    if (this.isComparisonMode && this.resultType === 'translate' && this.originalText) {
+        // Render comparison view
+        contentEl.innerHTML = `
+          <div class="thecircle-result-comparison split-view">
+             <div class="thecircle-result-comparison-item">
+               <div class="thecircle-result-comparison-label">原文</div>
+               <div class="thecircle-result-comparison-content">${this.formatStreamContent(this.originalText)}</div>
+             </div>
+             <div class="thecircle-result-divider"></div>
+             <div class="thecircle-result-comparison-item">
+               <div class="thecircle-result-comparison-label">译文</div>
+               <div class="thecircle-result-comparison-content">${this.formatStreamContent(this.currentTranslatedText)}</div>
+             </div>
+          </div>
+        `;
+        this.resultPanel.classList.add('comparison-mode');
+    } else {
+        // Render standard view
+        if (contentEl.querySelector('.thecircle-stream-content')) {
+           const streamContent = contentEl.querySelector('.thecircle-stream-content');
+           if (streamContent) streamContent.innerHTML = this.formatStreamContent(this.currentTranslatedText);
+        } else {
+           // If we are switching back from comparison mode or initial render
+           if (this.isLoading && !this.currentTranslatedText) {
+             // Keep loading state if empty
+             if (!contentEl.innerHTML) {
+                contentEl.innerHTML = `
+                <div class="thecircle-stream-content"></div>
+              `;
+             }
+           } else {
+             // Standard content
+             // Use stream content wrapper for consistency
+             contentEl.innerHTML = `
+                <div class="thecircle-stream-content">${this.formatStreamContent(this.currentTranslatedText)}</div>
+              `;
+           }
+        }
+        this.resultPanel.classList.remove('comparison-mode');
+    }
+  }
+
+  private toggleComparisonMode(): void {
+    this.isComparisonMode = !this.isComparisonMode;
+    this.renderContent();
+    this.ensureFooterActions(this.isLoading, this.currentTranslatedText);
+  }
+
+  private createCompareButtonHTML(): string {
+    return `
+      <button class="thecircle-compare-btn" title="显示原文">
+        <span class="thecircle-compare-btn-icon">${icons.columns}</span>
+        <span>对比</span>
+      </button>
+    `;
   }
 
   private formatStreamContent(text: string): string {
@@ -375,6 +559,34 @@ export class RadialMenu {
       if (stopBtn) {
         stopBtn.remove();
       }
+    }
+
+    // Compare button logic
+    let compareBtn = actionsEl.querySelector('.thecircle-compare-btn');
+    if (this.resultType === 'translate' && this.originalText) {
+       if (!compareBtn) {
+         const tempDiv = document.createElement('div');
+         tempDiv.innerHTML = this.createCompareButtonHTML();
+         compareBtn = tempDiv.firstElementChild;
+         if (compareBtn) {
+            // Insert before copy button
+            const copyBtn = actionsEl.querySelector('.thecircle-copy-btn');
+            if (copyBtn) {
+               actionsEl.insertBefore(compareBtn, copyBtn);
+            } else {
+               actionsEl.appendChild(compareBtn);
+            }
+            compareBtn.addEventListener('click', () => this.toggleComparisonMode());
+         }
+       }
+       // Update active state
+       if (this.isComparisonMode) {
+          compareBtn?.classList.add('active');
+       } else {
+          compareBtn?.classList.remove('active');
+       }
+    } else {
+        if (compareBtn) compareBtn.remove();
     }
 
     // Manage Copy button

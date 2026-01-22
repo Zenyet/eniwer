@@ -726,22 +726,8 @@
   bottom: 174px;
 }
 
-/* Toast type colors */
-.thecircle-toast-success {
-  border-left: 3px solid rgba(34, 197, 94, 0.8);
-}
+/* Toast type colors removed as per UI design update */
 
-.thecircle-toast-error {
-  border-left: 3px solid rgba(239, 68, 68, 0.8);
-}
-
-.thecircle-toast-warning {
-  border-left: 3px solid rgba(234, 179, 8, 0.8);
-}
-
-.thecircle-toast-info {
-  border-left: 3px solid rgba(59, 130, 246, 0.8);
-}
 
 /* Toast icons */
 .thecircle-toast-icon {

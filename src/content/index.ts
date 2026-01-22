@@ -472,28 +472,6 @@ class TheCircle {
 
     this.activeToasts.push({ element: toast, timeoutId });
   }
-
-  private updateToastPositions(): void {
-    this.activeToasts.forEach((item, index) => {
-      item.element.setAttribute('data-index', String(index));
-    });
-  }
-
-  private removeToast(toastElement: HTMLElement): void {
-    const index = this.activeToasts.findIndex(item => item.element === toastElement);
-
-    if (index !== -1) {
-      const item = this.activeToasts[index];
-      clearTimeout(item.timeoutId);
-      this.activeToasts.splice(index, 1);
-
-      toastElement.classList.add('thecircle-toast-exit');
-      setTimeout(() => {
-        removeFromShadow(toastElement);
-        this.updateToastPositions();
-      }, 200);
-    }
-  }
 }
 
 // Initialize when DOM is ready

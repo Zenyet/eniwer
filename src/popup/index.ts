@@ -8,12 +8,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const logoHeader = document.getElementById('app-logo-header');
   if (logoHeader) logoHeader.innerHTML = icons.logo;
 
-  const logoButton = document.getElementById('app-logo-button');
-  if (logoButton) logoButton.innerHTML = icons.logo;
-
-  const settingsIcon = document.getElementById('settings-icon');
-  if (settingsIcon) settingsIcon.innerHTML = icons.settings;
-
   // Load config and stats
   const result = await chrome.storage.local.get(['thecircle_config', 'thecircle_stats']);
   const config = result.thecircle_config || DEFAULT_CONFIG;

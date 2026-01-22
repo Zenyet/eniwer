@@ -629,7 +629,6 @@ export class RadialMenu {
     const center = document.createElement('div');
     center.className = 'thecircle-center';
     center.innerHTML = `
-      <span class="thecircle-center-icon">${icons.circle}</span>
       <span class="thecircle-center-label">选择操作</span>
     `;
     this.container.appendChild(center);
@@ -748,7 +747,6 @@ export class RadialMenu {
       const centerIcon = this.container?.querySelector('.thecircle-center-icon');
       if (centerLabel && centerIcon) {
         centerLabel.textContent = '选择操作';
-        centerIcon.innerHTML = icons.circle;
       }
     }
   }

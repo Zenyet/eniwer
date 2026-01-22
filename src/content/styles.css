@@ -3,9 +3,9 @@
 
 /* CSS Custom Properties for Liquid Glass - use :host for Shadow DOM */
 :host {
-  /* Default Dark Mode */
+  /* Default Dark Mode Variables */
   --glass-bg: rgba(30, 30, 30, 0.85);
-  --glass-bg-hover: rgba(255, 255, 255, 0.1);
+  --glass-bg-hover: rgba(60, 60, 60, 0.85);
   --glass-border: rgba(255, 255, 255, 0.15);
   --glass-border-hover: rgba(255, 255, 255, 0.4);
   --glass-shadow: rgba(0, 0, 0, 0.25);
@@ -35,11 +35,44 @@
   --secondary-btn-hover: rgba(255, 255, 255, 0.15);
 }
 
+/* Light Mode Variables Definition */
+:host(.light),
+.light {
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg-hover: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-border-hover: rgba(0, 0, 0, 0.2);
+  --glass-shadow: rgba(0, 0, 0, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.8);
+  --text-primary: rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.6);
+  --scrollbar-track: rgba(0, 0, 0, 0.05);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+  --button-bg: rgba(0, 0, 0, 0.05);
+  --button-border: rgba(0, 0, 0, 0.1);
+  --button-hover: rgba(0, 0, 0, 0.1);
+  --code-bg: rgba(0, 0, 0, 0.05);
+  --toast-bg: rgba(255, 255, 255, 0.95);
+  --spinner-track: rgba(0, 0, 0, 0.1);
+  --spinner-head: rgba(0, 0, 0, 0.6);
+  --skeleton-base: rgba(0, 0, 0, 0.05);
+  --skeleton-highlight: rgba(0, 0, 0, 0.1);
+  --separator-color: rgba(0, 0, 0, 0.08);
+  --header-bg: rgba(0, 0, 0, 0.02);
+  --preview-bg: rgba(0, 0, 0, 0.05);
+  --input-bg: rgba(0, 0, 0, 0.05);
+  --input-border: rgba(0, 0, 0, 0.1);
+  --input-focus-bg: rgba(59, 130, 246, 0.05);
+  --secondary-btn-bg: rgba(0, 0, 0, 0.05);
+  --secondary-btn-border: rgba(0, 0, 0, 0.1);
+  --secondary-btn-hover: rgba(0, 0, 0, 0.1);
+}
+
 @media (prefers-color-scheme: light) {
-  :host {
-    /* Light Mode Liquid Glass */
+  :host:not(.dark) {
     --glass-bg: rgba(255, 255, 255, 0.75);
-    --glass-bg-hover: rgba(0, 0, 0, 0.05);
+    --glass-bg-hover: rgba(255, 255, 255, 0.95);
     --glass-border: rgba(0, 0, 0, 0.1);
     --glass-border-hover: rgba(0, 0, 0, 0.2);
     --glass-shadow: rgba(0, 0, 0, 0.1);
@@ -210,43 +243,43 @@
   transition: all 0.15s ease-out;
   /* Staggered entry animation */
   opacity: 0;
-  animation: thecircle-item-in 0.3s ease-out forwards;
+  animation: thecircle-item-in 0.5s ease-out forwards;
 }
 
 /* Staggered entry animation for each menu item */
 .thecircle-item:nth-child(2) {
-  animation-delay: 0.02s;
+  animation-delay: 0.05s;
 }
 .thecircle-item:nth-child(3) {
-  animation-delay: 0.04s;
-}
-.thecircle-item:nth-child(4) {
-  animation-delay: 0.06s;
-}
-.thecircle-item:nth-child(5) {
-  animation-delay: 0.08s;
-}
-.thecircle-item:nth-child(6) {
   animation-delay: 0.1s;
 }
+.thecircle-item:nth-child(4) {
+  animation-delay: 0.15s;
+}
+.thecircle-item:nth-child(5) {
+  animation-delay: 0.2s;
+}
+.thecircle-item:nth-child(6) {
+  animation-delay: 0.25s;
+}
 .thecircle-item:nth-child(7) {
-  animation-delay: 0.12s;
+  animation-delay: 0.3s;
 }
 .thecircle-item:nth-child(8) {
-  animation-delay: 0.14s;
+  animation-delay: 0.35s;
 }
 .thecircle-item:nth-child(9) {
-  animation-delay: 0.16s;
+  animation-delay: 0.4s;
 }
 
 @keyframes thecircle-item-in {
   from {
     opacity: 0;
-    transform: translate(var(--x, 0), var(--y, 0)) scale(0.5);
+    transform: translate(var(--x, 0), var(--y, 0));
   }
   to {
     opacity: 1;
-    transform: translate(var(--x, 0), var(--y, 0)) scale(1);
+    transform: translate(var(--x, 0), var(--y, 0));
   }
 }
 
@@ -299,9 +332,9 @@
 .thecircle-result-panel {
   position: fixed;
   z-index: 2147483647;
-  min-width: 280px;
-  max-width: 400px;
-  max-height: 350px;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 320px;
   display: flex;
   flex-direction: column;
   background: var(--glass-bg);
@@ -317,6 +350,11 @@
   animation: thecircle-slide-in 0.25s ease-out;
   overflow: hidden;
   color: var(--text-primary);
+  transition: max-width 0.3s ease;
+}
+
+.thecircle-result-panel.comparison-mode {
+  max-width: 600px;
 }
 
 /* Panel top highlight */
@@ -358,6 +396,8 @@
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  cursor: move; /* Indicate draggable */
+  user-select: none; /* Prevent text selection while dragging */
 }
 
 .thecircle-result-title {
@@ -367,7 +407,7 @@
 }
 
 .thecircle-result-close {
-  background: var(--button-bg);
+  background: transparent;
   border: none;
   font-size: 18px;
   cursor: pointer;
@@ -380,6 +420,11 @@
   border-radius: 9999px;
   color: var(--text-secondary);
   transition: all 0.2s ease;
+}
+
+.thecircle-result-close:hover {
+  background: var(--button-bg);
+  color: var(--text-primary);
 }
 
 /* Result Content with gradient mask scroll indicators */
@@ -480,7 +525,7 @@
   top: 0;
   background: linear-gradient(
     to bottom,
-    rgba(30, 30, 30, 0.9) 0%,
+    var(--glass-bg) 0%,
     transparent 100%
   );
 }
@@ -489,7 +534,7 @@
   bottom: 0;
   background: linear-gradient(
     to top,
-    rgba(30, 30, 30, 0.9) 0%,
+    var(--glass-bg) 0%,
     transparent 100%
   );
 }
@@ -503,11 +548,19 @@
 }
 
 /* Loading states */
-.thecircle-loading {
+.thecircle-loading-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
   min-height: 80px;
+  width: 100%;
+}
+
+.thecircle-loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .thecircle-spinner {
@@ -568,7 +621,8 @@
   z-index: 1;
 }
 
-.thecircle-copy-btn {
+.thecircle-copy-btn,
+.thecircle-compare-btn {
   border: none;
   color: var(--text-primary);
   padding: 8px 16px;
@@ -583,7 +637,8 @@
   gap: 6px;
 }
 
-.thecircle-copy-btn:hover {
+.thecircle-copy-btn:hover,
+.thecircle-compare-btn:hover {
   background: var(--button-hover);
   border-color: var(--glass-border-hover);
 }
@@ -593,7 +648,13 @@
   border-color: rgba(34, 197, 94, 0.5);
 }
 
-.thecircle-copy-btn-icon {
+.thecircle-compare-btn.active {
+  background: var(--input-focus-bg);
+  border-color: var(--glass-border-hover);
+}
+
+.thecircle-copy-btn-icon,
+.thecircle-compare-btn-icon {
   width: 14px;
   height: 14px;
   display: flex;
@@ -617,8 +678,8 @@
 }
 
 .thecircle-stop-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: var(--button-hover);
+  border-color: var(--glass-border-hover);
 }
 
 .thecircle-stop-btn svg {
@@ -734,6 +795,53 @@
   animation: thecircle-toast-out 0.2s ease-out forwards;
 }
 
+/* Comparison View Styles */
+.thecircle-result-comparison {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.thecircle-result-comparison.split-view {
+  flex-direction: row;
+  gap: 16px;
+}
+
+.thecircle-result-comparison-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; /* Prevent flex overflow */
+}
+
+.thecircle-result-comparison-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.thecircle-result-comparison-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-wrap: break-word;
+}
+
+.thecircle-result-divider {
+  height: 1px;
+  background: var(--separator-color);
+  margin: 4px 0;
+}
+
+.thecircle-result-comparison.split-view .thecircle-result-divider {
+  width: 1px;
+  height: auto;
+  margin: 0;
+}
+
 /* Responsive optimizations */
 @media (max-width: 500px) {
   .thecircle-result-panel {
@@ -741,6 +849,21 @@
     max-width: calc(100vw - 40px);
     left: 20px !important;
     right: 20px !important;
+  }
+  
+  .thecircle-result-panel.comparison-mode {
+    max-width: calc(100vw - 40px);
+  }
+  
+  .thecircle-result-comparison.split-view {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .thecircle-result-comparison.split-view .thecircle-result-divider {
+    width: auto;
+    height: 1px;
+    margin: 4px 0;
   }
 
   .thecircle-item {
@@ -954,24 +1077,58 @@
   height: 16px;
 }
 
-.thecircle-screenshot-preview {
-  padding: 16px;
-  background: var(--preview-bg);
+/* Selection Popover Styles */
+.thecircle-selection-popover {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-out, top 0.2s ease-out, left 0.2s ease-out;
 }
 
-.thecircle-screenshot-preview img {
+.thecircle-selection-popover-exit {
+  animation: thecircle-fade-out 0.15s ease-out forwards;
+}
+
+.thecircle-selection-popover-container {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 9999px;
+  box-shadow: 0 4px 16px var(--glass-shadow);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.thecircle-selection-popover-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 6px;
+}
+
+.thecircle-selection-popover-btn:hover {
+  background: var(--button-hover);
+  color: var(--text-primary);
+}
+
+.thecircle-selection-popover-btn svg {
   width: 100%;
-  max-height: 300px;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  height: 100%;
 }
 
-.thecircle-screenshot-actions {
-  padding: 16px 18px;
-  border-top: 1px solid var(--separator-color);
-}
-
+/* Screenshot Action Buttons */
 .thecircle-screenshot-btn-group {
   display: flex;
   flex-wrap: wrap;
@@ -983,13 +1140,35 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border: none;
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: inherit;
+  border: 1px solid transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.thecircle-screenshot-btn-secondary {
+  background: var(--button-bg);
+  border-color: var(--button-border);
+  color: var(--text-primary);
+}
+
+.thecircle-screenshot-btn-secondary:hover {
+  background: var(--button-hover);
+  border-color: var(--glass-border-hover);
+}
+
+.thecircle-screenshot-btn-primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.thecircle-screenshot-btn-primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 .thecircle-screenshot-btn svg {
@@ -997,48 +1176,30 @@
   height: 16px;
 }
 
-.thecircle-screenshot-btn-primary {
-  background: #3b82f6;
-  color: #fff;
-}
-
-.thecircle-screenshot-btn-primary:hover {
-  background: #2563eb;
-}
-
-.thecircle-screenshot-btn-secondary {
-  background: var(--secondary-btn-bg);
-  color: var(--text-primary);
-  border: 1px solid var(--secondary-btn-border);
-}
-
-.thecircle-screenshot-btn-secondary:hover {
-  background: var(--secondary-btn-hover);
-}
-
 /* Screenshot Input Area */
 .thecircle-screenshot-input-area {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
 .thecircle-screenshot-input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 12px;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
   border-radius: 8px;
   color: var(--text-primary);
   font-size: 14px;
-  font-family: inherit;
   outline: none;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .thecircle-screenshot-input:focus {
-  border-color: #3b82f6;
   background: var(--input-focus-bg);
+  border-color: #3b82f6;
 }
 
 .thecircle-screenshot-input::placeholder {
@@ -1051,18 +1212,7 @@
   gap: 8px;
 }
 
-/* Screenshot Loading */
-.thecircle-screenshot-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 20px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-/* Screenshot Result */
+/* Screenshot Result & Generated Image */
 .thecircle-screenshot-result {
   display: flex;
   flex-direction: column;
@@ -1076,47 +1226,23 @@
 }
 
 .thecircle-screenshot-result-content {
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--preview-bg);
-  border-radius: 8px;
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
-}
-
-.thecircle-screenshot-result-content::-webkit-scrollbar {
-  width: 6px;
-  background-color: transparent;
-}
-
-.thecircle-screenshot-result-content::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 3px;
-}
-
-.thecircle-screenshot-result-content::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-.thecircle-screenshot-result-content code {
-  background: var(--code-bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
-  font-size: 13px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 .thecircle-screenshot-result-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
-/* Generated Image */
 .thecircle-screenshot-generated {
   display: flex;
   flex-direction: column;
@@ -1125,129 +1251,28 @@
 
 .thecircle-screenshot-generated-img {
   width: 100%;
-  max-height: 300px;
-  object-fit: contain;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-}
-
-/* Stop/Abort Button Styles */
-.thecircle-stop-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 6px;
-  color: #ef4444;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.thecircle-stop-btn:hover {
-  background: rgba(239, 68, 68, 0.3);
-  border-color: rgba(239, 68, 68, 0.6);
-}
-
-.thecircle-stop-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* Loading with stop button */
-.thecircle-loading-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-}
-
-.thecircle-loading-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.thecircle-loading-text {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-/* Selection Popover - Apple Liquid Glass Style */
-.thecircle-selection-popover {
-  position: fixed;
-  z-index: 2147483647;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
-  border-radius: 9999px;
-  box-shadow: 0 4px 16px var(--glass-shadow);
-  padding: 4px;
-  animation: thecircle-pop-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transition: opacity 0.2s ease;
 }
 
-.thecircle-selection-popover-exit {
-  animation: thecircle-pop-out 0.15s ease-out forwards;
-}
-
-@keyframes thecircle-pop-in {
-  from {
-    opacity: 0;
-    transform: scale(0.8) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-@keyframes thecircle-pop-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.8);
-  }
-}
-
-.thecircle-selection-popover-btn {
+.thecircle-screenshot-preview {
+  padding: 18px;
   display: flex;
-  align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 9999px;
-  /* Liquid Glass: 深色图标以对比浅色玻璃背景 */
-  color: rgba(0, 0, 0, 0.65);
-  cursor: pointer;
-  transition: color 0.2s ease;
+  background: var(--preview-bg);
+  max-height: 300px;
+  overflow: hidden;
 }
 
-.thecircle-selection-popover:hover .thecircle-selection-popover-btn {
-  color: rgba(0, 0, 0, 0.85);
+.thecircle-screenshot-preview img {
+  max-width: 100%;
+  max-height: 264px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.thecircle-selection-popover:active .thecircle-selection-popover-btn {
-  color: rgba(0, 0, 0, 0.7);
-}
-
-.thecircle-selection-popover-btn svg {
-  width: 16px;
-  height: 16px;
+.thecircle-screenshot-actions {
+  padding: 14px 18px;
+  border-top: 1px solid var(--separator-color);
+  background: var(--header-bg);
 }

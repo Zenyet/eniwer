@@ -79,6 +79,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Setup modal
   setupModal();
 
+  // Apply theme
+  applyTheme(config.theme);
+
   // Setup add item button
   document.getElementById('addGlobalItem')?.addEventListener('click', () => {
     editingItemId = null;
@@ -229,6 +232,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       screenshot: newScreenshotConfig,
     };
 
+    applyTheme(newConfig.theme!);
     await saveConfig(newConfig);
     await saveGlobalMenuItems(globalMenuItems);
     showToast('设置已保存', 'success');
@@ -247,6 +251,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     preferredLanguageEl.value = DEFAULT_CONFIG.preferredLanguage;
     popoverPositionEl.value = DEFAULT_CONFIG.popoverPosition || 'above';
     themeEl.value = DEFAULT_CONFIG.theme;
+    applyTheme(DEFAULT_CONFIG.theme);
     currentShortcut = DEFAULT_CONFIG.shortcut;
     updateShortcutDisplay(currentShortcut);
     toggleCustomProviderUI(DEFAULT_CONFIG.apiProvider);
@@ -293,20 +298,20 @@ function renderMenuList(listId: string, items: MenuItem[]) {
   list.innerHTML = sortedItems.map(item => {
     const isCustom = (item as CustomMenuItem).isCustom;
     return `
-      <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 transition-all duration-150 cursor-grab hover:bg-white/10 hover:border-white/15 menu-item-config" draggable="true" data-id="${item.id}">
-        <span class="text-sm cursor-grab text-white/30 select-none tracking-widest hover:text-white/50 drag-handle">⋮⋮</span>
-        <span class="flex items-center justify-center w-[28px] h-[28px] rounded-md bg-white/10 text-white/80 item-icon">${item.customIcon || item.icon}</span>
-        <span class="flex-1 text-sm font-medium text-white/90 item-label">${item.customLabel || item.label}</span>
-        <span class="text-xs px-2 py-0.5 rounded bg-white/10 text-white/50 item-action">${item.action}</span>
+      <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10 transition-all duration-150 cursor-grab hover:bg-gray-50 hover:border-gray-300 dark:hover:bg-white/10 dark:hover:border-white/15 menu-item-config" draggable="true" data-id="${item.id}">
+        <span class="text-sm cursor-grab text-gray-400 dark:text-white/30 select-none tracking-widest hover:text-gray-600 dark:hover:text-white/50 drag-handle">⋮⋮</span>
+        <span class="flex items-center justify-center w-[28px] h-[28px] rounded-md bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-white/80 item-icon">${item.customIcon || item.icon}</span>
+        <span class="flex-1 text-sm font-medium text-gray-900 dark:text-white/90 item-label">${item.customLabel || item.label}</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-white/50 item-action">${item.action}</span>
         <div class="flex items-center gap-2 item-actions">
           ${isCustom ? `
-            <button class="p-1.5 rounded cursor-pointer border-none bg-transparent text-white/40 transition-all duration-150 hover:bg-white/10 hover:text-white/80 item-btn edit" data-id="${item.id}" title="编辑">
+            <button class="p-1.5 rounded cursor-pointer border-none bg-transparent text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:text-white/40 dark:hover:bg-white/10 dark:hover:text-white/80 item-btn edit" data-id="${item.id}" title="编辑">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>
               </svg>
             </button>
-            <button class="p-1.5 rounded cursor-pointer border-none bg-transparent text-white/40 transition-all duration-150 hover:bg-red-500/20 hover:text-red-500 item-btn delete" data-id="${item.id}" title="删除">
+            <button class="p-1.5 rounded cursor-pointer border-none bg-transparent text-gray-400 hover:text-red-600 hover:bg-red-50 dark:text-white/40 dark:hover:bg-red-500/20 dark:hover:text-red-500 item-btn delete" data-id="${item.id}" title="删除">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
                 <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
@@ -315,7 +320,7 @@ function renderMenuList(listId: string, items: MenuItem[]) {
           ` : ''}
           <label class="relative inline-block w-[36px] h-[20px] toggle-switch small">
             <input type="checkbox" ${item.enabled ? 'checked' : ''} data-id="${item.id}" class="opacity-0 w-0 h-0 peer sr-only">
-            <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[14px] before:w-[14px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[16px] peer-checked:before:bg-white toggle-slider"></span>
+            <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[14px] before:w-[14px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[16px] peer-checked:before:bg-white toggle-slider"></span>
           </label>
         </div>
       </div>
@@ -341,12 +346,13 @@ function setupDragAndDrop(listId: string) {
 
     el.addEventListener('dragstart', (e) => {
       draggedItem = el;
-      el.classList.add('opacity-50', 'cursor-grabbing', 'dragging');
+      // Create a ghost image if needed, or just style the dragged item
+      setTimeout(() => el.classList.add('opacity-50', 'cursor-grabbing', 'dragging', 'scale-95'), 0);
       (e as DragEvent).dataTransfer!.effectAllowed = 'move';
     });
 
     el.addEventListener('dragend', () => {
-      el.classList.remove('opacity-50', 'cursor-grabbing', 'dragging');
+      el.classList.remove('opacity-50', 'cursor-grabbing', 'dragging', 'scale-95');
       draggedItem = null;
       // Update order based on DOM position
       updateOrderFromDOM(listId);
@@ -606,6 +612,11 @@ function closeModal() {
   const modal = document.getElementById('customItemModal');
   modal?.classList.remove('show');
   editingItemId = null;
+}
+
+function applyTheme(theme: string) {
+  const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', isDark);
 }
 
 function showToast(message: string, type: 'success' | 'error' = 'success'): void {

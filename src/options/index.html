@@ -6,212 +6,212 @@
   <title>The Circle - 设置</title>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="min-h-screen font-sans bg-[#0f0f0f] text-white">
+<body class="min-h-screen font-sans bg-gray-50 dark:bg-[#0f0f0f] text-gray-900 dark:text-white">
   <div class="max-w-xl mx-auto py-10 px-6">
     <header class="flex flex-col items-center mb-10">
       <div class="text-5xl text-blue-500 mb-3">◉</div>
       <h1 class="text-2xl font-bold mb-1">The Circle</h1>
-      <p class="text-sm text-white/50">设置</p>
+      <p class="text-sm text-gray-500 dark:text-white/50">设置</p>
     </header>
 
     <main class="flex flex-col gap-8">
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">AI 服务</h2>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">AI 服务</h2>
         <div class="mb-5 last:mb-0">
-          <label for="apiProvider" class="block text-sm font-medium mb-2 text-white/70">AI 提供商</label>
-          <select id="apiProvider" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="groq" class="bg-[#1a1a1a]">Groq (免费)</option>
-            <option value="openai" class="bg-[#1a1a1a]">OpenAI</option>
-            <option value="anthropic" class="bg-[#1a1a1a]">Anthropic</option>
-            <option value="gemini" class="bg-[#1a1a1a]">Google Gemini</option>
-            <option value="custom" class="bg-[#1a1a1a]">自定义</option>
+          <label for="apiProvider" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">AI 提供商</label>
+          <select id="apiProvider" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="groq" class="bg-white dark:bg-[#1a1a1a]">Groq (免费)</option>
+            <option value="openai" class="bg-white dark:bg-[#1a1a1a]">OpenAI</option>
+            <option value="anthropic" class="bg-white dark:bg-[#1a1a1a]">Anthropic</option>
+            <option value="gemini" class="bg-white dark:bg-[#1a1a1a]">Google Gemini</option>
+            <option value="custom" class="bg-white dark:bg-[#1a1a1a]">自定义</option>
           </select>
         </div>
         <div class="mb-5 last:mb-0" id="customApiUrlGroup" style="display: none;">
-          <label for="customApiUrl" class="block text-sm font-medium mb-2 text-white/70">API URL</label>
-          <input type="text" id="customApiUrl" placeholder="https://api.example.com/v1/chat/completions" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-          <p class="mt-2 text-xs text-white/40">支持 OpenAI 兼容格式的 API 端点</p>
+          <label for="customApiUrl" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">API URL</label>
+          <input type="text" id="customApiUrl" placeholder="https://api.example.com/v1/chat/completions" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">支持 OpenAI 兼容格式的 API 端点</p>
         </div>
         <div class="mb-5 last:mb-0" id="customModelGroup" style="display: none;">
-          <label for="customModel" class="block text-sm font-medium mb-2 text-white/70">模型名称</label>
-          <input type="text" id="customModel" placeholder="gpt-4, llama-3.1-70b, etc." class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-          <p class="mt-2 text-xs text-white/40">填写 API 支持的模型标识符</p>
+          <label for="customModel" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">模型名称</label>
+          <input type="text" id="customModel" placeholder="gpt-4, llama-3.1-70b, etc." class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">填写 API 支持的模型标识符</p>
         </div>
         <div class="mb-5 last:mb-0">
-          <label for="apiKey" class="block text-sm font-medium mb-2 text-white/70">API Key (可选)</label>
-          <input type="password" id="apiKey" placeholder="输入你的 API Key" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-          <p class="mt-2 text-xs text-white/40" id="apiKeyHelpText">使用 Groq 免费服务无需配置 API Key</p>
+          <label for="apiKey" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">API Key (可选)</label>
+          <input type="password" id="apiKey" placeholder="输入你的 API Key" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40" id="apiKeyHelpText">使用 Groq 免费服务无需配置 API Key</p>
         </div>
-        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-white/10">
+        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-gray-200 dark:border-white/10">
           <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm font-medium text-white/90">启用流式传输</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white/90">启用流式传输</span>
             <span class="relative inline-block w-[44px] h-[24px]">
               <input type="checkbox" id="useStreaming" checked class="opacity-0 w-0 h-0 peer sr-only">
-              <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
+              <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
             </span>
           </label>
-          <p class="mt-2 text-xs text-white/40">开启后 AI 响应将逐字显示，提供更流畅的体验</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">开启后 AI 响应将逐字显示，提供更流畅的体验</p>
         </div>
       </section>
 
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">偏好设置</h2>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">偏好设置</h2>
         <div class="mb-5 last:mb-0">
-          <label for="preferredLanguage" class="block text-sm font-medium mb-2 text-white/70">翻译目标语言</label>
-          <select id="preferredLanguage" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="zh-CN" class="bg-[#1a1a1a]">简体中文</option>
-            <option value="zh-TW" class="bg-[#1a1a1a]">繁体中文</option>
-            <option value="en" class="bg-[#1a1a1a]">English</option>
-            <option value="ja" class="bg-[#1a1a1a]">日本語</option>
-            <option value="ko" class="bg-[#1a1a1a]">한국어</option>
-            <option value="es" class="bg-[#1a1a1a]">Español</option>
-            <option value="fr" class="bg-[#1a1a1a]">Français</option>
-            <option value="de" class="bg-[#1a1a1a]">Deutsch</option>
+          <label for="preferredLanguage" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">翻译目标语言</label>
+          <select id="preferredLanguage" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="zh-CN" class="bg-white dark:bg-[#1a1a1a]">简体中文</option>
+            <option value="zh-TW" class="bg-white dark:bg-[#1a1a1a]">繁体中文</option>
+            <option value="en" class="bg-white dark:bg-[#1a1a1a]">English</option>
+            <option value="ja" class="bg-white dark:bg-[#1a1a1a]">日本語</option>
+            <option value="ko" class="bg-white dark:bg-[#1a1a1a]">한국어</option>
+            <option value="es" class="bg-white dark:bg-[#1a1a1a]">Español</option>
+            <option value="fr" class="bg-white dark:bg-[#1a1a1a]">Français</option>
+            <option value="de" class="bg-white dark:bg-[#1a1a1a]">Deutsch</option>
           </select>
         </div>
         <div class="mb-5 last:mb-0">
-          <label for="popoverPosition" class="block text-sm font-medium mb-2 text-white/70">选中文本后弹出位置</label>
-          <select id="popoverPosition" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="above" class="bg-[#1a1a1a]">文本上方</option>
-            <option value="below" class="bg-[#1a1a1a]">文本下方</option>
+          <label for="popoverPosition" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">选中文本后弹出位置</label>
+          <select id="popoverPosition" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="above" class="bg-white dark:bg-[#1a1a1a]">文本上方</option>
+            <option value="below" class="bg-white dark:bg-[#1a1a1a]">文本下方</option>
           </select>
-          <p class="mt-2 text-xs text-white/40">选中文本后，翻译按钮的显示位置</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">选中文本后，翻译按钮的显示位置</p>
         </div>
         <div class="mb-5 last:mb-0">
-          <label for="theme" class="block text-sm font-medium mb-2 text-white/70">主题</label>
-          <select id="theme" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="dark" class="bg-[#1a1a1a]">深色</option>
-            <option value="light" class="bg-[#1a1a1a]">浅色</option>
-            <option value="system" class="bg-[#1a1a1a]">跟随系统</option>
+          <label for="theme" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">主题</label>
+          <select id="theme" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="dark" class="bg-white dark:bg-[#1a1a1a]">深色</option>
+            <option value="light" class="bg-white dark:bg-[#1a1a1a]">浅色</option>
+            <option value="system" class="bg-white dark:bg-[#1a1a1a]">跟随系统</option>
           </select>
         </div>
       </section>
 
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">菜单配置</h2>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">菜单配置</h2>
 
         <!-- 全局菜单 -->
         <div class="mb-6 last:mb-0">
-          <h3 class="text-sm font-medium mb-2 text-white/80">全局菜单</h3>
-          <p class="mt-2 text-xs text-white/40">拖拽排序，点击开关启用/禁用菜单项</p>
-          <div class="flex flex-col gap-2 mb-4" id="globalMenuList">
+          <h3 class="text-sm font-medium mb-2 text-gray-800 dark:text-white/80">全局菜单</h3>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">拖拽排序，点击开关启用/禁用菜单项</p>
+          <div class="flex flex-col gap-2 mb-4 mt-4" id="globalMenuList">
             <!-- 动态渲染菜单项 -->
           </div>
-          <button class="w-full flex items-center justify-center gap-2 border-dashed px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer text-white/80 bg-white/10 border border-white/15 hover:bg-white/12 transition-all duration-150" id="addGlobalItem">
+          <button class="w-full flex items-center justify-center gap-2 border-dashed px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer text-gray-600 dark:text-white/80 bg-gray-50 border border-gray-200 dark:bg-white/10 dark:border-white/15 hover:bg-gray-100 dark:hover:bg-white/12 transition-all duration-150" id="addGlobalItem">
             <span class="text-lg font-light">+</span>
             添加自定义项
           </button>
         </div>
       </section>
 
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">截图设置</h2>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">截图设置</h2>
         <div class="mb-5 last:mb-0 mt-0 pt-0 border-t-0">
           <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm font-medium text-white/90">自动保存截图</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white/90">自动保存截图</span>
             <span class="relative inline-block w-[44px] h-[24px]">
               <input type="checkbox" id="screenshotSaveToFile" checked class="opacity-0 w-0 h-0 peer sr-only">
-              <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
+              <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
             </span>
           </label>
-          <p class="mt-2 text-xs text-white/40">截图后自动保存到下载文件夹</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">截图后自动保存到下载文件夹</p>
         </div>
-        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-white/10">
+        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-gray-200 dark:border-white/10">
           <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm font-medium text-white/90">复制到剪贴板</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white/90">复制到剪贴板</span>
             <span class="relative inline-block w-[44px] h-[24px]">
               <input type="checkbox" id="screenshotCopyToClipboard" class="opacity-0 w-0 h-0 peer sr-only">
-              <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
+              <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
             </span>
           </label>
-          <p class="mt-2 text-xs text-white/40">截图后自动复制到剪贴板</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">截图后自动复制到剪贴板</p>
         </div>
-        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-white/10">
+        <div class="mb-5 last:mb-0 mt-6 pt-5 border-t border-gray-200 dark:border-white/10">
           <label class="flex items-center justify-between cursor-pointer">
-            <span class="text-sm font-medium text-white/90">启用 AI 分析</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white/90">启用 AI 分析</span>
             <span class="relative inline-block w-[44px] h-[24px]">
               <input type="checkbox" id="screenshotEnableAI" checked class="opacity-0 w-0 h-0 peer sr-only">
-              <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
+              <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
             </span>
           </label>
-          <p class="mt-2 text-xs text-white/40">在截图面板中显示"问AI"和"描述图片"按钮</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">在截图面板中显示"问AI"和"描述图片"按钮</p>
         </div>
         <div class="mb-5 last:mb-0">
-          <label for="screenshotDefaultAIAction" class="block text-sm font-medium mb-2 text-white/70">默认 AI 操作</label>
-          <select id="screenshotDefaultAIAction" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="none" class="bg-[#1a1a1a]">无</option>
-            <option value="ask" class="bg-[#1a1a1a]">询问 AI</option>
-            <option value="describe" class="bg-[#1a1a1a]">描述图片</option>
+          <label for="screenshotDefaultAIAction" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">默认 AI 操作</label>
+          <select id="screenshotDefaultAIAction" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="none" class="bg-white dark:bg-[#1a1a1a]">无</option>
+            <option value="ask" class="bg-white dark:bg-[#1a1a1a]">询问 AI</option>
+            <option value="describe" class="bg-white dark:bg-[#1a1a1a]">描述图片</option>
           </select>
-          <p class="mt-2 text-xs text-white/40">截图后自动执行的 AI 操作</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">截图后自动执行的 AI 操作</p>
         </div>
 
-        <div class="mt-6 pt-5 border-t border-white/10">
-          <h3 class="text-sm font-medium mb-4 text-white/80">图像生成设置</h3>
+        <div class="mt-6 pt-5 border-t border-gray-200 dark:border-white/10">
+          <h3 class="text-sm font-medium mb-4 text-gray-800 dark:text-white/80">图像生成设置</h3>
           <div class="mb-5 last:mb-0 mt-0 pt-0 border-t-0">
             <label class="flex items-center justify-between cursor-pointer">
-              <span class="text-sm font-medium text-white/90">启用 AI 生图</span>
+              <span class="text-sm font-medium text-gray-900 dark:text-white/90">启用 AI 生图</span>
               <span class="relative inline-block w-[44px] h-[24px]">
                 <input type="checkbox" id="screenshotEnableImageGen" class="opacity-0 w-0 h-0 peer sr-only">
-                <span class="absolute inset-0 cursor-pointer rounded-full bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
+                <span class="absolute inset-0 cursor-pointer rounded-full bg-gray-200 dark:bg-white/15 transition-all duration-250 before:absolute before:rounded-full before:h-[18px] before:w-[18px] before:left-[3px] before:bottom-[3px] before:bg-white dark:before:bg-white/70 before:transition-all before:duration-250 peer-checked:bg-blue-500 peer-checked:before:translate-x-[20px] peer-checked:before:bg-white peer-focus:ring-2 peer-focus:ring-blue-500/30"></span>
               </span>
             </label>
-            <p class="mt-2 text-xs text-white/40">在截图面板中显示"AI生图"按钮</p>
+            <p class="mt-2 text-xs text-gray-400 dark:text-white/40">在截图面板中显示"AI生图"按钮</p>
           </div>
           <div class="mb-5 last:mb-0" id="imageGenProviderGroup">
-            <label for="imageGenProvider" class="block text-sm font-medium mb-2 text-white/70">图像生成服务</label>
-            <select id="imageGenProvider" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-              <option value="openai" class="bg-[#1a1a1a]">OpenAI DALL-E</option>
-              <option value="custom" class="bg-[#1a1a1a]">自定义</option>
+            <label for="imageGenProvider" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">图像生成服务</label>
+            <select id="imageGenProvider" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+              <option value="openai" class="bg-white dark:bg-[#1a1a1a]">OpenAI DALL-E</option>
+              <option value="custom" class="bg-white dark:bg-[#1a1a1a]">自定义</option>
             </select>
-            <p class="mt-2 text-xs text-white/40">使用 OpenAI 需要配置 API Key</p>
+            <p class="mt-2 text-xs text-gray-400 dark:text-white/40">使用 OpenAI 需要配置 API Key</p>
           </div>
           <div class="mb-5 last:mb-0" id="customImageGenUrlGroup" style="display: none;">
-            <label for="customImageGenUrl" class="block text-sm font-medium mb-2 text-white/70">自定义生图 API URL</label>
-            <input type="text" id="customImageGenUrl" placeholder="https://api.example.com/v1/images/generations" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <p class="mt-2 text-xs text-white/40">支持 OpenAI 兼容格式的图像生成 API</p>
+            <label for="customImageGenUrl" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">自定义生图 API URL</label>
+            <input type="text" id="customImageGenUrl" placeholder="https://api.example.com/v1/images/generations" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <p class="mt-2 text-xs text-gray-400 dark:text-white/40">支持 OpenAI 兼容格式的图像生成 API</p>
           </div>
           <div class="mb-5 last:mb-0" id="imageSizeGroup">
-            <label for="imageSize" class="block text-sm font-medium mb-2 text-white/70">生成图片尺寸</label>
-            <select id="imageSize" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-              <option value="1024x1024" class="bg-[#1a1a1a]">1024 × 1024 (方形)</option>
-              <option value="1792x1024" class="bg-[#1a1a1a]">1792 × 1024 (横向)</option>
-              <option value="1024x1792" class="bg-[#1a1a1a]">1024 × 1792 (纵向)</option>
+            <label for="imageSize" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">生成图片尺寸</label>
+            <select id="imageSize" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+              <option value="1024x1024" class="bg-white dark:bg-[#1a1a1a]">1024 × 1024 (方形)</option>
+              <option value="1792x1024" class="bg-white dark:bg-[#1a1a1a]">1792 × 1024 (横向)</option>
+              <option value="1024x1792" class="bg-white dark:bg-[#1a1a1a]">1024 × 1792 (纵向)</option>
             </select>
           </div>
         </div>
       </section>
 
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">快捷键</h2>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">快捷键</h2>
         <div class="mb-5 last:mb-0">
-          <label class="block text-sm font-medium mb-2 text-white/70">当前快捷键</label>
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">当前快捷键</label>
           <div class="flex items-center gap-4">
-            <div class="flex-1 flex items-center justify-center gap-2 py-4 px-4 rounded-lg bg-white/5 transition-all duration-200" id="shortcutDisplay">
-              <span class="px-4 py-2 rounded-md text-sm font-semibold bg-white/10 border border-white/20">Alt</span>
-              <span class="text-base text-white/50">+</span>
-              <span class="px-4 py-2 rounded-md text-sm font-semibold bg-white/10 border border-white/20">Space</span>
+            <div class="flex-1 flex items-center justify-center gap-2 py-4 px-4 rounded-lg bg-gray-100 dark:bg-white/5 transition-all duration-200" id="shortcutDisplay">
+              <span class="px-4 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 dark:bg-white/10 dark:border-white/20">Alt</span>
+              <span class="text-base text-gray-500 dark:text-white/50">+</span>
+              <span class="px-4 py-2 rounded-md text-sm font-semibold bg-white border border-gray-200 dark:bg-white/10 dark:border-white/20">Space</span>
             </div>
-            <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-white/80 bg-white/10 border border-white/15 hover:bg-white/12" id="recordShortcutBtn">录制快捷键</button>
+            <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-gray-600 dark:text-white/80 bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/15 hover:bg-gray-200 dark:hover:bg-white/12" id="recordShortcutBtn">录制快捷键</button>
           </div>
-          <p class="mt-2 text-xs text-white/40" id="shortcutHelpText">点击"录制快捷键"按钮，然后按下你想要的快捷键组合</p>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40" id="shortcutHelpText">点击"录制快捷键"按钮，然后按下你想要的快捷键组合</p>
         </div>
       </section>
 
-      <section class="rounded-xl p-6 bg-white/5 border border-white/10">
-        <h2 class="text-base font-semibold mb-5 text-white/90">关于</h2>
-        <div class="text-sm leading-loose text-white/70">
-          <p><strong class="text-white">The Circle</strong> v1.0.0</p>
+      <section class="rounded-xl p-6 bg-white border border-gray-200 dark:bg-white/5 dark:border-white/10">
+        <h2 class="text-base font-semibold mb-5 text-gray-900 dark:text-white/90">关于</h2>
+        <div class="text-sm leading-loose text-gray-700 dark:text-white/70">
+          <p><strong class="text-gray-900 dark:text-white">The Circle</strong> v1.0.0</p>
           <p>一个径向菜单 AI 工具箱。</p>
-          <p class="mt-3 text-xs text-white/40">
+          <p class="mt-3 text-xs text-gray-400 dark:text-white/40">
             快捷键呼出，鼠标选择，AI 加持。
           </p>
         </div>
       </section>
     </main>
 
-    <footer class="flex justify-end gap-3 mt-8 pt-6 border-t border-white/10">
-      <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-white/80 bg-white/10 border border-white/15 hover:bg-white/12" id="resetBtn">重置为默认</button>
+    <footer class="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200 dark:border-white/10">
+      <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-gray-600 dark:text-white/80 bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/15 hover:bg-gray-200 dark:hover:bg-white/12" id="resetBtn">重置为默认</button>
       <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 bg-blue-500 text-white hover:bg-blue-600" id="saveBtn">保存设置</button>
     </footer>
   </div>
@@ -219,45 +219,45 @@
   <div class="fixed bottom-6 left-1/2 px-5 py-3 text-sm rounded-lg pointer-events-none -translate-x-1/2 translate-y-[100px] bg-[#1e1e1e]/95 border border-white/15 text-white/90 shadow-lg opacity-0 transition-all duration-250 backdrop-blur-sm z-[2000]" id="toast"></div>
 
   <!-- Custom Menu Item Modal -->
-  <div class="fixed inset-0 flex items-center justify-center z-[1000] bg-black/60 backdrop-blur-[4px] opacity-0 invisible transition-all duration-200 group" id="customItemModal">
-    <div class="w-full max-w-md mx-4 rounded-xl bg-[#1a1a1a] border border-white/10 shadow-2xl scale-95 -translate-y-[10px] transition-transform duration-200 group-[.show]:scale-100 group-[.show]:translate-y-0">
-      <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
-        <h3 class="text-base font-semibold text-white/95" id="modalTitle">添加自定义菜单项</h3>
-        <button class="flex items-center justify-center w-8 h-8 rounded-full cursor-pointer border-none bg-white/10 text-white/60 text-xl transition-all duration-150 hover:bg-white/15 hover:text-white/90" id="modalClose">×</button>
+  <div class="fixed inset-0 flex items-center justify-center z-[1000] bg-gray-900/60 dark:bg-black/60 backdrop-blur-[4px] opacity-0 invisible transition-all duration-200 group" id="customItemModal">
+    <div class="w-full max-w-md mx-4 rounded-xl bg-white border border-gray-200 dark:bg-[#1a1a1a] dark:border-white/10 shadow-2xl scale-95 -translate-y-[10px] transition-transform duration-200 group-[.show]:scale-100 group-[.show]:translate-y-0">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/10">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-white/95" id="modalTitle">添加自定义菜单项</h3>
+        <button class="flex items-center justify-center w-8 h-8 rounded-full cursor-pointer border-none bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-white/60 text-xl transition-all duration-150 hover:bg-gray-200 dark:hover:bg-white/15 hover:text-gray-900 dark:hover:text-white/90" id="modalClose">×</button>
       </div>
       <div class="px-5 py-4">
         <div class="mb-4 last:mb-0">
-          <label class="block text-sm font-medium mb-2 text-white/70">图标</label>
-          <div class="flex flex-wrap gap-2 p-3 rounded-lg bg-white/5 border border-white/10 max-h-[120px] overflow-y-auto" id="iconPicker">
+          <label class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">图标</label>
+          <div class="flex flex-wrap gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200 dark:bg-white/5 dark:border-white/10 max-h-[120px] overflow-y-auto" id="iconPicker">
             <!-- Icons will be rendered dynamically -->
           </div>
           <input type="hidden" id="selectedIcon" value="">
         </div>
         <div class="mb-4 last:mb-0">
-          <label for="customItemLabel" class="block text-sm font-medium mb-2 text-white/70">名称</label>
-          <input type="text" id="customItemLabel" placeholder="菜单项名称" maxlength="10" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
+          <label for="customItemLabel" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">名称</label>
+          <input type="text" id="customItemLabel" placeholder="菜单项名称" maxlength="10" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
         </div>
         <div class="mb-4 last:mb-0">
-          <label for="customItemAction" class="block text-sm font-medium mb-2 text-white/70">操作类型</label>
-          <select id="customItemAction" class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-            <option value="customAI" class="bg-[#1a1a1a]">自定义 AI 提示</option>
-            <option value="openUrl" class="bg-[#1a1a1a]">打开链接</option>
-            <option value="copyText" class="bg-[#1a1a1a]">复制文本</option>
+          <label for="customItemAction" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">操作类型</label>
+          <select id="customItemAction" class="custom-select w-full pl-3.5 pr-10 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+            <option value="customAI" class="bg-white dark:bg-[#1a1a1a]">自定义 AI 提示</option>
+            <option value="openUrl" class="bg-white dark:bg-[#1a1a1a]">打开链接</option>
+            <option value="copyText" class="bg-white dark:bg-[#1a1a1a]">复制文本</option>
           </select>
         </div>
         <div class="mb-4 last:mb-0" id="customPromptGroup">
-          <label for="customPrompt" class="block text-sm font-medium mb-2 text-white/70">AI 提示词</label>
-          <textarea id="customPrompt" placeholder="请帮我...{text}..." rows="3" class="w-full px-3.5 py-2.5 rounded-lg text-sm text-white resize-none bg-white/5 border border-white/15 transition-all duration-150 font-inherit focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30"></textarea>
-          <p class="mt-2 text-xs text-white/40">{text} 会被替换为选中的文本</p>
+          <label for="customPrompt" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">AI 提示词</label>
+          <textarea id="customPrompt" placeholder="请帮我...{text}..." rows="3" class="w-full px-3.5 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white resize-none bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 font-inherit focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30"></textarea>
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">{text} 会被替换为选中的文本</p>
         </div>
         <div class="mb-4 last:mb-0" id="customUrlGroup" style="display: none;">
-          <label for="customUrl" class="block text-sm font-medium mb-2 text-white/70">链接地址</label>
-          <input type="text" id="customUrl" placeholder="https://..." class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-white bg-white/5 border border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-500/10 placeholder:text-white/30">
-          <p class="mt-2 text-xs text-white/40">{text} 会被替换为选中的文本</p>
+          <label for="customUrl" class="block text-sm font-medium mb-2 text-gray-700 dark:text-white/70">链接地址</label>
+          <input type="text" id="customUrl" placeholder="https://..." class="w-full pl-3.5 pr-6 py-2.5 rounded-lg text-sm text-gray-900 dark:text-white bg-white border border-gray-200 dark:bg-white/5 dark:border-white/15 transition-all duration-150 focus:outline-none focus:border-blue-500 focus:bg-blue-50 dark:focus:bg-blue-500/10 placeholder:text-gray-400 dark:placeholder:text-white/30">
+          <p class="mt-2 text-xs text-gray-400 dark:text-white/40">{text} 会被替换为选中的文本</p>
         </div>
       </div>
-      <div class="flex justify-end gap-3 px-5 py-4 border-t border-white/10">
-        <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-white/80 bg-white/10 border border-white/15 hover:bg-white/12" id="cancelCustomItem">取消</button>
+      <div class="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-white/10">
+        <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 text-gray-600 dark:text-white/80 bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/15 hover:bg-gray-200 dark:hover:bg-white/12" id="cancelCustomItem">取消</button>
         <button class="px-5 py-2.5 rounded-lg text-sm font-medium cursor-pointer border-none transition-all duration-150 bg-blue-500 text-white hover:bg-blue-600" id="saveCustomItem">保存</button>
       </div>
     </div>

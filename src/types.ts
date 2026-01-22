@@ -60,7 +60,7 @@ export const DEFAULT_SCREENSHOT_CONFIG: ScreenshotConfig = {
 
 export const DEFAULT_CONFIG: MenuConfig = {
   shortcut: 'Double+Shift',
-  theme: 'dark',
+  theme: 'light',
   preferredLanguage: 'zh-CN',
   apiProvider: 'groq',
   useStreaming: true,

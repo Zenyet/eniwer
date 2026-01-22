@@ -112,7 +112,7 @@ export class ScreenshotPanel {
         const span = copyBtn.querySelector('span');
         if (span) {
           const originalText = span.textContent;
-          span.textContent = '已复制!';
+          span.textContent = '已复制';
           setTimeout(() => {
             span.textContent = originalText;
           }, 1500);
@@ -213,7 +213,7 @@ export class ScreenshotPanel {
           const span = copyBtn.querySelector('span');
           if (span) {
             const originalText = span.textContent;
-            span.textContent = '已复制!';
+            span.textContent = '已复制';
             setTimeout(() => {
               span.textContent = originalText;
             }, 1500);
@@ -276,6 +276,9 @@ export class ScreenshotPanel {
     // Position panel in center
     this.positionPanel();
 
+    // Setup drag behavior
+    this.setupDragBehavior();
+
     // Setup event listeners
     const closeBtn = this.panel.querySelector('.thecircle-screenshot-close');
     closeBtn?.addEventListener('click', () => {
@@ -294,6 +297,80 @@ export class ScreenshotPanel {
       }
     };
     document.addEventListener('keydown', handleEsc);
+  }
+
+  private setupDragBehavior(): void {
+    if (!this.panel) return;
+
+    const header = this.panel.querySelector('.thecircle-screenshot-header') as HTMLElement;
+    if (!header) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialLeft = 0;
+    let initialTop = 0;
+
+    // Set cursor style
+    header.style.cursor = 'move';
+    header.style.userSelect = 'none';
+
+    const onMouseDown = (e: MouseEvent) => {
+      // Don't start drag if clicking close button
+      if ((e.target as HTMLElement).closest('.thecircle-screenshot-close')) return;
+
+      e.stopPropagation();
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = this.panel!.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      header.style.cursor = 'grabbing';
+      
+      // Prevent text selection during drag
+      e.preventDefault();
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !this.panel) return;
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      // Calculate new position
+      let newLeft = initialLeft + dx;
+      let newTop = initialTop + dy;
+
+      // Boundary checks (keep at least 20px visible)
+      const rect = this.panel.getBoundingClientRect();
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+
+      if (newLeft + rect.width < 20) newLeft = 20 - rect.width;
+      if (newLeft > windowWidth - 20) newLeft = windowWidth - 20;
+      if (newTop < 0) newTop = 0;
+      if (newTop > windowHeight - 20) newTop = windowHeight - 20;
+
+      this.panel.style.left = `${newLeft}px`;
+      this.panel.style.top = `${newTop}px`;
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+      if (header) {
+        header.style.cursor = 'move';
+      }
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    header.addEventListener('mousedown', onMouseDown);
   }
 
   private createActionsHTML(): string {
@@ -337,7 +414,7 @@ export class ScreenshotPanel {
       const span = copyBtn.querySelector('span');
       if (span) {
         const originalText = span.textContent;
-        span.textContent = '已复制!';
+        span.textContent = '已复制';
         setTimeout(() => {
           span.textContent = originalText;
         }, 1500);

@@ -1,1 +1,5 @@
 @import "tailwindcss";
+
+@layer utilities {
+  /* Add any popup specific utilities here */
+}

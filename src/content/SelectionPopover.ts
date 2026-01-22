@@ -35,6 +35,13 @@ export class SelectionPopover {
 
     this.createPopover(rect, position);
     this.setupScrollListener();
+
+    // Show immediately
+    requestAnimationFrame(() => {
+      if (this.popover) {
+        this.popover.style.opacity = "1";
+      }
+    });
   }
 
   public hide(): void {
@@ -146,9 +153,11 @@ export class SelectionPopover {
     this.popover.style.top = `${top}px`;
 
     this.popover.innerHTML = `
-      <button class="thecircle-selection-popover-btn" data-action="translate" title="翻译">
-        ${icons.translate}
-      </button>
+      <div class="thecircle-selection-popover-container">
+        <button class="thecircle-selection-popover-btn" data-action="translate" title="翻译">
+          ${icons.translate}
+        </button>
+      </div>
     `;
 
     appendToShadow(this.popover);

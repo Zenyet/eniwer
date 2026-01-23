@@ -1,5 +1,5 @@
 import { icons } from '../icons';
-import { MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG } from '../types';
+import { ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG } from '../types';
 import { appendToShadow, removeFromShadow } from './ShadowHost';
 import { abortAllRequests } from '../utils/ai';
 
@@ -165,6 +165,7 @@ export class ScreenshotPanel {
 
   public streamUpdate(chunk: string, fullText: string): void {
     if (!this.panel) return;
+    void chunk;
     this.isLoading = true;
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
@@ -246,6 +247,9 @@ export class ScreenshotPanel {
   private resetActions(): void {
     if (!this.panel) return;
     this.isLoading = false;
+    if (this.isShowingInput) {
+      this.isShowingInput = false;
+    }
 
     const actionsArea = this.panel.querySelector('.thecircle-screenshot-actions');
     if (actionsArea) {

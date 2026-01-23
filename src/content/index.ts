@@ -1,8 +1,10 @@
 import { RadialMenu } from './RadialMenu';
 import { MenuActions } from './MenuActions';
+import { ResultPanel } from './ResultPanel';
 import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
+import { abortAllRequests } from '../utils/ai';
 import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow, getShadowHost } from './ShadowHost';
 import './styles.css';
 
@@ -26,6 +28,7 @@ class TheCircle {
   private activeToasts: ToastItem[] = [];
   private readonly MAX_TOASTS = 4;
   private currentSelectedText: string = '';
+  private resultPanels: Set<ResultPanel> = new Set();
 
   constructor() {
     this.radialMenu = new RadialMenu();
@@ -230,35 +233,56 @@ class TheCircle {
       selectionRect = range.getBoundingClientRect();
     }
 
-    // Position radial menu at selection center but hidden (only show result panel)
-    const x = selectionRect ? selectionRect.left + selectionRect.width / 2 : window.innerWidth / 2;
-    const y = selectionRect ? selectionRect.bottom + 20 : window.innerHeight / 2;
+    // Create a new ResultPanel
+    const resultPanel = new ResultPanel();
+    this.resultPanels.add(resultPanel);
+    
+    resultPanel.setOnClose(() => {
+        this.resultPanels.delete(resultPanel);
+    });
+    resultPanel.setOnStop(() => abortAllRequests());
 
-    // Pass selection info to RadialMenu for result panel positioning
-    this.radialMenu.setSelectionInfo(selectionRect);
+    const originalText = this.currentSelectedText;
+    let translateRunId = 0;
 
-    // Show result panel directly (skip menu)
-    // Use showResult directly to pass options
-    this.radialMenu.showResult(translateItem.label, '', {
-      isLoading: true,
-      originalText: this.currentSelectedText,
-      type: 'translate'
+    const runTranslate = async (targetLang: string) => {
+      const runId = ++translateRunId;
+      this.menuActions.setSelectedText(originalText);
+
+      resultPanel.show(translateItem.label, '', {
+        isLoading: true,
+        originalText,
+        type: 'translate',
+        selectionRect: selectionRect,
+        iconHtml: translateItem.icon,
+        translateTargetLanguage: targetLang,
+      });
+
+      const onChunk = this.config.useStreaming
+        ? (chunk: string, fullText: string) => {
+            if (runId !== translateRunId) return;
+            resultPanel.streamUpdate(chunk, fullText);
+          }
+        : undefined;
+
+      const result = await this.menuActions.execute(translateItem, onChunk, {
+        translateTargetLanguage: targetLang,
+      });
+
+      if (runId !== translateRunId) return;
+
+      if (result.type === 'error') {
+        resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+      } else if (result.type === 'ai') {
+        resultPanel.update(result.result || '');
+      }
+    };
+
+    resultPanel.setOnTranslateLanguageChange((targetLang) => {
+      void runTranslate(targetLang);
     });
 
-    // Create streaming callback for typewriter effect
-    const onChunk = this.config.useStreaming
-      ? (chunk: string, fullText: string) => {
-          this.radialMenu.streamUpdate(chunk, fullText);
-        }
-      : undefined;
-
-    const result = await this.menuActions.execute(translateItem, onChunk);
-
-    if (result.type === 'error') {
-      this.radialMenu.showResult('错误', result.result || '未知错误');
-    } else if (result.type === 'ai') {
-      this.radialMenu.updateResult(result.result || '');
-    }
+    await runTranslate(this.config.preferredLanguage || 'zh-CN');
   }
 
   private setupKeyboardShortcut(): void {
@@ -352,9 +376,6 @@ class TheCircle {
     const x = window.innerWidth / 2;
     const y = window.innerHeight / 2;
 
-    // Clear selection info for result panel positioning
-    this.radialMenu.setSelectionInfo(null);
-
     this.radialMenu.show(x, y, menuItems, async (item) => {
       await this.handleMenuAction(item);
     });
@@ -365,27 +386,91 @@ class TheCircle {
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
 
     if (aiActions.includes(item.action)) {
-      this.radialMenu.showResult(item.label, '', {
-        isLoading: true,
-        originalText: this.currentSelectedText || window.getSelection()?.toString() || '',
-        type: item.action === 'translate' ? 'translate' : 'general'
+      const resultPanel = new ResultPanel();
+      this.resultPanels.add(resultPanel);
+      
+      resultPanel.setOnClose(() => {
+        this.resultPanels.delete(resultPanel);
       });
+      resultPanel.setOnStop(() => abortAllRequests());
 
-      // Create streaming callback for typewriter effect
-      const onChunk = this.config.useStreaming
-        ? (chunk: string, fullText: string) => {
-            this.radialMenu.streamUpdate(chunk, fullText);
-          }
-        : undefined;
-
-      const result = await this.menuActions.execute(item, onChunk);
-
-      if (result.type === 'error') {
-        this.radialMenu.showResult('错误', result.result || '未知错误');
+      // Try to get selection rect for positioning
+      const selection = window.getSelection();
+      let selectionRect: DOMRect | null = null;
+      if (selection && selection.rangeCount > 0 && selection.toString().trim()) {
+        try {
+          const range = selection.getRangeAt(0);
+          selectionRect = range.getBoundingClientRect();
+        } catch (e) {
+          // ignore
+        }
       }
-      // Update result for both streaming (to clear stop button) and non-streaming
-      else if (result.type === 'ai') {
-        this.radialMenu.updateResult(result.result || '');
+
+      const originalText = this.currentSelectedText || window.getSelection()?.toString() || '';
+
+      if (item.action === 'translate') {
+        let translateRunId = 0;
+
+        const runTranslate = async (targetLang: string) => {
+          const runId = ++translateRunId;
+          this.menuActions.setSelectedText(originalText);
+
+          resultPanel.show(item.label, '', {
+            isLoading: true,
+            originalText,
+            type: 'translate',
+            selectionRect: selectionRect,
+            iconHtml: item.icon,
+            translateTargetLanguage: targetLang,
+          });
+
+          const onChunk = this.config.useStreaming
+            ? (chunk: string, fullText: string) => {
+                if (runId !== translateRunId) return;
+                resultPanel.streamUpdate(chunk, fullText);
+              }
+            : undefined;
+
+          const result = await this.menuActions.execute(item, onChunk, {
+            translateTargetLanguage: targetLang,
+          });
+
+          if (runId !== translateRunId) return;
+
+          if (result.type === 'error') {
+            resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+          } else if (result.type === 'ai') {
+            resultPanel.update(result.result || '');
+          }
+        };
+
+        resultPanel.setOnTranslateLanguageChange((targetLang) => {
+          void runTranslate(targetLang);
+        });
+
+        await runTranslate(this.config.preferredLanguage || 'zh-CN');
+      } else {
+        resultPanel.show(item.label, '', {
+          isLoading: true,
+          originalText,
+          type: 'general',
+          selectionRect: selectionRect,
+          iconHtml: item.icon,
+        });
+
+        const onChunk = this.config.useStreaming
+          ? (chunk: string, fullText: string) => {
+              resultPanel.streamUpdate(chunk, fullText);
+            }
+          : undefined;
+
+        const result = await this.menuActions.execute(item, onChunk);
+
+        if (result.type === 'error') {
+          resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+        } else if (result.type === 'ai') {
+          resultPanel.update(result.result || '');
+        }
       }
     } else {
       const result = await this.menuActions.execute(item);

@@ -1,7 +1,5 @@
 import { MenuItem } from '../types';
-import { icons } from '../icons';
 import { appendToShadow, removeFromShadow } from './ShadowHost';
-import { abortAllRequests } from '../utils/ai';
 
 export interface ShowResultOptions {
   isLoading?: boolean;
@@ -18,28 +16,13 @@ export class RadialMenu {
   private centerY: number = 0;
   private isVisible: boolean = false;
   private onSelect: ((item: MenuItem) => void) | null = null;
-  private resultPanel: HTMLElement | null = null;
-  private selectionRect: DOMRect | null = null;
   private radius: number = 120;
-  private isLoading: boolean = false;
-  private onStopCallback: (() => void) | null = null;
-  private onClose: (() => void) | null = null;
   
-  // State for comparison view
-  private originalText: string = '';
-  private currentTranslatedText: string = '';
-  private isComparisonMode: boolean = false;
-  private resultType: 'translate' | 'general' = 'general';
-
   constructor() {
     this.handleMouseMove = this.handleMouseMove.bind(this);
     this.handleKeyUp = this.handleKeyUp.bind(this);
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
-  }
-
-  public setSelectionInfo(rect: DOMRect | null): void {
-    this.selectionRect = rect;
   }
 
   public show(
@@ -113,504 +96,12 @@ export class RadialMenu {
     }
   }
 
-  // Show only the result panel without the radial menu (for popover-triggered actions)
-  public showResultOnly(x: number, y: number, title: string): void {
-    this.centerX = x;
-    this.centerY = y;
-    this.showResult(title, '', true);
-  }
-
-  public hideResultPanel(): void {
-    // Abort any active requests when closing result panel
-    if (this.isLoading) {
-      abortAllRequests();
-      this.isLoading = false;
-    }
-
-    if (this.resultPanel) {
-      this.resultPanel.classList.add('thecircle-fade-out');
-      const panelToRemove = this.resultPanel;
-      setTimeout(() => {
-        if (panelToRemove) {
-          removeFromShadow(panelToRemove);
-          if (this.resultPanel === panelToRemove) {
-            this.resultPanel = null;
-            this.onClose?.();
-          }
-        }
-      }, 200);
-    }
-  }
-
   public setOnStop(callback: () => void): void {
-    this.onStopCallback = callback;
+    void callback;
   }
 
   public setOnClose(callback: () => void): void {
-    this.onClose = callback;
-  }
-
-  public showResult(title: string, content: string, options: boolean | ShowResultOptions = false): void {
-    const isLoading = typeof options === 'boolean' ? options : (options.isLoading || false);
-    
-    // Reset state
-    if (typeof options === 'object') {
-      this.originalText = options.originalText || '';
-      this.resultType = options.type || 'general';
-    } else {
-      this.originalText = '';
-      this.resultType = 'general';
-    }
-    this.currentTranslatedText = content;
-    this.isComparisonMode = false;
-    
-    // If we have an existing panel, remove it immediately to avoid overlap/race conditions
-    // This is especially important when switching from "Loading" to "Error" quickly
-    if (this.resultPanel) {
-      removeFromShadow(this.resultPanel);
-      this.resultPanel = null;
-    }
-    
-    this.isLoading = isLoading;
-
-    this.resultPanel = document.createElement('div');
-    this.resultPanel.className = 'thecircle-result-panel';
-
-    // Use skeleton loading instead of spinner when loading
-    const loadingContent = isLoading
-      ? `<div class="thecircle-loading-container">
-           <div class="thecircle-loading-row">
-             <div class="thecircle-spinner"></div>
-             <span class="thecircle-loading-text">正在思考...</span>
-           </div>
-         </div>`
-      : content;
-
-    this.resultPanel.innerHTML = `
-      <div class="thecircle-result-header">
-        <span class="thecircle-result-title">${title}</span>
-        <button class="thecircle-result-close">×</button>
-      </div>
-      <div class="thecircle-result-content-wrapper">
-        <div class="thecircle-result-content">
-          ${loadingContent}
-        </div>
-      </div>
-      <div class="thecircle-result-actions">
-        ${isLoading ? this.createStopButtonHTML() : ''}
-        ${this.createCopyButtonHTML()}
-      </div>
-    `;
-
-    appendToShadow(this.resultPanel);
-
-    // Initial render if not loading or has content
-    if (!isLoading) {
-      this.renderContent();
-    }
-    
-    // Update footer actions immediately to show Compare button if needed
-    this.ensureFooterActions(isLoading, content);
-
-    // Position based on selection or center
-    const rect = this.resultPanel.getBoundingClientRect();
-    let left: number;
-    let top: number;
-
-    if (this.selectionRect) {
-      // Has selection - position near the selected text
-      left = this.selectionRect.left + this.selectionRect.width / 2 - rect.width / 2;
-      top = this.selectionRect.bottom + 15;
-
-      // If not enough space below, show above
-      if (top + rect.height > window.innerHeight - 20) {
-        top = this.selectionRect.top - rect.height - 15;
-      }
-    } else {
-      // No selection - center in viewport
-      left = (window.innerWidth - rect.width) / 2;
-      top = (window.innerHeight - rect.height) / 2;
-    }
-
-    // Keep within viewport bounds
-    if (left < 20) left = 20;
-    if (left + rect.width > window.innerWidth - 20) {
-      left = window.innerWidth - rect.width - 20;
-    }
-    if (top < 20) top = 20;
-    if (top + rect.height > window.innerHeight - 20) {
-      top = window.innerHeight - rect.height - 20;
-    }
-
-    this.resultPanel.style.left = `${left}px`;
-    this.resultPanel.style.top = `${top}px`;
-
-    // Event listeners
-    const closeBtn = this.resultPanel.querySelector('.thecircle-result-close');
-    closeBtn?.addEventListener('click', (e) => {
-      e.stopPropagation(); // Prevent event bubbling
-      e.preventDefault();
-      this.hideResultPanel();
-    });
-
-    // Stop button listener
-    if (isLoading) {
-      const stopBtn = this.resultPanel.querySelector('[data-action="stop"]');
-      stopBtn?.addEventListener('click', () => {
-        abortAllRequests();
-        this.isLoading = false;
-        this.onStopCallback?.();
-        // Just hide the stop button instead of closing panel
-        stopBtn.remove();
-        this.ensureFooterActions(false, content);
-      });
-    }
-
-    // Setup copy button
-    this.setupCopyButton(content);
-
-    // Setup drag behavior
-    this.setupDragBehavior();
-
-    // Setup scroll indicators
-    this.setupScrollIndicators();
-  }
-
-  private setupDragBehavior(): void {
-    if (!this.resultPanel) return;
-
-    const header = this.resultPanel.querySelector('.thecircle-result-header') as HTMLElement;
-    if (!header) return;
-
-    let isDragging = false;
-    let startX = 0;
-    let startY = 0;
-    let initialLeft = 0;
-    let initialTop = 0;
-
-    const onMouseDown = (e: MouseEvent) => {
-      // Don't start drag if clicking close button
-      if ((e.target as HTMLElement).closest('.thecircle-result-close')) return;
-      
-      // Stop event propagation to prevent popover logic from interfering
-      e.stopPropagation();
-
-      isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      
-      const rect = this.resultPanel!.getBoundingClientRect();
-      initialLeft = rect.left;
-      initialTop = rect.top;
-
-      header.style.cursor = 'grabbing';
-      
-      // Prevent text selection during drag
-      e.preventDefault();
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !this.resultPanel) return;
-
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      // Calculate new position
-      let newLeft = initialLeft + dx;
-      let newTop = initialTop + dy;
-
-      // Boundary checks (keep at least 20px visible)
-      const rect = this.resultPanel.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
-      if (newLeft + rect.width < 20) newLeft = 20 - rect.width;
-      if (newLeft > windowWidth - 20) newLeft = windowWidth - 20;
-      if (newTop < 0) newTop = 0;
-      if (newTop > windowHeight - 20) newTop = windowHeight - 20;
-
-      this.resultPanel.style.left = `${newLeft}px`;
-      this.resultPanel.style.top = `${newTop}px`;
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-      if (header) {
-        header.style.cursor = 'move';
-      }
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    header.addEventListener('mousedown', onMouseDown);
-  }
-
-  private createStopButtonHTML(): string {
-    return `
-      <button class="thecircle-stop-btn" data-action="stop">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-        </svg>
-        终止
-      </button>
-    `;
-  }
-
-  private createCopyButtonHTML(): string {
-    return `
-      <button class="thecircle-copy-btn">
-        <span class="thecircle-copy-btn-icon">${this.getCopyIcon()}</span>
-        <span class="thecircle-copy-btn-text">复制</span>
-      </button>
-    `;
-  }
-
-  private getCopyIcon(): string {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-    </svg>`;
-  }
-
-  private getCheckIcon(): string {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="20 6 9 17 4 12"></polyline>
-    </svg>`;
-  }
-
-  private setupCopyButton(content: string): void {
-    if (!this.resultPanel) return;
-
-    const copyBtn = this.resultPanel.querySelector('.thecircle-copy-btn');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(content);
-        this.showCopyFeedback(copyBtn as HTMLButtonElement);
-      });
-    }
-  }
-
-  private showCopyFeedback(btn: HTMLButtonElement): void {
-    const iconEl = btn.querySelector('.thecircle-copy-btn-icon');
-    const textEl = btn.querySelector('.thecircle-copy-btn-text');
-
-    if (iconEl && textEl) {
-      btn.classList.add('copied');
-      iconEl.innerHTML = this.getCheckIcon();
-      textEl.textContent = '已复制';
-
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        iconEl.innerHTML = this.getCopyIcon();
-        textEl.textContent = '复制';
-      }, 1500);
-    }
-  }
-
-  private setupScrollIndicators(): void {
-    if (!this.resultPanel) return;
-
-    const wrapper = this.resultPanel.querySelector('.thecircle-result-content-wrapper');
-    const content = this.resultPanel.querySelector('.thecircle-result-content');
-
-    if (wrapper && content) {
-      const updateIndicators = () => {
-        const { scrollTop, scrollHeight, clientHeight } = content as HTMLElement;
-        const hasScrollTop = scrollTop > 5;
-        const hasScrollBottom = scrollTop < scrollHeight - clientHeight - 5;
-
-        wrapper.classList.toggle('has-scroll-top', hasScrollTop);
-        wrapper.classList.toggle('has-scroll-bottom', hasScrollBottom);
-      };
-
-      content.addEventListener('scroll', updateIndicators);
-      // Initial check after content renders
-      requestAnimationFrame(updateIndicators);
-    }
-  }
-
-  public updateResult(content: string): void {
-    this.isLoading = false;
-    this.currentTranslatedText = content;
-    if (this.resultPanel) {
-      this.renderContent();
-      this.ensureFooterActions(false, content);
-      this.setupScrollIndicators();
-    }
-  }
-
-  // Stream update for typewriter effect
-  public streamUpdate(_chunk: string, fullText: string): void {
-    this.isLoading = true;
-    this.currentTranslatedText = fullText;
-    if (this.resultPanel) {
-      this.renderContent();
-      // Ensure stop button is visible in footer
-      this.ensureFooterActions(true, fullText);
-    }
-  }
-  
-  private renderContent(): void {
-    if (!this.resultPanel) return;
-    
-    const contentEl = this.resultPanel.querySelector('.thecircle-result-content');
-    if (!contentEl) return;
-
-    // Remove loading if present
-    if (contentEl.querySelector('.thecircle-loading-container')) {
-       // Just clear it, content will be set below
-       contentEl.innerHTML = '';
-    }
-
-    if (this.isComparisonMode && this.resultType === 'translate' && this.originalText) {
-        // Render comparison view
-        contentEl.innerHTML = `
-          <div class="thecircle-result-comparison split-view">
-             <div class="thecircle-result-comparison-item">
-               <div class="thecircle-result-comparison-label">原文</div>
-               <div class="thecircle-result-comparison-content">${this.formatStreamContent(this.originalText)}</div>
-             </div>
-             <div class="thecircle-result-divider"></div>
-             <div class="thecircle-result-comparison-item">
-               <div class="thecircle-result-comparison-label">译文</div>
-               <div class="thecircle-result-comparison-content">${this.formatStreamContent(this.currentTranslatedText)}</div>
-             </div>
-          </div>
-        `;
-        this.resultPanel.classList.add('comparison-mode');
-    } else {
-        // Render standard view
-        if (contentEl.querySelector('.thecircle-stream-content')) {
-           const streamContent = contentEl.querySelector('.thecircle-stream-content');
-           if (streamContent) streamContent.innerHTML = this.formatStreamContent(this.currentTranslatedText);
-        } else {
-           // If we are switching back from comparison mode or initial render
-           if (this.isLoading && !this.currentTranslatedText) {
-             // Keep loading state if empty
-             if (!contentEl.innerHTML) {
-                contentEl.innerHTML = `
-                <div class="thecircle-stream-content"></div>
-              `;
-             }
-           } else {
-             // Standard content
-             // Use stream content wrapper for consistency
-             contentEl.innerHTML = `
-                <div class="thecircle-stream-content">${this.formatStreamContent(this.currentTranslatedText)}</div>
-              `;
-           }
-        }
-        this.resultPanel.classList.remove('comparison-mode');
-    }
-  }
-
-  private toggleComparisonMode(): void {
-    this.isComparisonMode = !this.isComparisonMode;
-    this.renderContent();
-    this.ensureFooterActions(this.isLoading, this.currentTranslatedText);
-  }
-
-  private createCompareButtonHTML(): string {
-    return `
-      <button class="thecircle-compare-btn" title="显示原文">
-        <span class="thecircle-compare-btn-icon">${icons.columns}</span>
-        <span>对比</span>
-      </button>
-    `;
-  }
-
-  private formatStreamContent(text: string): string {
-    // Simple markdown-like formatting
-    return text
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>');
-  }
-
-  private ensureFooterActions(isLoading: boolean, content: string): void {
-    if (!this.resultPanel) return;
-
-    const actionsEl = this.resultPanel.querySelector('.thecircle-result-actions');
-    if (!actionsEl) return;
-
-    // Manage Stop button
-    let stopBtn = actionsEl.querySelector('[data-action="stop"]');
-    if (isLoading) {
-      if (!stopBtn) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = this.createStopButtonHTML();
-        stopBtn = tempDiv.firstElementChild;
-        if (stopBtn) {
-          actionsEl.insertBefore(stopBtn, actionsEl.firstChild);
-          stopBtn.addEventListener('click', () => {
-            abortAllRequests();
-            this.isLoading = false;
-            this.onStopCallback?.();
-            stopBtn?.remove();
-            this.ensureFooterActions(false, content);
-          });
-        }
-      }
-    } else {
-      if (stopBtn) {
-        stopBtn.remove();
-      }
-    }
-
-    // Compare button logic
-    let compareBtn = actionsEl.querySelector('.thecircle-compare-btn');
-    if (this.resultType === 'translate' && this.originalText) {
-       if (!compareBtn) {
-         const tempDiv = document.createElement('div');
-         tempDiv.innerHTML = this.createCompareButtonHTML();
-         compareBtn = tempDiv.firstElementChild;
-         if (compareBtn) {
-            // Insert before copy button
-            const copyBtn = actionsEl.querySelector('.thecircle-copy-btn');
-            if (copyBtn) {
-               actionsEl.insertBefore(compareBtn, copyBtn);
-            } else {
-               actionsEl.appendChild(compareBtn);
-            }
-            compareBtn.addEventListener('click', () => this.toggleComparisonMode());
-         }
-       }
-       // Update active state
-       if (this.isComparisonMode) {
-          compareBtn?.classList.add('active');
-       } else {
-          compareBtn?.classList.remove('active');
-       }
-    } else {
-        if (compareBtn) compareBtn.remove();
-    }
-
-    // Manage Copy button
-    const copyBtn = actionsEl.querySelector('.thecircle-copy-btn');
-    if (copyBtn) {
-      // Update listener with latest content
-      const newBtn = copyBtn.cloneNode(true) as HTMLButtonElement;
-      newBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(content);
-        this.showCopyFeedback(newBtn);
-      });
-      copyBtn.replaceWith(newBtn);
-    } else {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = this.createCopyButtonHTML();
-      const newCopyBtn = tempDiv.firstElementChild;
-      if (newCopyBtn) {
-        actionsEl.appendChild(newCopyBtn);
-        newCopyBtn.addEventListener('click', () => {
-          navigator.clipboard.writeText(content);
-          this.showCopyFeedback(newCopyBtn as HTMLButtonElement);
-        });
-      }
-    }
+    void callback;
   }
 
   private createOverlay(): void {
@@ -651,11 +142,10 @@ export class RadialMenu {
 
       // Use customIcon/customLabel if available
       const displayIcon = item.customIcon || item.icon;
-      const displayLabel = item.customLabel || item.label;
+      // const displayLabel = item.customLabel || item.label; // Label shown in center now
 
       itemEl.innerHTML = `
         <span class="thecircle-item-icon">${displayIcon}</span>
-        <span class="thecircle-item-label">${displayLabel}</span>
       `;
 
       this.container!.appendChild(itemEl);
@@ -733,10 +223,13 @@ export class RadialMenu {
       // Update center label
       const centerLabel = this.container?.querySelector('.thecircle-center-label');
       const centerIcon = this.container?.querySelector('.thecircle-center-icon');
-      if (centerLabel && centerIcon) {
+      
+      if (centerLabel) {
         const item = this.menuItems[index];
         centerLabel.textContent = item.customLabel || item.label;
-        centerIcon.innerHTML = item.customIcon || item.icon;
+        if (centerIcon) {
+          centerIcon.innerHTML = item.customIcon || item.icon;
+        }
       }
     } else {
       // Hide center
@@ -744,8 +237,7 @@ export class RadialMenu {
 
       // Reset center
       const centerLabel = this.container?.querySelector('.thecircle-center-label');
-      const centerIcon = this.container?.querySelector('.thecircle-center-icon');
-      if (centerLabel && centerIcon) {
+      if (centerLabel) {
         centerLabel.textContent = '选择操作';
       }
     }

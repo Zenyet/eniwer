@@ -1,4 +1,4 @@
-import { MenuItem, MenuConfig, Message, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG } from '../types';
+import { MenuItem, MenuConfig, Message, DEFAULT_SCREENSHOT_CONFIG } from '../types';
 import {
   callAI,
   callVisionAI,
@@ -18,6 +18,10 @@ import { ScreenshotPanel } from './ScreenshotPanel';
 
 export interface ScreenshotFlowCallbacks {
   onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+}
+
+export interface ExecuteAIOptions {
+  translateTargetLanguage?: string;
 }
 
 export class MenuActions {
@@ -46,13 +50,14 @@ export class MenuActions {
 
   public async execute(
     item: MenuItem,
-    onChunk?: OnChunkCallback
+    onChunk?: OnChunkCallback,
+    options: ExecuteAIOptions = {}
   ): Promise<{ type: string; result?: string; url?: string }> {
     switch (item.action) {
       case 'translate':
-        return this.handleTranslate(onChunk);
+        return this.handleTranslate(onChunk, options);
       case 'summarize':
-        return this.handleSummarize(onChunk);
+        return this.handleSummarize(onChunk, options);
       case 'explain':
         return this.handleExplain(onChunk);
       case 'rewrite':
@@ -68,7 +73,7 @@ export class MenuActions {
       case 'aiChat':
         return this.handleAIChat();
       case 'summarizePage':
-        return this.handleSummarizePage(onChunk);
+        return this.handleSummarizePage(onChunk, options);
       case 'switchTab':
         return this.handleSwitchTab();
       case 'history':
@@ -86,20 +91,20 @@ export class MenuActions {
     }
   }
 
-  private async handleTranslate(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
+  private async handleTranslate(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要翻译的文字' };
     }
 
-    return this.callAIAction('translate', this.selectedText, onChunk);
+    return this.callAIAction('translate', this.selectedText, onChunk, options);
   }
 
-  private async handleSummarize(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
+  private async handleSummarize(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要总结的文字' };
     }
 
-    return this.callAIAction('summarize', this.selectedText, onChunk);
+    return this.callAIAction('summarize', this.selectedText, onChunk, options);
   }
 
   private async handleExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
@@ -126,14 +131,15 @@ export class MenuActions {
     return this.callAIAction('codeExplain', this.selectedText, onChunk);
   }
 
-  private async handleSummarizePage(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
-    return this.callAIAction('summarizePage', document.body.innerText.slice(0, 10000), onChunk);
+  private async handleSummarizePage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+    return this.callAIAction('summarizePage', document.body.innerText.slice(0, 10000), onChunk, options);
   }
 
   private async callAIAction(
     action: string,
     text: string,
-    onChunk?: OnChunkCallback
+    onChunk?: OnChunkCallback,
+    options: ExecuteAIOptions = {}
   ): Promise<{ type: string; result?: string }> {
     const validationError = this.validateAIConfig();
     if (validationError) {
@@ -144,10 +150,10 @@ export class MenuActions {
 
     switch (action) {
       case 'translate':
-        systemPrompt = getTranslatePrompt(this.config.preferredLanguage || 'zh-CN');
+        systemPrompt = getTranslatePrompt(options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN');
         break;
       case 'summarize':
-        systemPrompt = getSummarizePrompt();
+        systemPrompt = getSummarizePrompt(this.config.summaryLanguage || 'auto');
         break;
       case 'explain':
         systemPrompt = getExplainPrompt();
@@ -159,7 +165,7 @@ export class MenuActions {
         systemPrompt = getCodeExplainPrompt();
         break;
       case 'summarizePage':
-        systemPrompt = getSummarizePagePrompt();
+        systemPrompt = getSummarizePagePrompt(this.config.summaryLanguage || 'auto');
         break;
       default:
         return { type: 'error', result: 'Unknown AI action' };

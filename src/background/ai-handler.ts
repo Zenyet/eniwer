@@ -746,8 +746,29 @@ export function getTranslatePrompt(targetLang: string): string {
   return `You are a professional translator. Translate the following text to ${targetLang}. Only output the translation, nothing else.`;
 }
 
-export function getSummarizePrompt(): string {
-  return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in the same language as the input.`;
+function resolveLanguageName(lang: string): string {
+  const normalized = lang.trim();
+  if (!normalized) return lang;
+  const map: Record<string, string> = {
+    'auto': 'the same language as the input',
+    'zh-CN': 'Simplified Chinese',
+    'zh-TW': 'Traditional Chinese',
+    'en': 'English',
+    'ja': 'Japanese',
+    'ko': 'Korean',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+  };
+  return map[normalized] || normalized;
+}
+
+export function getSummarizePrompt(outputLang: string = 'auto'): string {
+  if (outputLang === 'auto') {
+    return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in the same language as the input.`;
+  }
+  const langName = resolveLanguageName(outputLang);
+  return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in ${langName}.`;
 }
 
 export function getExplainPrompt(): string {
@@ -762,8 +783,12 @@ export function getCodeExplainPrompt(): string {
   return `You are a senior software engineer. Explain the following code in detail, including what it does, how it works, and any important concepts. Output in the same language as the input text (if any) or in English.`;
 }
 
-export function getSummarizePagePrompt(): string {
-  return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in the same language as the content.`;
+export function getSummarizePagePrompt(outputLang: string = 'auto'): string {
+  if (outputLang === 'auto') {
+    return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in the same language as the content.`;
+  }
+  const langName = resolveLanguageName(outputLang);
+  return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in ${langName}.`;
 }
 
 export function getDescribeImagePrompt(): string {

@@ -1,7 +1,5 @@
 import {
   Message,
-  MenuConfig,
-  ScreenshotConfig,
   AIRequestPayload,
   AIVisionRequestPayload,
   AIImageGenRequestPayload,
@@ -111,7 +109,7 @@ async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: bo
         systemPrompt = getTranslatePrompt(config.preferredLanguage || 'zh-CN');
         break;
       case 'summarize':
-        systemPrompt = getSummarizePrompt();
+        systemPrompt = getSummarizePrompt(config.summaryLanguage || 'auto');
         break;
       case 'explain':
         systemPrompt = getExplainPrompt();
@@ -123,7 +121,7 @@ async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: bo
         systemPrompt = getCodeExplainPrompt();
         break;
       case 'summarizePage':
-        systemPrompt = getSummarizePagePrompt();
+        systemPrompt = getSummarizePagePrompt(config.summaryLanguage || 'auto');
         break;
       default:
         return { success: false, error: 'Unknown AI action' };
@@ -148,7 +146,7 @@ async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRe
         systemPrompt = getTranslatePrompt(config.preferredLanguage || 'zh-CN');
         break;
       case 'summarize':
-        systemPrompt = getSummarizePrompt();
+        systemPrompt = getSummarizePrompt(config.summaryLanguage || 'auto');
         break;
       case 'explain':
         systemPrompt = getExplainPrompt();
@@ -160,7 +158,7 @@ async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRe
         systemPrompt = getCodeExplainPrompt();
         break;
       case 'summarizePage':
-        systemPrompt = getSummarizePagePrompt();
+        systemPrompt = getSummarizePagePrompt(config.summaryLanguage || 'auto');
         break;
       default:
         port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: 'Unknown AI action' } });

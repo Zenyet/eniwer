@@ -235,15 +235,33 @@ export class MenuActions {
 
   private async handleSwitchTab(): Promise<{ type: string; result?: string }> {
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = (await chrome.runtime.sendMessage({
         type: 'GET_TABS',
-      } as Message);
+      } as Message)) as { success?: boolean; tabs?: chrome.tabs.Tab[] };
 
-      if (response?.tabs) {
-        // For now, just show tab info - in future, could show a sub-menu
-        return { type: 'info', result: `打开了 ${response.tabs.length} 个标签页` };
+      if (!response?.success || !response.tabs?.length) {
+        return { type: 'error', result: '获取标签页失败' };
       }
-      return { type: 'error', result: '获取标签页失败' };
+
+      const tabs = response.tabs.filter((t) => typeof t.id === 'number');
+      const candidates = tabs.filter((t) => !t.active);
+      if (!candidates.length) {
+        return { type: 'info', result: '当前窗口只有一个标签页' };
+      }
+
+      const hasLastAccessed = candidates.some((t) => typeof (t as unknown as { lastAccessed?: number }).lastAccessed === 'number');
+      const sorted = hasLastAccessed
+        ? [...candidates].sort((a, b) => {
+            const aTime = (a as unknown as { lastAccessed?: number }).lastAccessed ?? 0;
+            const bTime = (b as unknown as { lastAccessed?: number }).lastAccessed ?? 0;
+            return bTime - aTime;
+          })
+        : candidates;
+
+      const target = sorted[0];
+      await chrome.runtime.sendMessage({ type: 'SWITCH_TAB', payload: target.id } as Message);
+      const title = target.title || target.url || '标签页';
+      return { type: 'success', result: `已切换到：${title}` };
     } catch {
       return { type: 'error', result: '获取标签页失败' };
     }
@@ -489,7 +507,12 @@ export class MenuActions {
   }
 
   private handleSettings(): { type: string; result: string } {
-    chrome.runtime.openOptionsPage();
-    return { type: 'redirect', result: '已打开设置页面' };
+    try {
+      const url = chrome.runtime.getURL('options/index.html');
+      chrome.runtime.sendMessage({ type: 'OPEN_URL', payload: url } as Message);
+      return { type: 'success', result: '已打开设置页面' };
+    } catch {
+      return { type: 'error', result: '打开设置页面失败' };
+    }
   }
 }

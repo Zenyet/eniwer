@@ -66,6 +66,10 @@ export class ResultPanel {
     this.setupScrollIndicators();
   }
 
+  public getContentElement(): HTMLElement | null {
+    return (this.element?.querySelector('.thecircle-result-content') as HTMLElement | null) || null;
+  }
+
   public update(content: string): void {
     this.isLoading = false;
     this.currentTranslatedText = content;
@@ -460,6 +464,10 @@ export class ResultPanel {
       const rect = this.element!.getBoundingClientRect();
       initialLeft = rect.left;
       initialTop = rect.top;
+      if (this.isMinimized && this.minimizedSide === 'right') {
+        this.element!.style.right = '';
+        this.element!.style.left = `${rect.left}px`;
+      }
       header?.style && (header.style.cursor = 'grabbing');
       minimizedContent?.style && (minimizedContent.style.cursor = 'grabbing');
       if (this.isMinimized) {
@@ -596,8 +604,13 @@ export class ResultPanel {
 
     const ballSize = 48;
     const top = Math.min(Math.max(rect.top, 0), window.innerHeight - ballSize);
-    const left = side === 'left' ? 0 : window.innerWidth - ballSize;
-    this.element.style.left = `${left}px`;
+    if (side === 'left') {
+      this.element.style.right = '';
+      this.element.style.left = '0px';
+    } else {
+      this.element.style.left = '';
+      this.element.style.right = '0px';
+    }
     this.element.style.top = `${top}px`;
   }
 
@@ -609,6 +622,7 @@ export class ResultPanel {
 
     this.element.style.width = '';
     this.element.style.height = '';
+    this.element.style.right = '';
 
     const rect = this.element.getBoundingClientRect();
     const safeLeft = Math.min(Math.max(this.restoreLeft, 20), window.innerWidth - rect.width - 20);

@@ -79,14 +79,12 @@ export const DEFAULT_SELECTION_MENU: MenuItem[] = [
   { id: 'copy', icon: icons.copy, label: '复制', action: 'copy', enabled: true, order: 5 },
   { id: 'sendToAI', icon: icons.sendToAI, label: '发送到 AI', action: 'sendToAI', enabled: true, order: 6 },
   { id: 'codeExplain', icon: icons.codeExplain, label: '代码解释', action: 'codeExplain', enabled: true, order: 7 },
-  { id: 'sendToAI', icon: icons.sendToAI, label: '发送到 AI', action: 'sendToAI', enabled: true, order: 6 },
-  { id: 'codeExplain', icon: icons.codeExplain, label: '代码解释', action: 'codeExplain', enabled: true, order: 7 },
 ];
 
 export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
-  { id: 'aiChat', icon: icons.aiChat, label: 'AI 对话', action: 'aiChat', enabled: true, order: 0 },
+  { id: 'askPage', icon: icons.messageCircle, label: '页面提问', action: 'askPage', enabled: true, order: 0 },
   { id: 'summarizePage', icon: icons.summarizePage, label: '总结页面', action: 'summarizePage', enabled: true, order: 1 },
-  { id: 'switchTab', icon: icons.switchTab, label: '标签切换', action: 'switchTab', enabled: true, order: 2 },
+  { id: 'rewritePage', icon: icons.rewrite, label: '内容改写', action: 'rewritePage', enabled: true, order: 2 },
   { id: 'history', icon: icons.history, label: '历史记录', action: 'history', enabled: true, order: 3 },
   { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 4 },
   { id: 'bookmark', icon: icons.bookmark, label: '书签', action: 'bookmark', enabled: true, order: 5 },

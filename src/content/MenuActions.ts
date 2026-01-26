@@ -22,6 +22,9 @@ export interface ScreenshotFlowCallbacks {
 
 export interface ExecuteAIOptions {
   translateTargetLanguage?: string;
+  pageQuestion?: string;
+  rewriteInstruction?: string;
+  rewriteUseSelection?: boolean;
 }
 
 export class MenuActions {
@@ -74,6 +77,12 @@ export class MenuActions {
         return this.handleAIChat();
       case 'summarizePage':
         return this.handleSummarizePage(onChunk, options);
+      case 'askPage':
+        return this.handleAskPage(onChunk, options);
+      case 'rewritePage':
+        return this.handleRewritePage(onChunk, options);
+      case 'notesPage':
+        return this.handleNotesPage(onChunk, options);
       case 'switchTab':
         return this.handleSwitchTab();
       case 'history':
@@ -135,6 +144,57 @@ export class MenuActions {
     return this.callAIAction('summarizePage', document.body.innerText.slice(0, 10000), onChunk, options);
   }
 
+  private async handleAskPage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+    const question = options.pageQuestion?.trim() || '';
+    if (!question) {
+      return { type: 'error', result: '请输入你想问的问题' };
+    }
+    const pageContent = document.body.innerText.slice(0, 10000);
+    const prompt = `Webpage content:\n${pageContent}\n\nUser question:\n${question}`;
+    return this.callAIAction('askPage', prompt, onChunk, options);
+  }
+
+  private async handleRewritePage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+    const validationError = this.validateAIConfig();
+    if (validationError) {
+      return { type: 'error', result: validationError };
+    }
+
+    const useSelection = options.rewriteUseSelection !== false;
+    const selectionText = useSelection ? this.selectedText.trim() : '';
+    const hasSelection = !!selectionText;
+
+    const pageContent = document.body.innerText.trim().slice(0, 10000);
+    const content = hasSelection ? selectionText.slice(0, 10000) : pageContent;
+
+    if (!content) {
+      return { type: 'error', result: '页面内容为空，无法改写' };
+    }
+
+    const instruction = options.rewriteInstruction?.trim();
+    const systemPrompt = instruction
+      ? `${getRewritePrompt()}\n\nUser instruction:\n${instruction}`
+      : getRewritePrompt();
+
+    const prompt = `Title: ${document.title}\nURL: ${window.location.href}\n\n${hasSelection ? 'Selected content' : 'Content'}:\n${content}`;
+
+    try {
+      const response = await callAI(prompt, systemPrompt, this.config, onChunk);
+
+      if (response.success) {
+        return { type: 'ai', result: response.result };
+      }
+      return { type: 'error', result: response.error || 'AI 请求失败' };
+    } catch (error) {
+      return { type: 'error', result: `请求失败: ${error}` };
+    }
+  }
+
+  private async handleNotesPage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+    const pageContent = document.body.innerText.slice(0, 10000);
+    return this.callAIAction('notesPage', pageContent, onChunk, options);
+  }
+
   private async callAIAction(
     action: string,
     text: string,
@@ -166,6 +226,12 @@ export class MenuActions {
         break;
       case 'summarizePage':
         systemPrompt = getSummarizePagePrompt(this.config.summaryLanguage || 'auto');
+        break;
+      case 'askPage':
+        systemPrompt = `You are a web reading assistant. Answer the user's question using only the provided webpage content. If the answer is not present, say you cannot find it in the content. Be concise. When helpful, include short exact quotes from the content as evidence.`;
+        break;
+      case 'notesPage':
+        systemPrompt = `You are a web page note-taking assistant. Convert the provided webpage content into a concise, highly actionable Markdown note with these sections:\n\n# Title\n# Summary\n# Key Points\n# Action Items\n# Notable Quotes\n# Tags\n\nKeep it practical and skimmable.`;
         break;
       default:
         return { type: 'error', result: 'Unknown AI action' };

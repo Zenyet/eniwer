@@ -383,7 +383,7 @@ class TheCircle {
 
   private async handleMenuAction(item: MenuItem): Promise<void> {
     // Show loading for AI actions
-    const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
+    const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage', 'askPage', 'rewritePage'];
 
     if (aiActions.includes(item.action)) {
       const resultPanel = new ResultPanel();
@@ -450,26 +450,192 @@ class TheCircle {
 
         await runTranslate(this.config.preferredLanguage || 'zh-CN');
       } else {
-        resultPanel.show(item.label, '', {
-          isLoading: true,
-          originalText,
-          type: 'general',
-          selectionRect: selectionRect,
-          iconHtml: item.icon,
-        });
+        this.menuActions.setSelectedText(originalText);
 
-        const onChunk = this.config.useStreaming
-          ? (chunk: string, fullText: string) => {
-              resultPanel.streamUpdate(chunk, fullText);
-            }
-          : undefined;
+        if (item.action === 'askPage') {
+          resultPanel.show(item.label, '', {
+            isLoading: false,
+            originalText: '',
+            type: 'general',
+            selectionRect: selectionRect,
+            iconHtml: item.icon,
+          });
 
-        const result = await this.menuActions.execute(item, onChunk);
+          const contentEl = resultPanel.getContentElement();
+          if (contentEl) {
+            contentEl.innerHTML = `
+              <div class="thecircle-screenshot-input-area">
+                <input type="text" class="thecircle-screenshot-input" placeholder="输入你想问当前页面的问题…" />
+                <div class="thecircle-screenshot-input-actions">
+                  <button class="thecircle-screenshot-btn thecircle-screenshot-btn-secondary" data-action="cancel">取消</button>
+                  <button class="thecircle-screenshot-btn thecircle-screenshot-btn-primary" data-action="submit">提交</button>
+                </div>
+              </div>
+            `;
 
-        if (result.type === 'error') {
-          resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
-        } else if (result.type === 'ai') {
-          resultPanel.update(result.result || '');
+            const inputEl = contentEl.querySelector('input') as HTMLInputElement | null;
+            const cancelBtn = contentEl.querySelector('[data-action="cancel"]') as HTMLButtonElement | null;
+            const submitBtn = contentEl.querySelector('[data-action="submit"]') as HTMLButtonElement | null;
+
+            cancelBtn?.addEventListener('click', () => {
+              resultPanel.hide();
+            });
+
+            let runId = 0;
+            const runAsk = async () => {
+              const question = inputEl?.value.trim() || '';
+              if (!question) {
+                this.showToast('请输入问题', 'error');
+                return;
+              }
+
+              const currentRun = ++runId;
+              resultPanel.show(item.label, '', {
+                isLoading: true,
+                originalText: question,
+                type: 'general',
+                selectionRect: selectionRect,
+                iconHtml: item.icon,
+              });
+
+              const onChunk = this.config.useStreaming
+                ? (_chunk: string, fullText: string) => {
+                    if (currentRun !== runId) return;
+                    resultPanel.streamUpdate('', fullText);
+                  }
+                : undefined;
+
+              const result = await this.menuActions.execute(item, onChunk, { pageQuestion: question });
+              if (currentRun !== runId) return;
+
+              if (result.type === 'error') {
+                resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+              } else if (result.type === 'ai') {
+                resultPanel.update(result.result || '');
+              }
+            };
+
+            submitBtn?.addEventListener('click', () => {
+              void runAsk();
+            });
+
+            inputEl?.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void runAsk();
+              }
+            });
+
+            setTimeout(() => inputEl?.focus(), 0);
+          }
+        } else if (item.action === 'rewritePage') {
+          const hasSelection = !!originalText.trim();
+          const defaultUseSelection = hasSelection;
+
+          resultPanel.show(item.label, '', {
+            isLoading: false,
+            originalText: '',
+            type: 'general',
+            selectionRect: selectionRect,
+            iconHtml: item.icon,
+          });
+
+          const contentEl = resultPanel.getContentElement();
+          if (contentEl) {
+            contentEl.innerHTML = `
+              <div class="thecircle-screenshot-input-area">
+                <input type="text" class="thecircle-screenshot-input" placeholder="改写要求（可选，例如：更口语/更正式/更短/更长）" />
+                ${hasSelection ? `
+                  <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;opacity:.9;">
+                    <input type="checkbox" data-action="use-selection" ${defaultUseSelection ? 'checked' : ''} />
+                    优先改写选中内容（否则改写整页内容）
+                  </label>
+                ` : ''}
+                <div class="thecircle-screenshot-input-actions">
+                  <button class="thecircle-screenshot-btn thecircle-screenshot-btn-secondary" data-action="cancel">取消</button>
+                  <button class="thecircle-screenshot-btn thecircle-screenshot-btn-primary" data-action="submit">开始改写</button>
+                </div>
+              </div>
+            `;
+
+            const inputEl = contentEl.querySelector('input.thecircle-screenshot-input') as HTMLInputElement | null;
+            const useSelectionEl = contentEl.querySelector('[data-action="use-selection"]') as HTMLInputElement | null;
+            const cancelBtn = contentEl.querySelector('[data-action="cancel"]') as HTMLButtonElement | null;
+            const submitBtn = contentEl.querySelector('[data-action="submit"]') as HTMLButtonElement | null;
+
+            cancelBtn?.addEventListener('click', () => {
+              resultPanel.hide();
+            });
+
+            let runId = 0;
+            const runRewrite = async () => {
+              const instruction = inputEl?.value.trim() || '';
+              const currentRun = ++runId;
+
+              resultPanel.show(item.label, '', {
+                isLoading: true,
+                originalText: instruction || (hasSelection && (useSelectionEl?.checked ?? defaultUseSelection) ? originalText : document.title),
+                type: 'general',
+                selectionRect: selectionRect,
+                iconHtml: item.icon,
+              });
+
+              const onChunk = this.config.useStreaming
+                ? (_chunk: string, fullText: string) => {
+                    if (currentRun !== runId) return;
+                    resultPanel.streamUpdate('', fullText);
+                  }
+                : undefined;
+
+              const result = await this.menuActions.execute(item, onChunk, {
+                rewriteInstruction: instruction,
+                rewriteUseSelection: hasSelection ? (useSelectionEl?.checked ?? defaultUseSelection) : false,
+              });
+
+              if (currentRun !== runId) return;
+
+              if (result.type === 'error') {
+                resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+              } else if (result.type === 'ai') {
+                resultPanel.update(result.result || '');
+              }
+            };
+
+            submitBtn?.addEventListener('click', () => {
+              void runRewrite();
+            });
+
+            inputEl?.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void runRewrite();
+              }
+            });
+
+            setTimeout(() => inputEl?.focus(), 0);
+          }
+        } else {
+          resultPanel.show(item.label, '', {
+            isLoading: true,
+            originalText,
+            type: 'general',
+            selectionRect: selectionRect,
+            iconHtml: item.icon,
+          });
+
+          const onChunk = this.config.useStreaming
+            ? (chunk: string, fullText: string) => {
+                resultPanel.streamUpdate(chunk, fullText);
+              }
+            : undefined;
+
+          const result = await this.menuActions.execute(item, onChunk);
+
+          if (result.type === 'error') {
+            resultPanel.show('错误', result.result || '未知错误', { isLoading: false });
+          } else if (result.type === 'ai') {
+            resultPanel.update(result.result || '');
+          }
         }
       }
     } else {

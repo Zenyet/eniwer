@@ -192,7 +192,9 @@ export class CommandPalette {
       document.removeEventListener('mouseup', this.handleDragEnd);
 
       // Auto-minimize active AI task before hiding (regardless of current view)
-      if (this.aiResultData) {
+      // But don't minimize tasks restored from saved records (they're already saved)
+      const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
+      if (this.aiResultData && !isSavedTask) {
         this.minimize();
       }
 

@@ -78,6 +78,7 @@ export interface MinimizedTask {
   isLoading: boolean;
   minimizedAt: number;
   streamKey?: string; // Unique key to identify which stream this task belongs to
+  callbacks?: AIResultCallbacks; // Preserved callbacks for restore
   // Extended metadata
   actionType?: string; // 'summarizePage' | 'translate' | 'summarize' | 'explain' etc.
   sourceUrl?: string; // Source URL for page actions
@@ -939,6 +940,7 @@ export class CommandPalette {
       isLoading: this.aiResultData.isLoading,
       minimizedAt: Date.now(),
       streamKey: this.aiResultData.streamKey,
+      callbacks: this.aiResultCallbacks || undefined,
       actionType: this.aiResultData.actionType,
       sourceUrl: this.aiResultData.sourceUrl,
       sourceTitle: this.aiResultData.sourceTitle,
@@ -1329,6 +1331,7 @@ export class CommandPalette {
       isLoading: this.aiResultData.isLoading,
       minimizedAt: Date.now(),
       streamKey: this.aiResultData.streamKey, // Preserve streamKey for ongoing updates
+      callbacks: this.aiResultCallbacks || undefined,
       // Extended metadata
       actionType: this.aiResultData.actionType,
       sourceUrl: this.aiResultData.sourceUrl,
@@ -1385,13 +1388,11 @@ export class CommandPalette {
       order: 0,
     };
 
-    // Ensure stop callback is available if not already set
-    if (!this.aiResultCallbacks?.onStop) {
-      this.aiResultCallbacks = {
-        ...this.aiResultCallbacks,
-        onStop: () => abortAllRequests(),
-      };
-    }
+    // Restore callbacks from minimized task, ensuring onStop is available
+    this.aiResultCallbacks = {
+      ...task.callbacks,
+      onStop: () => abortAllRequests(),
+    };
 
     // Use unified interface - stay in commands view with active command
     this.currentView = 'commands';

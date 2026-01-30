@@ -14,10 +14,7 @@ import {
   OnChunkCallback,
 } from '../utils/ai';
 import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
-import { ContextChatPanel } from './ContextChatPanel';
-import { SmartClipPanel } from './SmartClipPanel';
 import { FocusReadMode } from './FocusReadMode';
-import { BrowseTrailPanel } from './BrowseTrailPanel';
 import type { CommandPalette } from './CommandPalette';
 
 export interface ScreenshotFlowCallbacks {
@@ -38,10 +35,7 @@ export class MenuActions {
   private commandPalette: CommandPalette | null = null;
   private currentScreenshotDataUrl: string = '';
   private flowCallbacks: ScreenshotFlowCallbacks | null = null;
-  private contextChatPanel: ContextChatPanel | null = null;
-  private smartClipPanel: SmartClipPanel | null = null;
   private focusReadMode: FocusReadMode | null = null;
-  private browseTrailPanel: BrowseTrailPanel | null = null;
 
   constructor(config: MenuConfig) {
     this.config = config;
@@ -91,8 +85,6 @@ export class MenuActions {
         return this.handleSummarizePage(onChunk, options);
       case 'contextChat':
         return this.handleContextChat();
-      case 'smartClip':
-        return this.handleSmartClip();
       case 'focusRead':
         return this.handleFocusRead();
       case 'browseTrail':
@@ -563,15 +555,7 @@ export class MenuActions {
   // New feature handlers
 
   private handleContextChat(): { type: string; result: string } {
-    this.contextChatPanel = new ContextChatPanel(this.config);
-    this.contextChatPanel.show();
-    return { type: 'silent', result: '' };
-  }
-
-  private handleSmartClip(): { type: string; result: string } {
-    this.smartClipPanel = new SmartClipPanel(this.config);
-    this.smartClipPanel.show();
-    return { type: 'silent', result: '' };
+    return { type: 'contextChat', result: '' };
   }
 
   private handleFocusRead(): { type: string; result: string } {
@@ -581,9 +565,7 @@ export class MenuActions {
   }
 
   private handleBrowseTrail(): { type: string; result: string } {
-    this.browseTrailPanel = new BrowseTrailPanel();
-    this.browseTrailPanel.show();
-    return { type: 'silent', result: '' };
+    return { type: 'browseTrail', result: '' };
   }
 
   private handleSettings(): { type: string; result: string } {

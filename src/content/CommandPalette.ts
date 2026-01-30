@@ -1,9 +1,12 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Circle with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem } from '../types';
+import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession } from '../types';
 import { icons } from '../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../utils/storage';
 import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../utils/taskStorage';
+import { loadBrowseTrailSessions, deleteTrailEntry, clearTrailHistory, exportTrailData } from './BrowseTrailPanel';
+import { loadChatSession, saveChatSession, createNewChatSession, createChatMessage, getContextChatSystemPrompt, buildConversationPrompt, parseReferences } from './ContextChatPanel';
+import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../utils/ai';
 
 // View types for multi-view system
 export type ViewType =
@@ -11,7 +14,9 @@ export type ViewType =
   | 'ai-result'
   | 'settings'
   | 'settings-menu'
-  | 'screenshot';
+  | 'screenshot'
+  | 'browseTrail'
+  | 'contextChat';
 
 export interface ViewState {
   type: ViewType;
@@ -111,6 +116,14 @@ export class CommandPalette {
   // Settings state
   private settingsMenuItems: MenuItem[] = [];
   private editingItemId: string | null = null;
+
+  // Browse Trail state
+  private browseTrailSessions: BrowseSession[] = [];
+  private browseTrailSearch = '';
+
+  // Context Chat state
+  private chatSession: ChatSession | null = null;
+  private isChatStreaming = false;
 
   // Drag state
   private isDragging = false;
@@ -231,6 +244,9 @@ export class CommandPalette {
       'ai-result': this.aiResultData?.title || 'AI 结果',
       'settings': '设置',
       'settings-menu': '菜单管理',
+      'screenshot': '截图',
+      'browseTrail': '浏览轨迹',
+      'contextChat': '上下文追问',
     };
     return titles[view];
   }
@@ -502,12 +518,6 @@ export class CommandPalette {
     style.textContent = this.getStyles();
     this.shadowRoot.appendChild(style);
 
-    // Overlay with subtle blur
-    const overlay = document.createElement('div');
-    overlay.className = 'glass-overlay';
-    overlay.addEventListener('click', () => this.hide());
-    this.shadowRoot.appendChild(overlay);
-
     // Main panel
     const panel = document.createElement('div');
     panel.className = `glass-panel glass-panel-enter ${this.theme}`;
@@ -527,7 +537,6 @@ export class CommandPalette {
     if (!this.shadowRoot) return;
 
     const panel = this.shadowRoot.querySelector('.glass-panel') as HTMLElement;
-    const overlay = this.shadowRoot.querySelector('.glass-overlay') as HTMLElement;
     if (!panel) return;
 
     // Get previous view from data attribute to avoid animating same-view transitions
@@ -543,28 +552,23 @@ export class CommandPalette {
       setTimeout(() => panel.classList.remove('glass-view-transition'), 200);
     }
 
-    // Hide overlay for AI result view to allow reading the page
-    // Also position the panel to the right side for AI result view (unless keepPosition is true)
-    if (overlay) {
-      if (this.currentView === 'ai-result') {
-        overlay.style.display = 'none';
-        // Position panel to the right side if not already dragged and not keeping position
-        if (!keepPosition && panel.style.transform !== 'none') {
-          panel.style.position = 'fixed';
-          panel.style.top = '80px';
-          panel.style.left = 'auto';
-          panel.style.right = '20px';
-          panel.style.transform = 'none';
-        }
-      } else {
-        overlay.style.display = '';
-        // Reset to center position for commands view
-        panel.style.position = '';
-        panel.style.top = '';
-        panel.style.left = '';
-        panel.style.right = '';
-        panel.style.transform = '';
+    // Position the panel to the right side for AI result view (unless keepPosition is true)
+    if (this.currentView === 'ai-result') {
+      // Position panel to the right side if not already dragged and not keeping position
+      if (!keepPosition && panel.style.transform !== 'none') {
+        panel.style.position = 'fixed';
+        panel.style.top = '80px';
+        panel.style.left = 'auto';
+        panel.style.right = '20px';
+        panel.style.transform = 'none';
       }
+    } else {
+      // Reset to center position for commands view
+      panel.style.position = '';
+      panel.style.top = '';
+      panel.style.left = '';
+      panel.style.right = '';
+      panel.style.transform = '';
     }
 
     switch (this.currentView) {
@@ -592,6 +596,22 @@ export class CommandPalette {
       case 'screenshot':
         panel.innerHTML = this.getScreenshotViewHTML();
         this.bindScreenshotViewEvents();
+        break;
+      case 'browseTrail':
+        panel.innerHTML = this.getBrowseTrailViewHTML();
+        this.bindBrowseTrailEvents();
+        requestAnimationFrame(() => {
+          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+          input?.focus();
+        });
+        break;
+      case 'contextChat':
+        panel.innerHTML = this.getContextChatViewHTML();
+        this.bindContextChatEvents();
+        requestAnimationFrame(() => {
+          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+          input?.focus();
+        });
         break;
     }
   }
@@ -663,6 +683,7 @@ export class CommandPalette {
                 <rect x="6" y="6" width="12" height="12" rx="2"></rect>
               </svg>
             </button>
+            ${isTranslate ? this.getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
             ${isTranslate && this.aiResultData?.originalText ? `
               <button class="glass-footer-btn glass-btn-compare" title="对比原文">
                 ${icons.columns}
@@ -748,6 +769,21 @@ export class CommandPalette {
         this.toggleCompareMode();
       });
 
+      // Language select for translate
+      const langSelect = this.shadowRoot.querySelector('.glass-lang-select') as HTMLSelectElement;
+      langSelect?.addEventListener('change', () => {
+        if (this.aiResultData) {
+          // Generate new stream key so streaming updates work
+          this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          this.aiResultData.streamKey = this.currentStreamKey;
+          this.aiResultData.translateTargetLanguage = langSelect.value;
+          this.aiResultData.isLoading = true;
+          this.aiResultData.content = '';
+          this.updateUnifiedContent();
+          this.aiResultCallbacks?.onTranslateLanguageChange?.(langSelect.value);
+        }
+      });
+
       const refreshBtn = this.shadowRoot.querySelector('.glass-btn-refresh');
       refreshBtn?.addEventListener('click', () => {
         this.aiResultCallbacks?.onRefresh?.();
@@ -769,6 +805,7 @@ export class CommandPalette {
     });
 
     input?.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
       if (hasActiveCommand) {
         // When command is active
         if (e.key === 'Escape') {
@@ -810,6 +847,7 @@ export class CommandPalette {
     // Number keys for quick selection (1-9)
     if (!hasActiveCommand) {
       input?.addEventListener('keydown', (e) => {
+        if (e.isComposing) return;
         if (e.key >= '1' && e.key <= '9' && !this.searchQuery) {
           const index = parseInt(e.key) - 1;
           if (index < this.filteredItems.length) {
@@ -1131,6 +1169,9 @@ export class CommandPalette {
     const langSelect = this.shadowRoot.querySelector('.glass-lang-select') as HTMLSelectElement;
     langSelect?.addEventListener('change', () => {
       if (this.aiResultData) {
+        // Generate new stream key so streaming updates work
+        this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this.aiResultData.streamKey = this.currentStreamKey;
         this.aiResultData.translateTargetLanguage = langSelect.value;
         this.aiResultData.isLoading = true;
         this.aiResultData.content = '';
@@ -1165,9 +1206,9 @@ export class CommandPalette {
 
   // Drag handlers
   private handleDragStart = (e: MouseEvent): void => {
-    // Don't start drag if clicking on buttons or selects
+    // Don't start drag if clicking on interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('select')) return;
+    if (target.closest('button') || target.closest('select') || target.closest('input')) return;
 
     const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
     if (!panel) return;
@@ -1305,7 +1346,17 @@ export class CommandPalette {
       label: task.title,
       icon: task.iconHtml || '',
       action: task.actionType || 'unknown',
+      enabled: true,
+      order: 0,
     };
+
+    // Ensure stop callback is available if not already set
+    if (!this.aiResultCallbacks?.onStop) {
+      this.aiResultCallbacks = {
+        ...this.aiResultCallbacks,
+        onStop: () => abortAllRequests(),
+      };
+    }
 
     // Use unified interface - stay in commands view with active command
     this.currentView = 'commands';
@@ -2510,11 +2561,48 @@ export class CommandPalette {
       sourceTitle: task.sourceTitle,
       createdAt: task.createdAt,
     };
-    this.aiResultCallbacks = {};
+
+    // Set up callbacks for translate actions
+    if (task.actionType === 'translate' && task.originalText) {
+      const originalText = task.originalText;
+      this.aiResultCallbacks = {
+        onStop: () => abortAllRequests(),
+        onTranslateLanguageChange: async (targetLang: string) => {
+          await this.retranslate(originalText, targetLang);
+        },
+      };
+    } else {
+      this.aiResultCallbacks = {};
+    }
+
     // Stay in commands view to show the command tag style
     this.currentView = 'commands';
     // Re-render commands view with active command set
     this.renderCurrentView(false, true);
+  }
+
+  private async retranslate(originalText: string, targetLang: string): Promise<void> {
+    if (!this.aiResultData) return;
+
+    const onChunk: OnChunkCallback | undefined = this.config.useStreaming
+      ? (_chunk: string, fullText: string) => {
+          this.streamUpdate(_chunk, fullText);
+        }
+      : undefined;
+
+    const systemPrompt = getTranslatePrompt(targetLang);
+
+    try {
+      const result = await callAI(originalText, systemPrompt, this.config, onChunk);
+
+      if (result.success && result.result) {
+        this.updateAIResult(result.result);
+      } else {
+        this.updateAIResult(result.error || '翻译失败');
+      }
+    } catch (error) {
+      this.updateAIResult(`错误: ${error}`);
+    }
   }
 
   private updateSelection(): void {
@@ -2563,10 +2651,528 @@ export class CommandPalette {
     // AI actions will call showAIResult() which transitions the view,
     // so we should not hide the palette for these actions
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
-    if (!aiActions.includes(item.action)) {
-      this.hide();
+    if (aiActions.includes(item.action)) {
+      this.callbacks?.onSelect(item);
+      return;
     }
+
+    // BrowseTrail and ContextChat transition to their own views
+    if (item.action === 'browseTrail') {
+      this.showBrowseTrail();
+      return;
+    }
+    if (item.action === 'contextChat') {
+      this.showContextChat();
+      return;
+    }
+
+    this.hide();
     this.callbacks?.onSelect(item);
+  }
+
+  // ========================================
+  // Browse Trail View
+  // ========================================
+
+  private async showBrowseTrail(): Promise<void> {
+    this.browseTrailSessions = await loadBrowseTrailSessions();
+    this.browseTrailSearch = '';
+    this.activeCommand = {
+      id: 'browseTrail',
+      action: 'browseTrail',
+      label: '浏览轨迹',
+      icon: icons.history,
+      enabled: true,
+      order: 0,
+    };
+    this.currentView = 'browseTrail';
+    this.viewStack = [];
+    this.renderCurrentView();
+  }
+
+  private getBrowseTrailViewHTML(): string {
+    return `
+      <div class="glass-search glass-draggable">
+        <div class="glass-command-tag" data-action="browseTrail">
+          <span class="glass-command-tag-icon">${icons.history}</span>
+          <span class="glass-command-tag-label">浏览轨迹</span>
+          <button class="glass-command-tag-close">&times;</button>
+        </div>
+        <input
+          type="text"
+          class="glass-input"
+          placeholder="搜索历史记录..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <kbd class="glass-kbd">ESC</kbd>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-body">
+        <div class="glass-trail-content">
+          ${this.getBrowseTrailContentHTML()}
+        </div>
+      </div>
+      <div class="glass-footer">
+        <div class="glass-trail-footer-actions">
+          <button class="glass-btn glass-btn-trail-clear">清空历史</button>
+          <button class="glass-btn glass-btn-trail-export">导出</button>
+        </div>
+        <div class="glass-brand">
+          <span class="glass-logo">${icons.logo}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private getBrowseTrailContentHTML(): string {
+    // Flatten all entries
+    const allEntries: TrailEntry[] = [];
+    for (const session of this.browseTrailSessions) {
+      allEntries.push(...session.entries);
+    }
+    allEntries.sort((a, b) => b.visitedAt - a.visitedAt);
+
+    // Filter by search
+    const query = this.browseTrailSearch.toLowerCase();
+    const filtered = query
+      ? allEntries.filter(e =>
+          e.title.toLowerCase().includes(query) ||
+          e.url.toLowerCase().includes(query) ||
+          (e.summary?.toLowerCase().includes(query))
+        )
+      : allEntries;
+
+    if (filtered.length === 0) {
+      return `
+        <div class="glass-trail-empty">
+          <div class="glass-trail-empty-icon">${icons.history}</div>
+          <div class="glass-trail-empty-text">
+            ${query ? '没有找到匹配的记录' : '还没有浏览记录'}
+          </div>
+          <div class="glass-trail-empty-hint">
+            ${query ? '试试其他关键词' : '浏览网页时会自动记录'}
+          </div>
+        </div>
+      `;
+    }
+
+    // Group by date
+    const groups = this.groupTrailByDate(filtered);
+
+    return Object.entries(groups).map(([date, entries]) => `
+      <div class="glass-trail-group">
+        <div class="glass-trail-date">${date}</div>
+        <div class="glass-trail-entries">
+          ${entries.map(entry => {
+            const time = new Date(entry.visitedAt).toLocaleTimeString('zh-CN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            });
+            let domain = '';
+            try { domain = new URL(entry.url).hostname; } catch {}
+
+            return `
+              <div class="glass-trail-entry" data-url="${this.escapeHtml(entry.url)}">
+                <div class="glass-trail-entry-info">
+                  <div class="glass-trail-entry-title">${this.escapeHtml(entry.title || '无标题')}</div>
+                  <div class="glass-trail-entry-meta">
+                    <span class="glass-trail-entry-domain">${this.escapeHtml(domain)}</span>
+                    <span class="glass-trail-entry-time">${time}</span>
+                  </div>
+                </div>
+                <button class="glass-trail-entry-delete" data-id="${entry.id}" title="删除">&times;</button>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private groupTrailByDate(entries: TrailEntry[]): Record<string, TrailEntry[]> {
+    const groups: Record<string, TrailEntry[]> = {};
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+    for (const entry of entries) {
+      const date = new Date(entry.visitedAt).toDateString();
+      let label: string;
+
+      if (date === today) {
+        label = '今天';
+      } else if (date === yesterday) {
+        label = '昨天';
+      } else {
+        label = new Date(entry.visitedAt).toLocaleDateString('zh-CN', {
+          month: 'long',
+          day: 'numeric',
+          weekday: 'short',
+        });
+      }
+
+      if (!groups[label]) {
+        groups[label] = [];
+      }
+      groups[label].push(entry);
+    }
+
+    return groups;
+  }
+
+  private bindBrowseTrailEvents(): void {
+    if (!this.shadowRoot) return;
+
+    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
+    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
+
+    if (searchArea) {
+      searchArea.addEventListener('mousedown', this.handleDragStart);
+    }
+
+    // Command tag close
+    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
+    tagClose?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.activeCommand = null;
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView();
+    });
+
+    // Search
+    input?.addEventListener('input', () => {
+      this.browseTrailSearch = input.value.trim();
+      const content = this.shadowRoot?.querySelector('.glass-trail-content');
+      if (content) {
+        content.innerHTML = this.getBrowseTrailContentHTML();
+        this.bindTrailEntryEvents();
+      }
+    });
+
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.activeCommand = null;
+        this.currentView = 'commands';
+        this.viewStack = [];
+        this.renderCurrentView();
+      }
+    });
+
+    // Footer actions
+    const clearBtn = this.shadowRoot.querySelector('.glass-btn-trail-clear');
+    clearBtn?.addEventListener('click', async () => {
+      if (confirm('确定要清空所有浏览记录吗？')) {
+        await clearTrailHistory();
+        this.browseTrailSessions = [];
+        const content = this.shadowRoot?.querySelector('.glass-trail-content');
+        if (content) {
+          content.innerHTML = this.getBrowseTrailContentHTML();
+        }
+      }
+    });
+
+    const exportBtn = this.shadowRoot.querySelector('.glass-btn-trail-export');
+    exportBtn?.addEventListener('click', () => {
+      exportTrailData(this.browseTrailSessions);
+      this.showToast('已导出浏览历史');
+    });
+
+    // Bind entry events
+    this.bindTrailEntryEvents();
+  }
+
+  private bindTrailEntryEvents(): void {
+    if (!this.shadowRoot) return;
+
+    this.shadowRoot.querySelectorAll('.glass-trail-entry').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('.glass-trail-entry-delete')) return;
+        const url = el.getAttribute('data-url');
+        if (url) {
+          window.open(url, '_blank');
+        }
+      });
+    });
+
+    this.shadowRoot.querySelectorAll('.glass-trail-entry-delete').forEach(el => {
+      el.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute('data-id');
+        if (id) {
+          this.browseTrailSessions = await deleteTrailEntry(id);
+          const content = this.shadowRoot?.querySelector('.glass-trail-content');
+          if (content) {
+            content.innerHTML = this.getBrowseTrailContentHTML();
+            this.bindTrailEntryEvents();
+          }
+        }
+      });
+    });
+  }
+
+  // ========================================
+  // Context Chat View
+  // ========================================
+
+  private async showContextChat(): Promise<void> {
+    const url = window.location.href;
+    const existing = await loadChatSession(url);
+
+    if (existing) {
+      this.chatSession = existing;
+    } else {
+      this.chatSession = createNewChatSession(url, document.title);
+    }
+
+    this.isChatStreaming = false;
+    this.activeCommand = {
+      id: 'contextChat',
+      action: 'contextChat',
+      label: '上下文追问',
+      icon: icons.messageCircle,
+      enabled: true,
+      order: 0,
+    };
+    this.currentView = 'contextChat';
+    this.viewStack = [];
+    this.renderCurrentView();
+  }
+
+  private getContextChatViewHTML(): string {
+    return `
+      <div class="glass-search glass-draggable">
+        <div class="glass-command-tag" data-action="contextChat">
+          <span class="glass-command-tag-icon">${icons.messageCircle}</span>
+          <span class="glass-command-tag-label">上下文追问</span>
+          <button class="glass-command-tag-close">&times;</button>
+        </div>
+        <input
+          type="text"
+          class="glass-input glass-chat-input"
+          placeholder="输入问题后按回车..."
+          autocomplete="off"
+          spellcheck="false"
+          ${this.isChatStreaming ? 'disabled' : ''}
+        />
+        <kbd class="glass-kbd">ESC</kbd>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-body">
+        <div class="glass-chat-content">
+          ${this.getContextChatContentHTML()}
+        </div>
+      </div>
+      <div class="glass-footer">
+        <div class="glass-chat-footer-actions">
+          <button class="glass-btn glass-btn-chat-clear">清空对话</button>
+        </div>
+        <div class="glass-brand">
+          <span class="glass-logo">${icons.logo}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private getContextChatContentHTML(): string {
+    if (!this.chatSession || this.chatSession.messages.length === 0) {
+      return `
+        <div class="glass-chat-empty">
+          <div class="glass-chat-empty-icon">${icons.messageCircle}</div>
+          <div class="glass-chat-empty-text">开始提问，AI 将基于当前页面内容回答</div>
+        </div>
+      `;
+    }
+
+    return this.chatSession.messages.map(msg => {
+      const roleLabel = msg.role === 'user' ? '你' : 'AI';
+      const roleClass = msg.role === 'user' ? 'glass-chat-msg-user' : 'glass-chat-msg-assistant';
+
+      let contentHtml = '';
+      if (msg.references && msg.references.length > 0) {
+        const refsHtml = msg.references.map(r =>
+          `<div class="glass-chat-reference">"${this.escapeHtml(r.text)}"</div>`
+        ).join('');
+        contentHtml = `<div class="glass-chat-references">${refsHtml}</div>`;
+      }
+      contentHtml += `<div class="glass-chat-msg-text">${this.formatAIContent(msg.content)}</div>`;
+
+      return `
+        <div class="glass-chat-msg ${roleClass}">
+          <div class="glass-chat-msg-label">${roleLabel}</div>
+          ${contentHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  private bindContextChatEvents(): void {
+    if (!this.shadowRoot) return;
+
+    const input = this.shadowRoot.querySelector('.glass-chat-input') as HTMLInputElement;
+    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
+
+    if (searchArea) {
+      searchArea.addEventListener('mousedown', this.handleDragStart);
+    }
+
+    // Command tag close
+    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
+    tagClose?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.activeCommand = null;
+      this.chatSession = null;
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView();
+    });
+
+    // Send message on Enter
+    input?.addEventListener('keydown', (e) => {
+      if (e.isComposing) return;
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!this.isChatStreaming) {
+          this.sendChatMessage(input);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.activeCommand = null;
+        this.chatSession = null;
+        this.currentView = 'commands';
+        this.viewStack = [];
+        this.renderCurrentView();
+      }
+    });
+
+    // Clear chat
+    const clearBtn = this.shadowRoot.querySelector('.glass-btn-chat-clear');
+    clearBtn?.addEventListener('click', async () => {
+      if (this.chatSession) {
+        this.chatSession.messages = [];
+        await saveChatSession(this.chatSession);
+        const content = this.shadowRoot?.querySelector('.glass-chat-content');
+        if (content) {
+          content.innerHTML = this.getContextChatContentHTML();
+        }
+      }
+    });
+
+    // Scroll to bottom
+    this.scrollChatToBottom();
+  }
+
+  private async sendChatMessage(input: HTMLInputElement): Promise<void> {
+    if (!this.chatSession || this.isChatStreaming) return;
+
+    const rawContent = input.value.trim();
+    if (!rawContent) return;
+
+    const { cleanContent, references } = parseReferences(rawContent);
+
+    // Add user message
+    const userMsg = createChatMessage('user', cleanContent, references.length > 0 ? references : undefined);
+    this.chatSession.messages.push(userMsg);
+
+    // Clear input
+    input.value = '';
+    input.disabled = true;
+    input.placeholder = 'AI 正在回复...';
+
+    // Update display
+    const content = this.shadowRoot?.querySelector('.glass-chat-content');
+    if (content) {
+      content.innerHTML = this.getContextChatContentHTML();
+    }
+    this.scrollChatToBottom();
+
+    // Add empty assistant message placeholder
+    const assistantMsg = createChatMessage('assistant', '');
+    this.chatSession.messages.push(assistantMsg);
+
+    // Render the placeholder
+    if (content) {
+      content.innerHTML = this.getContextChatContentHTML() + `
+        <div class="glass-chat-msg glass-chat-msg-assistant glass-chat-streaming">
+          <div class="glass-chat-msg-label">AI</div>
+          <div class="glass-chat-msg-text">${this.getLoadingHTML()}</div>
+        </div>
+      `;
+      // Remove the empty assistant msg from the rendered chat (it shows in streaming div)
+      const lastMsg = content.querySelector('.glass-chat-msg:nth-last-child(2)');
+      if (lastMsg && lastMsg.querySelector('.glass-chat-msg-text')?.textContent === '') {
+        lastMsg.remove();
+      }
+    }
+    this.scrollChatToBottom();
+
+    this.isChatStreaming = true;
+
+    // Build prompt
+    const systemPrompt = getContextChatSystemPrompt(this.chatSession);
+    const conversationHistory = buildConversationPrompt(
+      this.chatSession.messages.slice(0, -1) // Exclude the empty assistant message
+    );
+
+    try {
+      const onChunk: OnChunkCallback = (_chunk, fullText) => {
+        if (!this.chatSession) return;
+        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        if (lastMsg.role === 'assistant') {
+          lastMsg.content = fullText;
+        }
+        // Update streaming message
+        const streamingEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text');
+        if (streamingEl) {
+          streamingEl.innerHTML = this.formatAIContent(fullText);
+        }
+        this.scrollChatToBottom();
+      };
+
+      const response = await callAI(conversationHistory, systemPrompt, this.config, onChunk);
+
+      if (response.success && response.result) {
+        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        if (lastMsg.role === 'assistant') {
+          lastMsg.content = response.result;
+        }
+      } else {
+        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        if (lastMsg.role === 'assistant') {
+          lastMsg.content = response.error || 'AI 请求失败';
+        }
+      }
+
+      await saveChatSession(this.chatSession);
+    } catch (error) {
+      const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+      if (lastMsg.role === 'assistant') {
+        lastMsg.content = `错误: ${error}`;
+      }
+    } finally {
+      this.isChatStreaming = false;
+    }
+
+    // Re-render full chat content
+    if (content) {
+      content.innerHTML = this.getContextChatContentHTML();
+    }
+    this.scrollChatToBottom();
+
+    // Re-enable input
+    input.disabled = false;
+    input.placeholder = '输入问题后按回车...';
+    input.focus();
+  }
+
+  private scrollChatToBottom(): void {
+    if (!this.shadowRoot) return;
+    const body = this.shadowRoot.querySelector('.glass-body');
+    if (body) {
+      body.scrollTop = body.scrollHeight;
+    }
   }
 
   private escapeHtml(text: string): string {
@@ -2642,25 +3248,22 @@ export class CommandPalette {
       }
 
       /* ========================================
-         Overlay - Subtle background dimming
-         ======================================== */
-      .glass-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.4);
-        z-index: 2147483646;
-        animation: overlayIn var(--duration-fast) var(--ease-out);
-      }
-
-      @keyframes overlayIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
-      /* ========================================
          Main Panel - Liquid Glass container
          ======================================== */
       .glass-panel {
+        /* Reset inherited styles to prevent page style pollution */
+        text-align: left;
+        line-height: normal;
+        letter-spacing: normal;
+        word-spacing: normal;
+        text-transform: none;
+        text-indent: 0;
+        text-shadow: none;
+        direction: ltr;
+        white-space: normal;
+        cursor: default;
+        visibility: visible;
+
         position: fixed;
         top: 18%;
         left: 50%;
@@ -3169,7 +3772,6 @@ export class CommandPalette {
          ======================================== */
       @media (prefers-reduced-motion: reduce) {
         .glass-panel,
-        .glass-overlay,
         .glass-item,
         .glass-item-icon {
           animation: none;
@@ -3542,7 +4144,7 @@ export class CommandPalette {
       }
 
       .glass-recent-close:hover {
-        color: var(--text-primary);
+        color: #ff6b6b;
       }
 
       /* ========================================
@@ -3683,13 +4285,14 @@ export class CommandPalette {
       /* Language Select */
       .glass-lang-select {
         appearance: none;
-        padding: 6px 28px 6px 10px;
+        height: 32px;
+        padding: 0 28px 0 10px;
         border: 0.5px solid var(--glass-border);
         background: var(--glass-bg-hover);
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 8px center;
-        border-radius: 6px;
+        border-radius: 8px;
         color: var(--text-primary);
         font-size: 13px;
         cursor: pointer;
@@ -3730,24 +4333,32 @@ export class CommandPalette {
         max-height: 400px;
         overflow-y: auto;
         scrollbar-width: thin;
-        scrollbar-color: var(--scrollbar-thumb) transparent;
+        scrollbar-color: var(--glass-border) transparent;
       }
 
       .glass-settings-body::-webkit-scrollbar {
-        width: 6px;
+        width: 6px !important;
+        height: 6px !important;
+        background: transparent !important;
       }
 
       .glass-settings-body::-webkit-scrollbar-track {
-        background: transparent;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-thumb {
-        background: var(--scrollbar-thumb);
+        background: transparent !important;
         border-radius: 3px;
       }
 
+      .glass-settings-body::-webkit-scrollbar-thumb {
+        background: var(--glass-border) !important;
+        border-radius: 3px;
+        border: none !important;
+      }
+
       .glass-settings-body::-webkit-scrollbar-thumb:hover {
-        background: var(--scrollbar-thumb-hover);
+        background: var(--glass-border-strong) !important;
+      }
+
+      .glass-settings-body::-webkit-scrollbar-corner {
+        background: transparent !important;
       }
 
       .glass-settings-list {
@@ -3816,18 +4427,18 @@ export class CommandPalette {
       .glass-form-group {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
       }
 
       .glass-form-group + .glass-form-group {
-        margin-top: 4px;
+        margin-top: 12px;
       }
 
       .glass-form-group.glass-form-toggle {
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 0;
+        padding: 6px 0;
       }
 
       .glass-form-label {
@@ -3840,6 +4451,7 @@ export class CommandPalette {
         font-size: 12px;
         color: var(--text-tertiary);
         line-height: 1.4;
+        margin-top: -2px;
       }
 
       .glass-select {
@@ -4246,6 +4858,247 @@ export class CommandPalette {
         to {
           opacity: 1;
         }
+      }
+
+      /* ========================================
+         Browse Trail View
+         ======================================== */
+      .glass-trail-content {
+        padding: 8px;
+      }
+
+      .glass-trail-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        text-align: center;
+      }
+
+      .glass-trail-empty-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-tertiary);
+        margin-bottom: 12px;
+      }
+
+      .glass-trail-empty-icon svg {
+        width: 32px;
+        height: 32px;
+      }
+
+      .glass-trail-empty-text {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      .glass-trail-empty-hint {
+        font-size: 12px;
+        color: var(--text-tertiary);
+      }
+
+      .glass-trail-group {
+        margin-bottom: 12px;
+      }
+
+      .glass-trail-date {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        padding: 4px 12px;
+        margin-bottom: 4px;
+      }
+
+      .glass-trail-entries {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .glass-trail-entry {
+        display: flex;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-trail-entry:hover {
+        background: var(--glass-bg-hover);
+      }
+
+      .glass-trail-entry-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .glass-trail-entry-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+      }
+
+      .glass-trail-entry-meta {
+        display: flex;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-tertiary);
+      }
+
+      .glass-trail-entry-domain {
+        max-width: 150px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .glass-trail-entry-delete {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: none;
+        background: transparent;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: 16px;
+        opacity: 0;
+        transition: all var(--duration-fast) var(--ease-out);
+        margin-left: 8px;
+        flex-shrink: 0;
+      }
+
+      .glass-trail-entry:hover .glass-trail-entry-delete {
+        opacity: 1;
+      }
+
+      .glass-trail-entry-delete:hover {
+        color: #ff6b6b;
+      }
+
+      .glass-trail-footer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      /* ========================================
+         Context Chat View
+         ======================================== */
+      .glass-chat-content {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .glass-chat-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+        text-align: center;
+      }
+
+      .glass-chat-empty-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-tertiary);
+        margin-bottom: 12px;
+      }
+
+      .glass-chat-empty-icon svg {
+        width: 32px;
+        height: 32px;
+      }
+
+      .glass-chat-empty-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+      }
+
+      .glass-chat-msg {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .glass-chat-msg-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-tertiary);
+      }
+
+      .glass-chat-msg-text {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text-primary);
+      }
+
+      .glass-chat-msg-text code {
+        background: var(--glass-bg-hover);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: "SF Mono", ui-monospace, monospace;
+        font-size: 13px;
+      }
+
+      .glass-chat-msg-user .glass-chat-msg-text {
+        background: var(--glass-bg-selected);
+        padding: 10px 14px;
+        border-radius: 12px;
+        border-top-left-radius: 4px;
+      }
+
+      .glass-chat-msg-assistant .glass-chat-msg-text {
+        background: var(--glass-bg-hover);
+        padding: 10px 14px;
+        border-radius: 12px;
+        border-top-left-radius: 4px;
+      }
+
+      .glass-chat-references {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+
+      .glass-chat-reference {
+        font-size: 12px;
+        color: var(--text-secondary);
+        background: var(--glass-bg-hover);
+        padding: 6px 10px;
+        border-radius: 6px;
+        border-left: 3px solid var(--glass-border-strong);
+        font-style: italic;
+      }
+
+      .glass-chat-streaming .glass-chat-msg-text {
+        box-shadow: inset 0 0 0 1px var(--glass-border-strong);
+      }
+
+      .glass-chat-footer-actions {
+        display: flex;
+        gap: 8px;
       }
     `;
   }

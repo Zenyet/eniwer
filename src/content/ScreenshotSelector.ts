@@ -151,12 +151,44 @@ const SCREENSHOT_STYLES = `
   background: rgba(59, 130, 246, 0.35);
   border-color: rgba(59, 130, 246, 0.6);
 }
+@media (prefers-color-scheme: light) {
+  .thecircle-screenshot-toolbar {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), inset 0 0.5px 0 rgba(255, 255, 255, 0.8);
+  }
+  .thecircle-screenshot-toolbar-btn {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: rgba(0, 0, 0, 0.85);
+  }
+  .thecircle-screenshot-toolbar-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+    border-color: rgba(0, 0, 0, 0.2);
+  }
+  .thecircle-screenshot-toolbar-btn-primary {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #2563eb;
+  }
+  .thecircle-screenshot-toolbar-btn-primary:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+}
 `;
 
 let stylesInjected = false;
 
 function injectStyles(): void {
   if (stylesInjected) return;
+
+  // Remove existing style tag if present (for extension reload)
+  const existingStyle = document.getElementById('thecircle-screenshot-styles');
+  if (existingStyle) {
+    existingStyle.remove();
+  }
+
   const style = document.createElement('style');
   style.id = 'thecircle-screenshot-styles';
   style.textContent = SCREENSHOT_STYLES;

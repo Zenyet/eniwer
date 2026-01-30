@@ -99,8 +99,7 @@ export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
   { id: 'focusRead', icon: icons.fileText, label: '阅读模式', action: 'focusRead', enabled: true, order: 2 },
   { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 3 },
   { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 4 },
-  { id: 'smartClip', icon: icons.bookmark, label: '智能剪藏', action: 'smartClip', enabled: true, order: 5 },
-  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 6 },
+  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 5 },
 ];
 
 export type MessageType =
@@ -147,19 +146,6 @@ export interface AIImageGenRequestPayload {
   prompt: string;
   config: MenuConfig;
   screenshotConfig: ScreenshotConfig;
-}
-
-// Smart Clip types
-export interface SmartClip {
-  id: string;
-  url: string;
-  title: string;
-  summary: string;
-  keyPoints: string[];
-  screenshot?: string;
-  userNote?: string;
-  content: string;
-  createdAt: number;
 }
 
 // Context Chat types

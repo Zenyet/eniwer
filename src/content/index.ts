@@ -1,6 +1,7 @@
 import { CommandPalette } from './CommandPalette';
 import { MenuActions } from './MenuActions';
 import { SelectionPopover, PopoverPosition } from './SelectionPopover';
+import { TrailRecorder } from './BrowseTrailPanel';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
 import { abortAllRequests } from '../utils/ai';
@@ -18,6 +19,7 @@ class TheCircle {
   private commandPalette: CommandPalette;
   private menuActions: MenuActions;
   private selectionPopover: SelectionPopover;
+  private trailRecorder: TrailRecorder;
   private selectionMenuItems: MenuItem[] = DEFAULT_SELECTION_MENU;
   private globalMenuItems: MenuItem[] = DEFAULT_GLOBAL_MENU;
   private config: MenuConfig = DEFAULT_CONFIG;
@@ -32,6 +34,7 @@ class TheCircle {
     this.commandPalette = new CommandPalette(DEFAULT_CONFIG);
     this.menuActions = new MenuActions(DEFAULT_CONFIG);
     this.selectionPopover = new SelectionPopover();
+    this.trailRecorder = new TrailRecorder();
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
       onToast: (message, type) => this.showToast(message, type),

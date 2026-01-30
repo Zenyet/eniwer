@@ -203,7 +203,6 @@
   position: fixed;
   inset: 0;
   z-index: 2147483646;
-  background: rgba(0, 0, 0, 0.4);
   cursor: crosshair;
   animation: thecircle-fade-in 0.15s ease-out;
 }

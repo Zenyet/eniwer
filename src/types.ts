@@ -96,10 +96,9 @@ export const DEFAULT_SELECTION_MENU: MenuItem[] = [
 export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
   { id: 'contextChat', icon: icons.messageCircle, label: '上下文追问', action: 'contextChat', enabled: true, order: 0 },
   { id: 'summarizePage', icon: icons.summarizePage, label: '总结页面', action: 'summarizePage', enabled: true, order: 1 },
-  { id: 'focusRead', icon: icons.fileText, label: '阅读模式', action: 'focusRead', enabled: true, order: 2 },
-  { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 3 },
-  { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 4 },
-  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 5 },
+  { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 2 },
+  { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 3 },
+  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 4 },
 ];
 
 export type MessageType =

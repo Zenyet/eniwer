@@ -1,5 +1,5 @@
 // Command Palette - Apple Liquid Glass Design
-// The unified interface for The Circle with authentic iOS 26 Liquid Glass aesthetics
+// The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
 import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession } from '../types';
 import { icons } from '../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../utils/storage';
@@ -131,6 +131,8 @@ export class CommandPalette {
   private dragStartY = 0;
   private panelStartX = 0;
   private panelStartY = 0;
+  // Saved panel position (persists across hide/show)
+  private savedPanelPosition: { top: string; left: string; right: string; transform: string } | null = null;
 
   // Minimized tasks storage (in-memory for current session)
   private minimizedTasks: MinimizedTask[] = [];
@@ -196,6 +198,14 @@ export class CommandPalette {
 
       const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
       if (panel) {
+        // Save panel position before hiding (for restoring on next show)
+        this.savedPanelPosition = {
+          top: panel.style.top,
+          left: panel.style.left,
+          right: panel.style.right,
+          transform: panel.style.transform,
+        };
+
         // Check if panel was dragged (has explicit left/top positioning)
         const wasDragged = panel.style.transform === 'none';
         if (wasDragged) {
@@ -226,7 +236,7 @@ export class CommandPalette {
   public pushView(view: ViewState): void {
     this.viewStack.push({ type: this.currentView, title: this.getViewTitle(this.currentView), data: this.getViewData() });
     this.currentView = view.type;
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   public popView(): void {
@@ -234,7 +244,7 @@ export class CommandPalette {
     if (previousView) {
       this.currentView = previousView.type;
       this.restoreViewData(previousView);
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
   }
 
@@ -518,18 +528,35 @@ export class CommandPalette {
     style.textContent = this.getStyles();
     this.shadowRoot.appendChild(style);
 
+    // Transparent overlay to capture clicks outside panel
+    const overlay = document.createElement('div');
+    overlay.className = 'glass-overlay';
+    overlay.addEventListener('click', () => this.hide());
+    this.shadowRoot.appendChild(overlay);
+
     // Main panel
     const panel = document.createElement('div');
-    panel.className = `glass-panel glass-panel-enter ${this.theme}`;
+    const hasRestoredPosition = this.savedPanelPosition && this.savedPanelPosition.transform === 'none';
+    panel.className = `glass-panel ${hasRestoredPosition ? 'glass-panel-enter-restored' : 'glass-panel-enter'} ${this.theme}`;
+
+    // Restore saved position if available
+    if (this.savedPanelPosition) {
+      panel.style.top = this.savedPanelPosition.top;
+      panel.style.left = this.savedPanelPosition.left;
+      panel.style.right = this.savedPanelPosition.right;
+      panel.style.transform = this.savedPanelPosition.transform;
+    }
+
     this.shadowRoot.appendChild(panel);
 
     document.body.appendChild(this.container);
     // First render - no view transition animation (panel already has panelIn animation)
-    this.renderCurrentView(false);
+    this.renderCurrentView(false, true);
 
     // Remove enter animation class after animation completes
     setTimeout(() => {
       panel.classList.remove('glass-panel-enter');
+      panel.classList.remove('glass-panel-enter-restored');
     }, 300);
   }
 
@@ -552,23 +579,26 @@ export class CommandPalette {
       setTimeout(() => panel.classList.remove('glass-view-transition'), 200);
     }
 
-    // Position the panel to the right side for AI result view (unless keepPosition is true)
-    if (this.currentView === 'ai-result') {
-      // Position panel to the right side if not already dragged and not keeping position
-      if (!keepPosition && panel.style.transform !== 'none') {
-        panel.style.position = 'fixed';
-        panel.style.top = '80px';
-        panel.style.left = 'auto';
-        panel.style.right = '20px';
-        panel.style.transform = 'none';
+    // Position the panel (unless keepPosition is true)
+    if (!keepPosition) {
+      if (this.currentView === 'ai-result') {
+        // Position panel to the right side if not already dragged
+        if (panel.style.transform !== 'none') {
+          panel.style.position = 'fixed';
+          panel.style.top = '80px';
+          panel.style.left = 'auto';
+          panel.style.right = '20px';
+          panel.style.transform = 'none';
+        }
+      } else if (this.currentView === 'commands') {
+        // Only reset to center position for commands view (initial state)
+        panel.style.position = '';
+        panel.style.top = '';
+        panel.style.left = '';
+        panel.style.right = '';
+        panel.style.transform = '';
       }
-    } else {
-      // Reset to center position for commands view
-      panel.style.position = '';
-      panel.style.top = '';
-      panel.style.left = '';
-      panel.style.right = '';
-      panel.style.transform = '';
+      // For other views (browseTrail, contextChat, settings, etc.), keep current position
     }
 
     switch (this.currentView) {
@@ -622,6 +652,7 @@ export class CommandPalette {
     const needsInput = hasActiveCommand && ['contextChat'].includes(this.activeCommand?.action || '');
     const isLoading = this.aiResultData?.isLoading ?? false;
     const isTranslate = this.aiResultData?.resultType === 'translate';
+    const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
 
     // Determine placeholder text
     let placeholder = '搜索命令...';
@@ -695,7 +726,7 @@ export class CommandPalette {
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
-            ${this.activeCommand?.action === 'summarizePage' ? `
+            ${this.activeCommand?.action === 'summarizePage' && !isSavedTask ? `
               <button class="glass-footer-btn glass-btn-refresh" title="重新总结" style="display: ${!isLoading ? 'flex' : 'none'}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 2v6h-6"></path>
@@ -705,6 +736,7 @@ export class CommandPalette {
                 </svg>
               </button>
             ` : ''}
+            ${!isSavedTask ? `
             <button class="glass-footer-btn glass-btn-save" title="保存" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
@@ -712,6 +744,7 @@ export class CommandPalette {
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
             </button>
+            ` : ''}
           </div>
         ` : `
           <div class="glass-hints">
@@ -877,7 +910,7 @@ export class CommandPalette {
     this.aiResultData = null;
     this.aiResultCallbacks = null;
     this.searchQuery = '';
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   // Minimize current task to background without aborting (streaming continues)
@@ -917,7 +950,7 @@ export class CommandPalette {
     this.aiResultData = null;
     this.aiResultCallbacks = null;
     this.searchQuery = '';
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   private async saveCurrentTask(btn: HTMLButtonElement): Promise<void> {
@@ -1118,7 +1151,7 @@ export class CommandPalette {
       this.viewStack = [];
       this.aiResultData = null;
       this.aiResultCallbacks = null;
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Minimize button
@@ -1200,7 +1233,7 @@ export class CommandPalette {
       this.viewStack = [];
       this.aiResultData = null;
       this.aiResultCallbacks = null;
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
   };
 
@@ -1361,7 +1394,7 @@ export class CommandPalette {
     // Use unified interface - stay in commands view with active command
     this.currentView = 'commands';
     this.viewStack = [];
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   private dismissMinimizedTask(taskId: string): void {
@@ -1659,7 +1692,7 @@ export class CommandPalette {
       this.activeCommand = null;
       this.currentView = 'commands';
       this.viewStack = [];
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Theme select
@@ -1824,7 +1857,7 @@ export class CommandPalette {
       this.settingsMenuItems = [...DEFAULT_GLOBAL_MENU];
       this.showToast('已重置为默认设置');
       // Re-render settings
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Escape key
@@ -1834,7 +1867,7 @@ export class CommandPalette {
         this.activeCommand = null;
         this.currentView = 'commands';
         this.viewStack = [];
-        this.renderCurrentView();
+        this.renderCurrentView(true, true);
       }
     });
   }
@@ -1950,7 +1983,7 @@ export class CommandPalette {
         if (id) {
           this.settingsMenuItems = this.settingsMenuItems.filter(m => m.id !== id);
           await saveGlobalMenuItems(this.settingsMenuItems);
-          this.renderCurrentView();
+          this.renderCurrentView(true, true);
           this.showToast('菜单项已删除');
         }
       });
@@ -2155,7 +2188,7 @@ export class CommandPalette {
       this.screenshotCallbacks = null;
       this.activeCommand = null;
       this.currentView = 'commands';
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Save button
@@ -2211,7 +2244,7 @@ export class CommandPalette {
       this.screenshotCallbacks = null;
       this.activeCommand = null;
       this.currentView = 'commands';
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
   };
 
@@ -2644,7 +2677,7 @@ export class CommandPalette {
       await this.loadSettingsMenuItems();
       this.currentView = 'settings';
       this.viewStack = [];
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
       return;
     }
 
@@ -2687,7 +2720,7 @@ export class CommandPalette {
     };
     this.currentView = 'browseTrail';
     this.viewStack = [];
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   private getBrowseTrailViewHTML(): string {
@@ -2837,7 +2870,7 @@ export class CommandPalette {
       this.activeCommand = null;
       this.currentView = 'commands';
       this.viewStack = [];
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Search
@@ -2856,7 +2889,7 @@ export class CommandPalette {
         this.activeCommand = null;
         this.currentView = 'commands';
         this.viewStack = [];
-        this.renderCurrentView();
+        this.renderCurrentView(true, true);
       }
     });
 
@@ -2938,7 +2971,7 @@ export class CommandPalette {
     };
     this.currentView = 'contextChat';
     this.viewStack = [];
-    this.renderCurrentView();
+    this.renderCurrentView(true, true);
   }
 
   private getContextChatViewHTML(): string {
@@ -3026,7 +3059,7 @@ export class CommandPalette {
       this.chatSession = null;
       this.currentView = 'commands';
       this.viewStack = [];
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     });
 
     // Send message on Enter
@@ -3043,7 +3076,7 @@ export class CommandPalette {
         this.chatSession = null;
         this.currentView = 'commands';
         this.viewStack = [];
-        this.renderCurrentView();
+        this.renderCurrentView(true, true);
       }
     });
 
@@ -3189,6 +3222,13 @@ export class CommandPalette {
         padding: 0;
       }
 
+      /* Transparent overlay to capture clicks outside panel */
+      .glass-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483646;
+      }
+
       /* ========================================
          Apple Liquid Glass Design System
          Authentic iOS 26 / visionOS aesthetics
@@ -3294,6 +3334,10 @@ export class CommandPalette {
         animation: panelIn var(--duration-normal) var(--ease-spring);
       }
 
+      .glass-panel.glass-panel-enter-restored {
+        animation: panelInRestored var(--duration-normal) var(--ease-spring);
+      }
+
       @keyframes panelIn {
         from {
           opacity: 0;
@@ -3302,6 +3346,17 @@ export class CommandPalette {
         to {
           opacity: 1;
           transform: translateX(-50%) translateY(0) scale(1);
+        }
+      }
+
+      @keyframes panelInRestored {
+        from {
+          opacity: 0;
+          transform: translateY(-16px) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: none;
         }
       }
 
@@ -4095,8 +4150,7 @@ export class CommandPalette {
       }
 
       .glass-minimized-close:hover {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
+        color: #ff6b6b;
       }
 
       /* ========================================

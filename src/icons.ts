@@ -1,4 +1,4 @@
-// SVG Icons for The Circle
+// SVG Icons for The Panel
 // Using Lucide-style icons
 
 export const icons = {

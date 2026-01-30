@@ -1,7 +1,7 @@
 {
   "name": "thecircle",
   "version": "1.0.0",
-  "description": "A radial menu AI toolkit Chrome extension",
+  "description": "A panel AI toolkit Chrome extension",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",

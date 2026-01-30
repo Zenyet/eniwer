@@ -54,7 +54,7 @@ class TheCircle {
       const cssText = await response.text();
       loadStyles(cssText);
     } catch (error) {
-      console.error('The Circle: Failed to load styles', error);
+      console.error('The Panel: Failed to load styles', error);
     }
 
     await this.loadConfig();
@@ -62,7 +62,7 @@ class TheCircle {
     this.setupMessageListener();
     this.setupStorageListener();
     this.setupSelectionListener();
-    console.log('The Circle: Initialized with Command Palette');
+    console.log('The Panel: Initialized with Command Palette');
   }
 
   private async loadConfig(): Promise<void> {
@@ -77,7 +77,7 @@ class TheCircle {
       // Apply the loaded theme
       this.applyTheme(this.config.theme);
     } catch (error) {
-      console.error('The Circle: Failed to load config', error);
+      console.error('The Panel: Failed to load config', error);
     }
   }
 
@@ -100,7 +100,7 @@ class TheCircle {
     const host = getShadowHost();
     const container = host.shadowRoot?.getElementById('thecircle-container');
 
-    console.log('The Circle: Applying theme:', theme);
+    console.log('The Panel: Applying theme:', theme);
 
     // Remove existing theme classes from both host and container
     const removeClasses = ['dark', 'light'];

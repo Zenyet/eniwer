@@ -14,7 +14,6 @@ import {
   OnChunkCallback,
 } from '../utils/ai';
 import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
-import { FocusReadMode } from './FocusReadMode';
 import type { CommandPalette } from './CommandPalette';
 
 export interface ScreenshotFlowCallbacks {
@@ -35,7 +34,6 @@ export class MenuActions {
   private commandPalette: CommandPalette | null = null;
   private currentScreenshotDataUrl: string = '';
   private flowCallbacks: ScreenshotFlowCallbacks | null = null;
-  private focusReadMode: FocusReadMode | null = null;
 
   constructor(config: MenuConfig) {
     this.config = config;
@@ -85,8 +83,6 @@ export class MenuActions {
         return this.handleSummarizePage(onChunk, options);
       case 'contextChat':
         return this.handleContextChat();
-      case 'focusRead':
-        return this.handleFocusRead();
       case 'browseTrail':
         return this.handleBrowseTrail();
       case 'switchTab':
@@ -556,12 +552,6 @@ export class MenuActions {
 
   private handleContextChat(): { type: string; result: string } {
     return { type: 'contextChat', result: '' };
-  }
-
-  private handleFocusRead(): { type: string; result: string } {
-    this.focusReadMode = new FocusReadMode(this.config);
-    this.focusReadMode.enter();
-    return { type: 'silent', result: '' };
   }
 
   private handleBrowseTrail(): { type: string; result: string } {

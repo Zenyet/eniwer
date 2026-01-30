@@ -319,4 +319,4 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
-console.log('The Circle: Background service worker initialized');
+console.log('The Panel: Background service worker initialized');

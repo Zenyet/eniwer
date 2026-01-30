@@ -8,20 +8,19 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 10px;
+    height: 42px;
+    padding: 0 10px;
     border-radius: 8px;
     background: #f3f4f6;
-    min-height: 40px;
+    border: 1px solid #e5e7eb;
     transition: all 150ms ease;
-  }
-
-  .dark .shortcut-display {
-    background: rgba(255, 255, 255, 0.05);
+    box-sizing: border-box;
   }
 
   .shortcut-display.recording {
-    border: 2px solid #3b82f6;
     background: rgba(59, 130, 246, 0.1);
+    border-color: transparent;
+    box-shadow: 0 0 0 2px #3b82f6;
   }
 
   .shortcut-key {
@@ -34,19 +33,9 @@
     color: #374151;
   }
 
-  .dark .shortcut-key {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: white;
-  }
-
   .shortcut-separator {
     font-size: 11px;
     color: #9ca3af;
-  }
-
-  .dark .shortcut-separator {
-    color: rgba(255, 255, 255, 0.5);
   }
 
   /* Record button */
@@ -54,41 +43,68 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
     border-radius: 8px;
-    font-size: 14px;
     cursor: pointer;
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
     color: #374151;
     transition: all 150ms ease;
-  }
-
-  .dark .record-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: white;
+    box-sizing: border-box;
   }
 
   .record-btn:hover {
     background: rgba(59, 130, 246, 0.1);
     border-color: rgba(59, 130, 246, 0.3);
-  }
-
-  .dark .record-btn:hover {
-    background: rgba(59, 130, 246, 0.3);
-    border-color: rgba(59, 130, 246, 0.5);
+    color: #3b82f6;
   }
 
   .record-btn.recording {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: transparent;
+    box-shadow: 0 0 0 2px #ef4444;
     color: #ef4444;
   }
+}
 
-  .dark .record-btn.recording {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: #ef4444;
+@media (prefers-color-scheme: dark) {
+  .shortcut-display {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .shortcut-display.recording {
+    background: rgba(59, 130, 246, 0.15);
+    box-shadow: 0 0 0 2px #60a5fa;
+  }
+
+  .shortcut-key {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .shortcut-separator {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .record-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .record-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #60a5fa;
+  }
+
+  .record-btn.recording {
+    background: rgba(239, 68, 68, 0.15);
+    box-shadow: 0 0 0 2px #f87171;
     color: #f87171;
   }
 }

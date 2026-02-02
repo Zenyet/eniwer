@@ -117,14 +117,18 @@ export class CommandPalette {
   // Settings state
   private settingsMenuItems: MenuItem[] = [];
   private editingItemId: string | null = null;
+  private tempConfig: MenuConfig | null = null;
+  private settingsChanged = false;
 
   // Browse Trail state
   private browseTrailSessions: BrowseSession[] = [];
   private browseTrailSearch = '';
+  private browseTrailDisplayCount = 50;
 
   // Context Chat state
   private chatSession: ChatSession | null = null;
   private isChatStreaming = false;
+  private isQuickAsk = false;
 
   // Drag state
   private isDragging = false;
@@ -157,10 +161,11 @@ export class CommandPalette {
     this.loadRecentSavedTasks();
   }
 
-  private updateTheme(): void {
-    if (this.config.theme === 'light') {
+  private updateTheme(overrideTheme?: 'dark' | 'light' | 'system'): void {
+    const themeSetting = overrideTheme ?? this.config.theme;
+    if (themeSetting === 'light') {
       this.theme = 'light';
-    } else if (this.config.theme === 'dark') {
+    } else if (themeSetting === 'dark') {
       this.theme = 'dark';
     } else {
       this.theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -486,6 +491,10 @@ export class CommandPalette {
 
   // Settings methods
   public showSettings(): void {
+    // Initialize temp config for editing
+    this.tempConfig = JSON.parse(JSON.stringify(this.config));
+    this.settingsChanged = false;
+
     // Set view state BEFORE rendering
     this.currentView = 'settings';
     this.viewStack = [];
@@ -658,7 +667,7 @@ export class CommandPalette {
     const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
 
     // Determine placeholder text
-    let placeholder = '搜索命令...';
+    let placeholder = '搜索命令或直接提问...';
     if (hasActiveCommand) {
       if (needsInput) {
         placeholder = '输入内容后按回车...';
@@ -697,6 +706,7 @@ export class CommandPalette {
         <kbd class="glass-kbd">ESC</kbd>
       </div>
       <div class="glass-divider"></div>
+      ${hasActiveCommand && this.aiResultData ? this.getSourceInfoHTML(this.aiResultData) : ''}
       <div class="glass-body">
         ${hasActiveCommand ? `
           <div class="glass-ai-content-area">
@@ -1095,9 +1105,65 @@ export class CommandPalette {
         </div>
       </div>
       <div class="glass-divider"></div>
+      ${this.getSourceInfoHTML(data)}
       <div class="glass-body glass-ai-result-body">
         <div class="glass-ai-content" data-compare="false">
           ${data.isLoading && !data.content ? this.getLoadingHTML() : this.formatAIContent(data.content)}
+        </div>
+      </div>
+    `;
+  }
+
+  private getSourceInfoHTML(data: AIResultData): string {
+    const isPageAction = data.actionType === 'summarizePage';
+    const isTranslate = data.resultType === 'translate';
+
+    // Only show source info for page actions or translations with sourceUrl
+    if (!isPageAction && !isTranslate) return '';
+    if (!data.sourceUrl && !data.sourceTitle && !data.originalText) return '';
+
+    let titlePart = '';
+    let metaPart = '';
+
+    if (isPageAction) {
+      // Page summary: show page title as clickable link
+      const displayTitle = data.sourceTitle || (data.sourceUrl ? new URL(data.sourceUrl).hostname : '');
+      if (data.sourceUrl) {
+        titlePart = `<a class="glass-source-link" href="${this.escapeHtml(data.sourceUrl)}" target="_blank" title="${this.escapeHtml(data.sourceUrl)}">${this.escapeHtml(displayTitle)}</a>`;
+      } else if (displayTitle) {
+        titlePart = `<span class="glass-source-title">${this.escapeHtml(displayTitle)}</span>`;
+      }
+    } else if (isTranslate) {
+      // Translation: show source site domain
+      if (data.sourceUrl) {
+        try {
+          const hostname = new URL(data.sourceUrl).hostname;
+          titlePart = `<span class="glass-source-title">${this.escapeHtml(hostname)}</span>`;
+        } catch {
+          // ignore invalid URL
+        }
+      }
+    }
+
+    // Time info
+    if (data.createdAt) {
+      metaPart = this.formatTimeAgo(data.createdAt);
+    }
+
+    if (!titlePart && !metaPart) return '';
+
+    return `
+      <div class="glass-source-info">
+        <div class="glass-source-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </div>
+        <div class="glass-source-content">
+          ${titlePart}
+          ${metaPart ? `<span class="glass-source-meta">${metaPart}</span>` : ''}
         </div>
       </div>
     `;
@@ -1494,9 +1560,11 @@ export class CommandPalette {
 
   // Settings Views
   private getSettingsViewHTML(): string {
-    const isCustomProvider = this.config.apiProvider === 'custom';
-    const screenshotConfig = this.config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
-    const historyConfig = this.config.history || DEFAULT_HISTORY_CONFIG;
+    // Use tempConfig if available, otherwise use config
+    const config = this.tempConfig || this.config;
+    const isCustomProvider = config.apiProvider === 'custom';
+    const screenshotConfig = config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
+    const historyConfig = config.history || DEFAULT_HISTORY_CONFIG;
 
     return `
       <div class="glass-search glass-draggable">
@@ -1524,16 +1592,16 @@ export class CommandPalette {
             <div class="glass-form-group">
               <label class="glass-form-label">主题</label>
               <select class="glass-select" id="theme-select">
-                <option value="system"${this.config.theme === 'system' ? ' selected' : ''}>跟随系统</option>
-                <option value="dark"${this.config.theme === 'dark' ? ' selected' : ''}>深色</option>
-                <option value="light"${this.config.theme === 'light' ? ' selected' : ''}>浅色</option>
+                <option value="system"${config.theme === 'system' ? ' selected' : ''}>跟随系统</option>
+                <option value="dark"${config.theme === 'dark' ? ' selected' : ''}>深色</option>
+                <option value="light"${config.theme === 'light' ? ' selected' : ''}>浅色</option>
               </select>
             </div>
             <div class="glass-form-group">
               <label class="glass-form-label">弹出位置</label>
               <select class="glass-select" id="popover-position-select">
-                <option value="above"${this.config.popoverPosition === 'above' ? ' selected' : ''}>选中文本上方</option>
-                <option value="below"${this.config.popoverPosition === 'below' ? ' selected' : ''}>选中文本下方</option>
+                <option value="above"${config.popoverPosition === 'above' ? ' selected' : ''}>选中文本上方</option>
+                <option value="below"${config.popoverPosition === 'below' ? ' selected' : ''}>选中文本下方</option>
               </select>
             </div>
           </div>
@@ -1544,24 +1612,24 @@ export class CommandPalette {
             <div class="glass-form-group">
               <label class="glass-form-label">翻译目标语言</label>
               <select class="glass-select" id="translate-lang-select">
-                <option value="zh-CN"${this.config.preferredLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${this.config.preferredLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="en"${this.config.preferredLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="ja"${this.config.preferredLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-                <option value="ko"${this.config.preferredLanguage === 'ko' ? ' selected' : ''}>한국어</option>
-                <option value="es"${this.config.preferredLanguage === 'es' ? ' selected' : ''}>Español</option>
-                <option value="fr"${this.config.preferredLanguage === 'fr' ? ' selected' : ''}>Français</option>
-                <option value="de"${this.config.preferredLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
+                <option value="zh-CN"${config.preferredLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
+                <option value="zh-TW"${config.preferredLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
+                <option value="en"${config.preferredLanguage === 'en' ? ' selected' : ''}>English</option>
+                <option value="ja"${config.preferredLanguage === 'ja' ? ' selected' : ''}>日本語</option>
+                <option value="ko"${config.preferredLanguage === 'ko' ? ' selected' : ''}>한국어</option>
+                <option value="es"${config.preferredLanguage === 'es' ? ' selected' : ''}>Español</option>
+                <option value="fr"${config.preferredLanguage === 'fr' ? ' selected' : ''}>Français</option>
+                <option value="de"${config.preferredLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
               </select>
             </div>
             <div class="glass-form-group">
               <label class="glass-form-label">总结输出语言</label>
               <select class="glass-select" id="summary-lang-select">
-                <option value="auto"${this.config.summaryLanguage === 'auto' ? ' selected' : ''}>自动检测</option>
-                <option value="zh-CN"${this.config.summaryLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${this.config.summaryLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="en"${this.config.summaryLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="ja"${this.config.summaryLanguage === 'ja' ? ' selected' : ''}>日本語</option>
+                <option value="auto"${config.summaryLanguage === 'auto' ? ' selected' : ''}>自动检测</option>
+                <option value="zh-CN"${config.summaryLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
+                <option value="zh-TW"${config.summaryLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
+                <option value="en"${config.summaryLanguage === 'en' ? ' selected' : ''}>English</option>
+                <option value="ja"${config.summaryLanguage === 'ja' ? ' selected' : ''}>日本語</option>
               </select>
             </div>
           </div>
@@ -1572,30 +1640,30 @@ export class CommandPalette {
             <div class="glass-form-group">
               <label class="glass-form-label">服务商</label>
               <select class="glass-select" id="api-provider-select">
-                <option value="groq"${this.config.apiProvider === 'groq' ? ' selected' : ''}>Groq (免费)</option>
-                <option value="openai"${this.config.apiProvider === 'openai' ? ' selected' : ''}>OpenAI</option>
-                <option value="anthropic"${this.config.apiProvider === 'anthropic' ? ' selected' : ''}>Anthropic</option>
-                <option value="gemini"${this.config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
-                <option value="custom"${this.config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
+                <option value="groq"${config.apiProvider === 'groq' ? ' selected' : ''}>Groq (免费)</option>
+                <option value="openai"${config.apiProvider === 'openai' ? ' selected' : ''}>OpenAI</option>
+                <option value="anthropic"${config.apiProvider === 'anthropic' ? ' selected' : ''}>Anthropic</option>
+                <option value="gemini"${config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
+                <option value="custom"${config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
               </select>
-              <span class="glass-form-hint" id="api-key-hint">${this.getAPIKeyHint(this.config.apiProvider)}</span>
+              <span class="glass-form-hint" id="api-key-hint">${this.getAPIKeyHint(config.apiProvider)}</span>
             </div>
             <div class="glass-form-group">
               <label class="glass-form-label">API Key</label>
-              <input type="password" class="glass-input-field" id="api-key-input" value="${this.config.apiKey || ''}" placeholder="输入 API Key">
+              <input type="password" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key">
             </div>
             <div class="glass-form-group" id="custom-url-group" style="display: ${isCustomProvider ? 'block' : 'none'}">
               <label class="glass-form-label">API URL</label>
-              <input type="text" class="glass-input-field" id="custom-url-input" value="${this.config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
+              <input type="text" class="glass-input-field" id="custom-url-input" value="${config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
             </div>
             <div class="glass-form-group" id="custom-model-group" style="display: ${isCustomProvider ? 'block' : 'none'}">
               <label class="glass-form-label">模型名称</label>
-              <input type="text" class="glass-input-field" id="custom-model-input" value="${this.config.customModel || ''}" placeholder="gpt-4">
+              <input type="text" class="glass-input-field" id="custom-model-input" value="${config.customModel || ''}" placeholder="gpt-4">
             </div>
             <div class="glass-form-group glass-form-toggle">
               <label class="glass-form-label">流式传输</label>
               <label class="glass-toggle">
-                <input type="checkbox" id="streaming-toggle" ${this.config.useStreaming ? 'checked' : ''}>
+                <input type="checkbox" id="streaming-toggle" ${config.useStreaming ? 'checked' : ''}>
                 <span class="glass-toggle-slider"></span>
               </label>
             </div>
@@ -1671,17 +1739,21 @@ export class CommandPalette {
           </div>
         </div>
       </div>
-      <div class="glass-footer">
-        <div class="glass-footer-hint">设置会自动保存</div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
+      <div class="glass-footer glass-settings-footer">
+        <div class="glass-settings-footer-actions">
+          <button class="glass-btn glass-btn-cancel">取消</button>
+          <button class="glass-btn glass-btn-primary glass-btn-save">保存</button>
         </div>
       </div>
     `;
   }
 
   private bindSettingsEvents(): void {
-    if (!this.shadowRoot) return;
+    if (!this.shadowRoot || !this.tempConfig) return;
+
+    const tempConfig = this.tempConfig;
+    const screenshotConfig = tempConfig.screenshot || { ...DEFAULT_SCREENSHOT_CONFIG };
+    const historyConfig = tempConfig.history || { ...DEFAULT_HISTORY_CONFIG };
 
     // Drag events on search area
     const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
@@ -1689,51 +1761,52 @@ export class CommandPalette {
       searchArea.addEventListener('mousedown', this.handleDragStart);
     }
 
-    // Command tag close button - return to commands view
+    // Helper to mark settings as changed
+    const markChanged = () => { this.settingsChanged = true; };
+
+    // Command tag close button - same as cancel
     const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', () => {
-      this.activeCommand = null;
-      this.currentView = 'commands';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    });
+    tagClose?.addEventListener('click', () => this.cancelSettings());
+
+    // Cancel button
+    const cancelBtn = this.shadowRoot.querySelector('.glass-btn-cancel');
+    cancelBtn?.addEventListener('click', () => this.cancelSettings());
+
+    // Save button
+    const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
+    saveBtn?.addEventListener('click', () => this.saveSettings());
 
     // Theme select
     const themeSelect = this.shadowRoot.querySelector('#theme-select') as HTMLSelectElement;
-    themeSelect?.addEventListener('change', async () => {
-      const theme = themeSelect.value as 'dark' | 'light' | 'system';
-      this.config.theme = theme;
-      await saveConfig({ theme });
-      this.updateTheme();
+    themeSelect?.addEventListener('change', () => {
+      tempConfig.theme = themeSelect.value as 'dark' | 'light' | 'system';
+      markChanged();
+      // Preview theme change immediately
+      this.updateTheme(tempConfig.theme);
       const panel = this.shadowRoot?.querySelector('.glass-panel');
       panel?.classList.remove('dark', 'light');
       panel?.classList.add(this.theme);
-      this.showToast('主题已更新');
     });
 
     // Popover position select
     const popoverSelect = this.shadowRoot.querySelector('#popover-position-select') as HTMLSelectElement;
-    popoverSelect?.addEventListener('change', async () => {
-      const position = popoverSelect.value as 'above' | 'below';
-      this.config.popoverPosition = position;
-      await saveConfig({ popoverPosition: position });
-      this.showToast('弹出位置已更新');
+    popoverSelect?.addEventListener('change', () => {
+      tempConfig.popoverPosition = popoverSelect.value as 'above' | 'below';
+      markChanged();
     });
 
     // Translate language select
     const translateSelect = this.shadowRoot.querySelector('#translate-lang-select') as HTMLSelectElement;
-    translateSelect?.addEventListener('change', async () => {
-      this.config.preferredLanguage = translateSelect.value;
-      await saveConfig({ preferredLanguage: translateSelect.value });
-      this.showToast('翻译语言已更新');
+    translateSelect?.addEventListener('change', () => {
+      tempConfig.preferredLanguage = translateSelect.value;
+      markChanged();
     });
 
     // Summary language select
     const summarySelect = this.shadowRoot.querySelector('#summary-lang-select') as HTMLSelectElement;
-    summarySelect?.addEventListener('change', async () => {
-      this.config.summaryLanguage = summarySelect.value;
-      await saveConfig({ summaryLanguage: summarySelect.value });
-      this.showToast('总结语言已更新');
+    summarySelect?.addEventListener('change', () => {
+      tempConfig.summaryLanguage = summarySelect.value;
+      markChanged();
     });
 
     // Provider select
@@ -1742,105 +1815,89 @@ export class CommandPalette {
     const customModelGroup = this.shadowRoot.querySelector('#custom-model-group') as HTMLElement;
     const apiKeyHint = this.shadowRoot.querySelector('#api-key-hint') as HTMLElement;
 
-    providerSelect?.addEventListener('change', async () => {
+    providerSelect?.addEventListener('change', () => {
       const provider = providerSelect.value as MenuConfig['apiProvider'];
       const isCustom = provider === 'custom';
       if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'block' : 'none';
       if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
       if (apiKeyHint) apiKeyHint.textContent = this.getAPIKeyHint(provider);
-      this.config.apiProvider = provider;
-      await saveConfig({ apiProvider: provider });
-      this.showToast('服务商已更新');
+      tempConfig.apiProvider = provider;
+      markChanged();
     });
 
     // API Key input
     const apiKeyInput = this.shadowRoot.querySelector('#api-key-input') as HTMLInputElement;
-    apiKeyInput?.addEventListener('change', async () => {
-      this.config.apiKey = apiKeyInput.value || undefined;
-      await saveConfig({ apiKey: apiKeyInput.value || undefined });
-      this.showToast('API Key 已保存');
+    apiKeyInput?.addEventListener('input', () => {
+      tempConfig.apiKey = apiKeyInput.value || undefined;
+      markChanged();
     });
 
     // Custom URL input
     const customUrlInput = this.shadowRoot.querySelector('#custom-url-input') as HTMLInputElement;
-    customUrlInput?.addEventListener('change', async () => {
-      this.config.customApiUrl = customUrlInput.value || undefined;
-      await saveConfig({ customApiUrl: customUrlInput.value || undefined });
-      this.showToast('API URL 已保存');
+    customUrlInput?.addEventListener('input', () => {
+      tempConfig.customApiUrl = customUrlInput.value || undefined;
+      markChanged();
     });
 
     // Custom model input
     const customModelInput = this.shadowRoot.querySelector('#custom-model-input') as HTMLInputElement;
-    customModelInput?.addEventListener('change', async () => {
-      this.config.customModel = customModelInput.value || undefined;
-      await saveConfig({ customModel: customModelInput.value || undefined });
-      this.showToast('模型名称已保存');
+    customModelInput?.addEventListener('input', () => {
+      tempConfig.customModel = customModelInput.value || undefined;
+      markChanged();
     });
 
     // Streaming toggle
     const streamingToggle = this.shadowRoot.querySelector('#streaming-toggle') as HTMLInputElement;
-    streamingToggle?.addEventListener('change', async () => {
-      this.config.useStreaming = streamingToggle.checked;
-      await saveConfig({ useStreaming: streamingToggle.checked });
-      this.showToast('流式传输设置已更新');
+    streamingToggle?.addEventListener('change', () => {
+      tempConfig.useStreaming = streamingToggle.checked;
+      markChanged();
     });
 
     // Screenshot settings
-    const screenshotConfig = this.config.screenshot || { ...DEFAULT_SCREENSHOT_CONFIG };
-
     const saveToFile = this.shadowRoot.querySelector('#save-to-file') as HTMLInputElement;
-    saveToFile?.addEventListener('change', async () => {
+    saveToFile?.addEventListener('change', () => {
       screenshotConfig.saveToFile = saveToFile.checked;
-      await saveConfig({ screenshot: screenshotConfig });
-      this.config.screenshot = screenshotConfig;
-      this.showToast('设置已更新');
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
     });
 
     const copyToClipboard = this.shadowRoot.querySelector('#copy-to-clipboard') as HTMLInputElement;
-    copyToClipboard?.addEventListener('change', async () => {
+    copyToClipboard?.addEventListener('change', () => {
       screenshotConfig.copyToClipboard = copyToClipboard.checked;
-      await saveConfig({ screenshot: screenshotConfig });
-      this.config.screenshot = screenshotConfig;
-      this.showToast('设置已更新');
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
     });
 
     const enableAI = this.shadowRoot.querySelector('#enable-ai') as HTMLInputElement;
-    enableAI?.addEventListener('change', async () => {
+    enableAI?.addEventListener('change', () => {
       screenshotConfig.enableAI = enableAI.checked;
-      await saveConfig({ screenshot: screenshotConfig });
-      this.config.screenshot = screenshotConfig;
-      this.showToast('设置已更新');
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
     });
 
     const defaultAIAction = this.shadowRoot.querySelector('#default-ai-action') as HTMLSelectElement;
-    defaultAIAction?.addEventListener('change', async () => {
+    defaultAIAction?.addEventListener('change', () => {
       screenshotConfig.defaultAIAction = defaultAIAction.value as ScreenshotConfig['defaultAIAction'];
-      await saveConfig({ screenshot: screenshotConfig });
-      this.config.screenshot = screenshotConfig;
-      this.showToast('设置已更新');
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
     });
 
     // History settings
-    const historyConfig = this.config.history || { ...DEFAULT_HISTORY_CONFIG };
-
     const maxCount = this.shadowRoot.querySelector('#history-max-count') as HTMLSelectElement;
-    maxCount?.addEventListener('change', async () => {
+    maxCount?.addEventListener('change', () => {
       historyConfig.maxSaveCount = parseInt(maxCount.value, 10);
-      await saveConfig({ history: historyConfig });
-      this.config.history = historyConfig;
-      await enforceMaxCount(historyConfig.maxSaveCount);
-      this.showToast('设置已更新');
+      tempConfig.history = historyConfig;
+      markChanged();
     });
 
     const displayCount = this.shadowRoot.querySelector('#history-display-count') as HTMLSelectElement;
-    displayCount?.addEventListener('change', async () => {
+    displayCount?.addEventListener('change', () => {
       historyConfig.panelDisplayCount = parseInt(displayCount.value, 10);
-      await saveConfig({ history: historyConfig });
-      this.config.history = historyConfig;
-      await this.loadRecentSavedTasks();
-      this.showToast('设置已更新');
+      tempConfig.history = historyConfig;
+      markChanged();
     });
 
+    // Clear history (immediate action, not affected by save/cancel)
     const clearBtn = this.shadowRoot.querySelector('#clear-history');
     clearBtn?.addEventListener('click', async () => {
       if (confirm('确定要清空所有历史记录吗？此操作不可撤销。')) {
@@ -1851,28 +1908,67 @@ export class CommandPalette {
       }
     });
 
-    // Reset button
+    // Reset button (immediate action)
     const resetBtn = this.shadowRoot.querySelector('.glass-btn-reset');
     resetBtn?.addEventListener('click', async () => {
-      await saveConfig(DEFAULT_CONFIG);
-      await saveGlobalMenuItems(DEFAULT_GLOBAL_MENU);
-      this.config = { ...DEFAULT_CONFIG };
-      this.settingsMenuItems = [...DEFAULT_GLOBAL_MENU];
-      this.showToast('已重置为默认设置');
-      // Re-render settings
-      this.renderCurrentView(true, true);
-    });
-
-    // Escape key
-    this.shadowRoot.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.activeCommand = null;
-        this.currentView = 'commands';
-        this.viewStack = [];
+      if (confirm('确定要重置所有设置吗？')) {
+        await saveConfig(DEFAULT_CONFIG);
+        await saveGlobalMenuItems(DEFAULT_GLOBAL_MENU);
+        this.config = { ...DEFAULT_CONFIG };
+        this.tempConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+        this.settingsMenuItems = [...DEFAULT_GLOBAL_MENU];
+        this.settingsChanged = false;
+        this.showToast('已重置为默认设置');
         this.renderCurrentView(true, true);
       }
     });
+
+    // Escape key - same as cancel
+    this.shadowRoot.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.cancelSettings();
+      }
+    });
+  }
+
+  private cancelSettings(): void {
+    // Restore original theme if changed
+    if (this.settingsChanged && this.tempConfig?.theme !== this.config.theme) {
+      this.updateTheme(this.config.theme);
+      const panel = this.shadowRoot?.querySelector('.glass-panel');
+      panel?.classList.remove('dark', 'light');
+      panel?.classList.add(this.theme);
+    }
+    this.tempConfig = null;
+    this.settingsChanged = false;
+    this.activeCommand = null;
+    this.currentView = 'commands';
+    this.viewStack = [];
+    this.renderCurrentView(true, true);
+  }
+
+  private async saveSettings(): Promise<void> {
+    if (!this.tempConfig) return;
+
+    // Save to storage
+    await saveConfig(this.tempConfig);
+    this.config = this.tempConfig;
+
+    // Apply history settings if changed
+    if (this.tempConfig.history) {
+      await enforceMaxCount(this.tempConfig.history.maxSaveCount);
+      await this.loadRecentSavedTasks();
+    }
+
+    this.tempConfig = null;
+    this.settingsChanged = false;
+    this.showToast('设置已保存');
+
+    this.activeCommand = null;
+    this.currentView = 'commands';
+    this.viewStack = [];
+    this.renderCurrentView(true, true);
   }
 
   private getAPIKeyHint(provider: string): string {
@@ -2477,19 +2573,30 @@ export class CommandPalette {
 
     // Type-specific info
     if (task.actionType === 'summarizePage') {
-      // For page summary: show source site
-      if (task.sourceUrl) {
+      // For page summary: show page title and source site
+      if (task.sourceTitle) {
+        parts.push(task.sourceTitle);
+      } else if (task.sourceUrl) {
         try {
-          const url = new URL(task.sourceUrl);
-          parts.push(url.hostname);
+          parts.push(new URL(task.sourceUrl).hostname);
         } catch {
           // ignore invalid URL
         }
       }
-    } else if (task.resultType === 'translate' && task.originalText) {
-      // For translation: show original text preview
-      const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
-      parts.push(`"${preview}"`);
+    } else if (task.resultType === 'translate') {
+      // For translation: show source site domain
+      if (task.sourceUrl) {
+        try {
+          parts.push(new URL(task.sourceUrl).hostname);
+        } catch {
+          // ignore invalid URL
+        }
+      }
+      // Also show original text preview
+      if (task.originalText) {
+        const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
+        parts.push(`"${preview}"`);
+      }
     }
 
     return parts.join(' · ');
@@ -2504,19 +2611,30 @@ export class CommandPalette {
 
     // Type-specific info
     if (task.actionType === 'summarizePage') {
-      // For page summary: show source site
-      if (task.sourceUrl) {
+      // For page summary: show page title or source site
+      if (task.sourceTitle) {
+        parts.push(task.sourceTitle);
+      } else if (task.sourceUrl) {
         try {
-          const url = new URL(task.sourceUrl);
-          parts.push(url.hostname);
+          parts.push(new URL(task.sourceUrl).hostname);
         } catch {
           // ignore invalid URL
         }
       }
-    } else if (task.resultType === 'translate' && task.originalText) {
-      // For translation: show original text preview
-      const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
-      parts.push(`"${preview}"`);
+    } else if (task.resultType === 'translate') {
+      // For translation: show source site domain
+      if (task.sourceUrl) {
+        try {
+          parts.push(new URL(task.sourceUrl).hostname);
+        } catch {
+          // ignore invalid URL
+        }
+      }
+      // Also show original text preview
+      if (task.originalText) {
+        const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
+        parts.push(`"${preview}"`);
+      }
     }
 
     // Loading status
@@ -2668,7 +2786,16 @@ export class CommandPalette {
   }
 
   private async executeSelected(): Promise<void> {
-    if (this.filteredItems.length === 0) return;
+    // If no filtered items but has search query, start quick ask
+    if (this.filteredItems.length === 0) {
+      // Get the original input value (preserving case)
+      const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+      const question = input?.value?.trim();
+      if (question) {
+        this.startQuickAsk(question);
+      }
+      return;
+    }
 
     const item = this.filteredItems[this.selectedIndex];
     if (!item) return;
@@ -2678,6 +2805,9 @@ export class CommandPalette {
     // Handle settings action specially - switch to settings view instead of closing
     if (item.action === 'settings') {
       await this.loadSettingsMenuItems();
+      // Initialize temp config for editing
+      this.tempConfig = JSON.parse(JSON.stringify(this.config));
+      this.settingsChanged = false;
       this.currentView = 'settings';
       this.viewStack = [];
       this.renderCurrentView(true, true);
@@ -2713,6 +2843,7 @@ export class CommandPalette {
   private async showBrowseTrail(): Promise<void> {
     this.browseTrailSessions = await loadBrowseTrailSessions();
     this.browseTrailSearch = '';
+    this.browseTrailDisplayCount = 50;
     this.activeCommand = {
       id: 'browseTrail',
       action: 'browseTrail',
@@ -2793,10 +2924,14 @@ export class CommandPalette {
       `;
     }
 
-    // Group by date
-    const groups = this.groupTrailByDate(filtered);
+    // Progressive loading: only show up to displayCount
+    const displayEntries = filtered.slice(0, this.browseTrailDisplayCount);
+    const hasMore = filtered.length > this.browseTrailDisplayCount;
 
-    return Object.entries(groups).map(([date, entries]) => `
+    // Group by date
+    const groups = this.groupTrailByDate(displayEntries);
+
+    const entriesHTML = Object.entries(groups).map(([date, entries]) => `
       <div class="glass-trail-group">
         <div class="glass-trail-date">${date}</div>
         <div class="glass-trail-entries">
@@ -2824,6 +2959,16 @@ export class CommandPalette {
         </div>
       </div>
     `).join('');
+
+    const loadMoreHTML = hasMore ? `
+      <div class="glass-trail-load-more">
+        <button class="glass-btn glass-btn-load-more">
+          加载更多 (${filtered.length - this.browseTrailDisplayCount} 条)
+        </button>
+      </div>
+    ` : '';
+
+    return entriesHTML + loadMoreHTML;
   }
 
   private groupTrailByDate(entries: TrailEntry[]): Record<string, TrailEntry[]> {
@@ -2879,6 +3024,7 @@ export class CommandPalette {
     // Search
     input?.addEventListener('input', () => {
       this.browseTrailSearch = input.value.trim();
+      this.browseTrailDisplayCount = 50;
       const content = this.shadowRoot?.querySelector('.glass-trail-content');
       if (content) {
         content.innerHTML = this.getBrowseTrailContentHTML();
@@ -2947,6 +3093,51 @@ export class CommandPalette {
         }
       });
     });
+
+    // Load more button
+    const loadMoreBtn = this.shadowRoot.querySelector('.glass-btn-load-more');
+    loadMoreBtn?.addEventListener('click', () => {
+      this.browseTrailDisplayCount += 50;
+      const content = this.shadowRoot?.querySelector('.glass-trail-content');
+      if (content) {
+        content.innerHTML = this.getBrowseTrailContentHTML();
+        this.bindTrailEntryEvents();
+      }
+    });
+  }
+
+  // ========================================
+  // Quick Ask (direct AI question from search)
+  // ========================================
+
+  private async startQuickAsk(question: string): Promise<void> {
+    const url = window.location.href;
+    // Create a fresh chat session for quick ask (without page context)
+    this.chatSession = createNewChatSession(url, document.title);
+
+    this.isChatStreaming = false;
+    this.isQuickAsk = true;
+    this.activeCommand = {
+      id: 'quickAsk',
+      action: 'contextChat',
+      label: '快速提问',
+      icon: icons.messageCircle,
+      enabled: true,
+      order: 0,
+    };
+    this.currentView = 'contextChat';
+    this.viewStack = [];
+    this.searchQuery = '';
+    this.renderCurrentView(true, true);
+
+    // Auto-send the question after view is rendered
+    requestAnimationFrame(() => {
+      const input = this.shadowRoot?.querySelector('.glass-chat-input') as HTMLInputElement;
+      if (input) {
+        input.value = question;
+        this.sendChatMessage(input);
+      }
+    });
   }
 
   // ========================================
@@ -2964,6 +3155,7 @@ export class CommandPalette {
     }
 
     this.isChatStreaming = false;
+    this.isQuickAsk = false;
     this.activeCommand = {
       id: 'contextChat',
       action: 'contextChat',
@@ -2978,11 +3170,12 @@ export class CommandPalette {
   }
 
   private getContextChatViewHTML(): string {
+    const label = this.activeCommand?.label || '上下文追问';
     return `
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="contextChat">
           <span class="glass-command-tag-icon">${icons.messageCircle}</span>
-          <span class="glass-command-tag-label">上下文追问</span>
+          <span class="glass-command-tag-label">${this.escapeHtml(label)}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
@@ -3014,10 +3207,13 @@ export class CommandPalette {
 
   private getContextChatContentHTML(): string {
     if (!this.chatSession || this.chatSession.messages.length === 0) {
+      const emptyText = this.isQuickAsk
+        ? '直接输入问题，AI 将为你解答'
+        : '开始提问，AI 将基于当前页面内容回答';
       return `
         <div class="glass-chat-empty">
           <div class="glass-chat-empty-icon">${icons.messageCircle}</div>
-          <div class="glass-chat-empty-text">开始提问，AI 将基于当前页面内容回答</div>
+          <div class="glass-chat-empty-text">${emptyText}</div>
         </div>
       `;
     }
@@ -3088,7 +3284,9 @@ export class CommandPalette {
     clearBtn?.addEventListener('click', async () => {
       if (this.chatSession) {
         this.chatSession.messages = [];
-        await saveChatSession(this.chatSession);
+        if (!this.isQuickAsk) {
+          await saveChatSession(this.chatSession);
+        }
         const content = this.shadowRoot?.querySelector('.glass-chat-content');
         if (content) {
           content.innerHTML = this.getContextChatContentHTML();
@@ -3146,8 +3344,10 @@ export class CommandPalette {
 
     this.isChatStreaming = true;
 
-    // Build prompt
-    const systemPrompt = getContextChatSystemPrompt(this.chatSession);
+    // Build prompt - use simple prompt for quick ask, context prompt for context chat
+    const systemPrompt = this.isQuickAsk
+      ? '你是一个有帮助的AI助手。请简洁、准确地回答用户的问题。'
+      : getContextChatSystemPrompt(this.chatSession);
     const conversationHistory = buildConversationPrompt(
       this.chatSession.messages.slice(0, -1) // Exclude the empty assistant message
     );
@@ -3181,7 +3381,10 @@ export class CommandPalette {
         }
       }
 
-      await saveChatSession(this.chatSession);
+      // Only save chat session for context chat, not quick ask
+      if (!this.isQuickAsk) {
+        await saveChatSession(this.chatSession);
+      }
     } catch (error) {
       const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
       if (lastMsg.role === 'assistant') {
@@ -4207,6 +4410,63 @@ export class CommandPalette {
       /* ========================================
          AI Result View
          ======================================== */
+      .glass-source-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: var(--glass-bg-hover);
+        border-bottom: 0.5px solid var(--glass-divider);
+      }
+
+      .glass-source-icon {
+        color: var(--text-tertiary);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+      }
+
+      .glass-source-content {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+
+      .glass-source-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-source-link:hover {
+        color: var(--text-primary);
+        text-decoration: underline;
+      }
+
+      .glass-source-title {
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .glass-source-meta {
+        color: var(--text-tertiary);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .glass-source-meta::before {
+        content: '·';
+        margin-right: 8px;
+      }
+
       .glass-ai-result-body {
         padding: 16px;
       }
@@ -4754,6 +5014,47 @@ export class CommandPalette {
         color: var(--text-primary);
       }
 
+      .glass-settings-footer {
+        justify-content: flex-end;
+      }
+
+      .glass-settings-footer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .glass-btn-cancel {
+        padding: 6px 16px;
+        background: var(--glass-bg-hover);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        color: var(--text-secondary);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-btn-cancel:hover {
+        background: var(--glass-bg-selected);
+        color: var(--text-primary);
+      }
+
+      .glass-btn-primary {
+        padding: 6px 16px;
+        background: var(--text-primary);
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: var(--glass-bg);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-btn-primary:hover {
+        opacity: 0.85;
+      }
+
       .glass-btn-add {
         display: flex;
         align-items: center;
@@ -5044,6 +5345,28 @@ export class CommandPalette {
 
       .glass-trail-entry-delete:hover {
         color: #ff6b6b;
+      }
+
+      .glass-trail-load-more {
+        display: flex;
+        justify-content: center;
+        padding: 12px 0;
+      }
+
+      .glass-btn-load-more {
+        background: var(--glass-bg-hover);
+        border: 0.5px solid var(--glass-border);
+        color: var(--text-secondary);
+        padding: 6px 16px;
+        border-radius: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-btn-load-more:hover {
+        background: var(--glass-border);
+        color: var(--text-primary);
       }
 
       .glass-trail-footer-actions {

@@ -84,40 +84,23 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 2147483647;
-  padding: 12px 20px;
-  font-size: 14px;
-  border-radius: 9999px;
-  background: var(--toast-bg);
+  padding: 10px 20px;
+  font-size: 13px;
+  border-radius: 20px;
+  background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border);
+  border: 0.5px solid var(--glass-border);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  box-shadow: 0 4px 16px var(--glass-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px var(--glass-shadow);
   animation: thecircle-toast-in 0.25s ease-out;
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .thecircle-toast[data-index="0"] { bottom: 24px; }
 .thecircle-toast[data-index="1"] { bottom: 74px; }
 .thecircle-toast[data-index="2"] { bottom: 124px; }
 .thecircle-toast[data-index="3"] { bottom: 174px; }
-
-.thecircle-toast-icon {
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.thecircle-toast-success .thecircle-toast-icon { color: #22c55e; }
-.thecircle-toast-error .thecircle-toast-icon { color: #ef4444; }
-.thecircle-toast-warning .thecircle-toast-icon { color: #eab308; }
-.thecircle-toast-info .thecircle-toast-icon { color: #3b82f6; }
 
 @keyframes thecircle-toast-in {
   from {

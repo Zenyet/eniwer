@@ -17,7 +17,7 @@ import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
 import type { CommandPalette } from './CommandPalette';
 
 export interface ScreenshotFlowCallbacks {
-  onToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  onToast: (message: string) => void;
 }
 
 export interface ExecuteAIOptions {
@@ -85,8 +85,6 @@ export class MenuActions {
         return this.handleContextChat();
       case 'browseTrail':
         return this.handleBrowseTrail();
-      case 'switchTab':
-        return this.handleSwitchTab();
       case 'screenshot':
         return this.handleScreenshotFlow();
       case 'settings':
@@ -295,40 +293,6 @@ export class MenuActions {
     return { type: 'redirect', url: 'https://chat.openai.com/' };
   }
 
-  private async handleSwitchTab(): Promise<{ type: string; result?: string }> {
-    try {
-      const response = (await chrome.runtime.sendMessage({
-        type: 'GET_TABS',
-      } as Message)) as { success?: boolean; tabs?: chrome.tabs.Tab[] };
-
-      if (!response?.success || !response.tabs?.length) {
-        return { type: 'error', result: '获取标签页失败' };
-      }
-
-      const tabs = response.tabs.filter((t) => typeof t.id === 'number');
-      const candidates = tabs.filter((t) => !t.active);
-      if (!candidates.length) {
-        return { type: 'info', result: '当前窗口只有一个标签页' };
-      }
-
-      const hasLastAccessed = candidates.some((t) => typeof (t as unknown as { lastAccessed?: number }).lastAccessed === 'number');
-      const sorted = hasLastAccessed
-        ? [...candidates].sort((a, b) => {
-            const aTime = (a as unknown as { lastAccessed?: number }).lastAccessed ?? 0;
-            const bTime = (b as unknown as { lastAccessed?: number }).lastAccessed ?? 0;
-            return bTime - aTime;
-          })
-        : candidates;
-
-      const target = sorted[0];
-      await chrome.runtime.sendMessage({ type: 'SWITCH_TAB', payload: target.id } as Message);
-      const title = target.title || target.url || '标签页';
-      return { type: 'success', result: `已切换到：${title}` };
-    } catch {
-      return { type: 'error', result: '获取标签页失败' };
-    }
-  }
-
   private handleScreenshotFlow(): { type: string; result: string } {
     // Start the screenshot selection flow
     this.screenshotSelector = new ScreenshotSelector();
@@ -337,7 +301,7 @@ export class MenuActions {
         await this.captureAndShowPanel(area);
       },
       onCancel: () => {
-        this.flowCallbacks?.onToast('截图已取消', 'info');
+        this.flowCallbacks?.onToast('截图已取消');
       },
     });
     return { type: 'silent', result: '' };
@@ -351,7 +315,7 @@ export class MenuActions {
       } as Message);
 
       if (!response?.success || !response.dataUrl) {
-        this.flowCallbacks?.onToast('截图失败', 'error');
+        this.flowCallbacks?.onToast('截图失败');
         return;
       }
 
@@ -377,11 +341,11 @@ export class MenuActions {
           },
         });
       } else {
-        this.flowCallbacks?.onToast('无法显示截图面板', 'error');
+        this.flowCallbacks?.onToast('无法显示截图面板');
       }
 
     } catch (error) {
-      this.flowCallbacks?.onToast(`截图失败: ${error}`, 'error');
+      this.flowCallbacks?.onToast(`截图失败: ${error}`);
     }
   }
 
@@ -428,9 +392,9 @@ export class MenuActions {
         type: 'DOWNLOAD_IMAGE',
         payload: { dataUrl: this.currentScreenshotDataUrl, filename },
       } as Message);
-      this.flowCallbacks?.onToast('截图已保存', 'success');
+      this.flowCallbacks?.onToast('截图已保存');
     } catch (error) {
-      this.flowCallbacks?.onToast(`保存失败: ${error}`, 'error');
+      this.flowCallbacks?.onToast(`保存失败: ${error}`);
     }
   }
 
@@ -441,9 +405,9 @@ export class MenuActions {
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
       ]);
-      this.flowCallbacks?.onToast('已复制到剪贴板', 'success');
+      this.flowCallbacks?.onToast('已复制到剪贴板');
     } catch (error) {
-      this.flowCallbacks?.onToast(`复制失败: ${error}`, 'error');
+      this.flowCallbacks?.onToast(`复制失败: ${error}`);
     }
   }
 

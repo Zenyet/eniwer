@@ -8,8 +8,6 @@ import { abortAllRequests } from '../utils/ai';
 import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow, getShadowHost } from './ShadowHost';
 import './styles.css';
 
-type ToastType = 'success' | 'error' | 'warning' | 'info';
-
 interface ToastItem {
   element: HTMLElement;
   timeoutId: number;
@@ -37,7 +35,7 @@ class TheCircle {
     this.trailRecorder = new TrailRecorder();
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
-      onToast: (message, type) => this.showToast(message, type),
+      onToast: (message) => this.showToast(message),
     });
     this.menuActions.setCommandPalette(this.commandPalette);
 
@@ -215,7 +213,7 @@ class TheCircle {
     // Find the translate menu item from selection menu
     const translateItem = this.selectionMenuItems.find(item => item.action === 'translate');
     if (!translateItem) {
-      this.showToast('翻译功能未配置', 'error');
+      this.showToast('翻译功能未配置');
       return;
     }
 
@@ -529,49 +527,19 @@ class TheCircle {
       const result = await this.menuActions.execute(item);
 
       if (result.type === 'error') {
-        this.showToast(result.result || '未知错误', 'error');
+        this.showToast(result.result || '未知错误');
       } else if (result.type === 'success') {
-        this.showToast(result.result || '操作成功', 'success');
+        this.showToast(result.result || '操作成功');
       } else if (result.type === 'info') {
-        this.showToast(result.result || '', 'info');
+        this.showToast(result.result || '');
       }
       // 'silent' and 'redirect' types don't show toast
     }
   }
 
-  private getToastIcon(type: ToastType): string {
-    const icons: Record<ToastType, string> = {
-      success: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>`,
-      error: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>`,
-      warning: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-        <line x1="12" y1="9" x2="12" y2="13"></line>
-        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-      </svg>`,
-      info: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="16" x2="12" y2="12"></line>
-        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-      </svg>`,
-    };
-    return icons[type];
-  }
-
-  private showToast(message: string, type: ToastType = 'info'): void {
+  private showToast(message: string): void {
     const toast = document.createElement('div');
-    const typeClasses = {
-      success: 'thecircle-toast-success',
-      error: 'thecircle-toast-error',
-      warning: 'thecircle-toast-warning',
-      info: 'thecircle-toast-info'
-    }[type];
-
-    toast.className = `thecircle-toast ${typeClasses}`;
+    toast.className = 'thecircle-toast';
 
     // Limit active toasts
     if (this.activeToasts.length >= this.MAX_TOASTS) {
@@ -587,21 +555,12 @@ class TheCircle {
     toast.style.bottom = `${24 + index * 50}px`;
     toast.setAttribute('data-index', String(index));
 
-    const iconEl = document.createElement('div');
-    iconEl.className = 'thecircle-toast-icon';
-
-    iconEl.innerHTML = this.getToastIcon(type);
-
-    const textEl = document.createElement('span');
-    textEl.textContent = message;
-
-    toast.appendChild(iconEl);
-    toast.appendChild(textEl);
+    toast.textContent = message;
 
     appendToShadow(toast);
 
     const timeoutId = window.setTimeout(() => {
-      toast.classList.add('animate-[thecircle-toast-out_0.2s_ease-out_forwards]', 'thecircle-toast-exit');
+      toast.classList.add('thecircle-toast-exit');
       setTimeout(() => {
         removeFromShadow(toast);
         this.activeToasts = this.activeToasts.filter(t => t.element !== toast);

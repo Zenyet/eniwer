@@ -65,15 +65,6 @@ async function handleMessage(message: Message, _sender: chrome.runtime.MessageSe
     case 'AI_IMAGE_GEN_REQUEST':
       return handleImageGenRequest(message.payload as AIImageGenRequestPayload);
 
-    case 'GET_TABS':
-      return handleGetTabs();
-
-    case 'SWITCH_TAB':
-      return handleSwitchTab(message.payload as number);
-
-    case 'NEW_TAB':
-      return handleNewTab();
-
     case 'SCREENSHOT':
       return handleScreenshot();
 
@@ -82,9 +73,6 @@ async function handleMessage(message: Message, _sender: chrome.runtime.MessageSe
 
     case 'DOWNLOAD_IMAGE':
       return handleDownloadImage(message.payload as { dataUrl: string; filename: string });
-
-    case 'ADD_BOOKMARK':
-      return handleAddBookmark(message.payload as { title: string; url: string });
 
     case 'OPEN_URL':
       return handleOpenURL(message.payload as string);
@@ -216,33 +204,6 @@ async function handleImageGenRequest(payload: AIImageGenRequestPayload): Promise
   return generateImage(prompt, config, screenshotConfig);
 }
 
-async function handleGetTabs(): Promise<{ success: boolean; tabs?: chrome.tabs.Tab[] }> {
-  try {
-    const tabs = await chrome.tabs.query({ currentWindow: true });
-    return { success: true, tabs };
-  } catch (error) {
-    return { success: false };
-  }
-}
-
-async function handleSwitchTab(tabId: number): Promise<{ success: boolean }> {
-  try {
-    await chrome.tabs.update(tabId, { active: true });
-    return { success: true };
-  } catch {
-    return { success: false };
-  }
-}
-
-async function handleNewTab(): Promise<{ success: boolean }> {
-  try {
-    await chrome.tabs.create({});
-    return { success: true };
-  } catch {
-    return { success: false };
-  }
-}
-
 async function handleScreenshot(): Promise<{ success: boolean; dataUrl?: string; error?: string }> {
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab();
@@ -278,18 +239,6 @@ async function handleDownloadImage(payload: { dataUrl: string; filename: string 
     return { success: true };
   } catch (error) {
     return { success: false, error: String(error) };
-  }
-}
-
-async function handleAddBookmark(payload: { title: string; url: string }): Promise<{ success: boolean }> {
-  try {
-    await chrome.bookmarks.create({
-      title: payload.title,
-      url: payload.url,
-    });
-    return { success: true };
-  } catch {
-    return { success: false };
   }
 }
 

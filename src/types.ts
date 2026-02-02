@@ -111,13 +111,9 @@ export type MessageType =
   | 'AI_STREAM_END'
   | 'AI_STREAM_ERROR'
   | 'OPEN_URL'
-  | 'GET_TABS'
-  | 'SWITCH_TAB'
-  | 'NEW_TAB'
   | 'SCREENSHOT'
   | 'CAPTURE_VISIBLE_TAB'
   | 'DOWNLOAD_IMAGE'
-  | 'ADD_BOOKMARK'
   | 'GET_PAGE_CONTENT';
 
 export interface Message {

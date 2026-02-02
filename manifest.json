@@ -9,12 +9,8 @@
     "128": "assets/icon-128.png"
   },
   "permissions": [
-    "activeTab",
     "storage",
-    "tabs",
     "clipboardWrite",
-    "clipboardRead",
-    "bookmarks",
     "scripting",
     "downloads"
   ],

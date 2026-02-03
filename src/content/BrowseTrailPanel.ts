@@ -87,6 +87,7 @@ function trimEntries(sessions: BrowseSession[], maxEntries: number): BrowseSessi
 export class TrailRecorder {
   private currentSessionId: string;
   private recordingEnabled = true;
+  private hasRecordedCurrentPage = false;
 
   constructor() {
     this.currentSessionId = this.generateId();
@@ -94,58 +95,69 @@ export class TrailRecorder {
   }
 
   private async startRecording(): Promise<void> {
-    // Record current page on load (no need for beforeunload)
+    // Wait for page to be fully loaded before recording
+    if (document.readyState === 'complete') {
+      await this.recordPageOnce();
+    } else {
+      window.addEventListener('load', () => this.recordPageOnce(), { once: true });
+    }
+  }
+
+  private async recordPageOnce(): Promise<void> {
+    // Prevent duplicate recording in the same page lifecycle
+    if (this.hasRecordedCurrentPage) return;
+    this.hasRecordedCurrentPage = true;
     await this.recordPage();
   }
 
   public async recordPage(): Promise<void> {
     if (!this.recordingEnabled) return;
 
-    const entry: TrailEntry = {
-      id: this.generateId(),
-      url: window.location.href,
-      title: document.title,
-      visitedAt: Date.now(),
-      sessionId: this.currentSessionId,
-    };
+    const url = window.location.href;
+    const title = document.title || url;
 
     // Skip certain URLs
-    if (this.shouldSkip(entry.url)) return;
+    if (this.shouldSkip(url)) return;
 
     try {
       const result = await chrome.storage.local.get(TRAIL_STORAGE_KEY);
       const sessions: BrowseSession[] = result[TRAIL_STORAGE_KEY] || [];
+
+      // Check if this exact URL was already recorded recently (within 2 minutes)
+      // This handles cases where content script might be re-injected
+      const recentDuplicateTime = 120000; // 2 minutes
+      const now = Date.now();
+      for (const s of sessions) {
+        for (let i = s.entries.length - 1; i >= 0; i--) {
+          const e = s.entries[i];
+          if (now - e.visitedAt > recentDuplicateTime) break;
+          if (e.url === url) return; // Already recorded recently
+        }
+      }
+
+      const entry: TrailEntry = {
+        id: this.generateId(),
+        url,
+        title,
+        visitedAt: now,
+        sessionId: this.currentSessionId,
+      };
 
       // Find or create current session
       let session = sessions.find(s => s.id === this.currentSessionId);
       if (!session) {
         session = {
           id: this.currentSessionId,
-          startedAt: Date.now(),
+          startedAt: now,
           entries: [],
         };
         sessions.unshift(session);
       }
 
-      // Avoid duplicate entries: check recent entries across ALL sessions within 30 seconds
-      const recentDuplicateTime = 30000; // 30 seconds
-      const now = Date.now();
-      outer: for (const s of sessions) {
-        // Sessions are sorted newest-first, skip if entire session is too old
-        if (s.entries.length > 0 && now - s.entries[s.entries.length - 1].visitedAt > recentDuplicateTime) {
-          break; // All remaining sessions are older
-        }
-        for (let i = s.entries.length - 1; i >= 0; i--) {
-          const e = s.entries[i];
-          if (now - e.visitedAt > recentDuplicateTime) break;
-          if (e.url === entry.url) return; // Skip duplicate
-        }
-      }
-
       session.entries.push(entry);
 
       // Keep only last 30 days of history
-      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
       let filteredSessions = sessions.filter(s => s.startedAt > thirtyDaysAgo);
 
       // Enforce max entry count

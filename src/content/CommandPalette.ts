@@ -1604,7 +1604,7 @@ export class CommandPalette {
                 <span class="glass-toggle-slider"></span>
               </label>
             </div>
-            <div class="glass-form-group" id="popover-position-group" style="display: ${config.showSelectionPopover !== false ? 'block' : 'none'}">
+            <div class="glass-form-group" id="popover-position-group"${config.showSelectionPopover === false ? ' style="display: none"' : ''}>
               <label class="glass-form-label">弹出位置</label>
               <select class="glass-select" id="popover-position-select">
                 <option value="above"${config.popoverPosition === 'above' ? ' selected' : ''}>选中文本上方</option>
@@ -1659,11 +1659,11 @@ export class CommandPalette {
               <label class="glass-form-label">API Key</label>
               <input type="password" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key">
             </div>
-            <div class="glass-form-group" id="custom-url-group" style="display: ${isCustomProvider ? 'block' : 'none'}">
+            <div class="glass-form-group" id="custom-url-group"${isCustomProvider ? '' : ' style="display: none"'}>
               <label class="glass-form-label">API URL</label>
               <input type="text" class="glass-input-field" id="custom-url-input" value="${config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
             </div>
-            <div class="glass-form-group" id="custom-model-group" style="display: ${isCustomProvider ? 'block' : 'none'}">
+            <div class="glass-form-group" id="custom-model-group"${isCustomProvider ? '' : ' style="display: none"'}>
               <label class="glass-form-label">模型名称</label>
               <input type="text" class="glass-input-field" id="custom-model-input" value="${config.customModel || ''}" placeholder="gpt-4">
             </div>
@@ -1715,7 +1715,7 @@ export class CommandPalette {
                 <span class="glass-toggle-slider"></span>
               </label>
             </div>
-            <div id="image-gen-settings" style="display: ${screenshotConfig.enableImageGen ? 'block' : 'none'}">
+            <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
               <div class="glass-form-group">
                 <label class="glass-form-label">生图服务</label>
                 <select class="glass-select" id="image-gen-provider">
@@ -1723,7 +1723,7 @@ export class CommandPalette {
                   <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
                 </select>
               </div>
-              <div class="glass-form-group" id="custom-image-gen-url-group" style="display: ${screenshotConfig.imageGenProvider === 'custom' ? 'block' : 'none'}">
+              <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
                 <label class="glass-form-label">自定义生图 API</label>
                 <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
               </div>

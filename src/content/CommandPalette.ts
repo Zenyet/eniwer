@@ -4707,7 +4707,7 @@ export class CommandPalette {
       }
 
       .glass-settings-section {
-        padding: 16px;
+        padding: 12px 16px;
         border-bottom: 1px solid var(--glass-divider);
       }
 
@@ -4716,12 +4716,12 @@ export class CommandPalette {
       }
 
       .glass-settings-section-title {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         color: var(--text-secondary);
-        margin-bottom: 16px;
+        margin-bottom: 10px;
       }
 
       .glass-settings-body {
@@ -4822,28 +4822,28 @@ export class CommandPalette {
       .glass-form-group {
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 4px;
       }
 
       .glass-form-group + .glass-form-group {
-        margin-top: 12px;
+        margin-top: 8px;
       }
 
       .glass-form-group.glass-form-toggle {
         flex-direction: row;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 0;
+        padding: 4px 0;
       }
 
       .glass-form-label {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
         color: var(--text-primary);
       }
 
       .glass-form-hint {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--text-tertiary);
         line-height: 1.4;
         margin-top: -2px;
@@ -4852,15 +4852,15 @@ export class CommandPalette {
       .glass-select {
         appearance: none;
         width: 100%;
-        padding: 10px 36px 10px 12px;
+        padding: 8px 32px 8px 10px;
         border: 1px solid var(--glass-border);
         background: var(--glass-bg-hover);
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
-        background-position: right 12px center;
-        border-radius: 8px;
+        background-position: right 10px center;
+        border-radius: 6px;
         color: var(--text-primary);
-        font-size: 14px;
+        font-size: 13px;
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
         box-sizing: border-box;
@@ -4878,12 +4878,12 @@ export class CommandPalette {
 
       .glass-input-field {
         width: 100%;
-        padding: 10px 12px;
+        padding: 8px 10px;
         border: 1px solid var(--glass-border);
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 6px;
         color: var(--text-primary);
-        font-size: 14px;
+        font-size: 13px;
         outline: none;
         transition: all var(--duration-fast) var(--ease-out);
         box-sizing: border-box;
@@ -4902,8 +4902,9 @@ export class CommandPalette {
       .glass-toggle {
         position: relative;
         display: inline-block;
-        width: 44px;
-        height: 24px;
+        width: 36px;
+        height: 20px;
+        flex-shrink: 0;
       }
 
       .glass-toggle input {
@@ -4918,15 +4919,15 @@ export class CommandPalette {
         inset: 0;
         background: var(--glass-bg-hover);
         border: 0.5px solid var(--glass-border);
-        border-radius: 24px;
+        border-radius: 20px;
         transition: all var(--duration-fast) var(--ease-out);
       }
 
       .glass-toggle-slider::before {
         content: "";
         position: absolute;
-        height: 18px;
-        width: 18px;
+        height: 14px;
+        width: 14px;
         left: 2px;
         bottom: 2px;
         background: var(--text-primary);
@@ -4940,22 +4941,22 @@ export class CommandPalette {
       }
 
       .glass-toggle input:checked + .glass-toggle-slider::before {
-        transform: translateX(20px);
+        transform: translateX(16px);
         background: white;
       }
 
       .glass-toggle-small {
-        width: 36px;
-        height: 20px;
+        width: 32px;
+        height: 18px;
       }
 
       .glass-toggle-small .glass-toggle-slider::before {
-        height: 14px;
-        width: 14px;
+        height: 12px;
+        width: 12px;
       }
 
       .glass-toggle-small input:checked + .glass-toggle-slider::before {
-        transform: translateX(16px);
+        transform: translateX(14px);
       }
 
       /* Menu Management */

@@ -81,11 +81,14 @@ class TheCircle {
 
   private setupStorageListener(): void {
     chrome.storage.onChanged.addListener((changes) => {
-      if (changes.thecircle_config) {
-        this.config = { ...this.config, ...changes.thecircle_config.newValue };
-        this.menuActions.setConfig(this.config);
-        this.commandPalette.setConfig(this.config);
-        this.applyTheme(this.config.theme);
+      if (changes.thecircle_data) {
+        const newData = changes.thecircle_data.newValue;
+        if (newData?.config) {
+          this.config = newData.config;
+          this.menuActions.setConfig(this.config);
+          this.commandPalette.setConfig(this.config);
+          this.applyTheme(this.config.theme);
+        }
       }
       // Listen for saved tasks changes to enable cross-tab sync
       if (changes.thecircle_saved_tasks) {

@@ -46,6 +46,7 @@ export interface MenuConfig {
   screenshot?: ScreenshotConfig;
   popoverPosition?: 'above' | 'below';
   history?: HistoryConfig;
+  showSelectionPopover?: boolean;
 }
 
 export interface StorageData {
@@ -80,6 +81,7 @@ export const DEFAULT_CONFIG: MenuConfig = {
   screenshot: DEFAULT_SCREENSHOT_CONFIG,
   popoverPosition: 'above',
   history: DEFAULT_HISTORY_CONFIG,
+  showSelectionPopover: true,
 };
 
 export const DEFAULT_SELECTION_MENU: MenuItem[] = [

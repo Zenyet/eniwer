@@ -1597,7 +1597,14 @@ export class CommandPalette {
                 <option value="light"${config.theme === 'light' ? ' selected' : ''}>浅色</option>
               </select>
             </div>
-            <div class="glass-form-group">
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">选中文本弹出框</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="show-popover-toggle" ${config.showSelectionPopover !== false ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="glass-form-group" id="popover-position-group" style="display: ${config.showSelectionPopover !== false ? 'block' : 'none'}">
               <label class="glass-form-label">弹出位置</label>
               <select class="glass-select" id="popover-position-select">
                 <option value="above"${config.popoverPosition === 'above' ? ' selected' : ''}>选中文本上方</option>
@@ -1701,6 +1708,34 @@ export class CommandPalette {
                 <option value="describe"${screenshotConfig.defaultAIAction === 'describe' ? ' selected' : ''}>描述</option>
               </select>
             </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">AI 生图</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+            <div id="image-gen-settings" style="display: ${screenshotConfig.enableImageGen ? 'block' : 'none'}">
+              <div class="glass-form-group">
+                <label class="glass-form-label">生图服务</label>
+                <select class="glass-select" id="image-gen-provider">
+                  <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
+                  <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
+                </select>
+              </div>
+              <div class="glass-form-group" id="custom-image-gen-url-group" style="display: ${screenshotConfig.imageGenProvider === 'custom' ? 'block' : 'none'}">
+                <label class="glass-form-label">自定义生图 API</label>
+                <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
+              </div>
+              <div class="glass-form-group">
+                <label class="glass-form-label">图片尺寸</label>
+                <select class="glass-select" id="image-size-select">
+                  <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
+                  <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
+                  <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <!-- 历史记录 -->
@@ -1795,6 +1830,15 @@ export class CommandPalette {
       markChanged();
     });
 
+    // Show selection popover toggle
+    const showPopoverToggle = this.shadowRoot.querySelector('#show-popover-toggle') as HTMLInputElement;
+    const popoverPositionGroup = this.shadowRoot.querySelector('#popover-position-group') as HTMLElement;
+    showPopoverToggle?.addEventListener('change', () => {
+      tempConfig.showSelectionPopover = showPopoverToggle.checked;
+      if (popoverPositionGroup) popoverPositionGroup.style.display = showPopoverToggle.checked ? 'block' : 'none';
+      markChanged();
+    });
+
     // Translate language select
     const translateSelect = this.shadowRoot.querySelector('#translate-lang-select') as HTMLSelectElement;
     translateSelect?.addEventListener('change', () => {
@@ -1878,6 +1922,42 @@ export class CommandPalette {
     const defaultAIAction = this.shadowRoot.querySelector('#default-ai-action') as HTMLSelectElement;
     defaultAIAction?.addEventListener('change', () => {
       screenshotConfig.defaultAIAction = defaultAIAction.value as ScreenshotConfig['defaultAIAction'];
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
+    });
+
+    // Image gen toggle
+    const enableImageGen = this.shadowRoot.querySelector('#enable-image-gen') as HTMLInputElement;
+    const imageGenSettings = this.shadowRoot.querySelector('#image-gen-settings') as HTMLElement;
+    enableImageGen?.addEventListener('change', () => {
+      screenshotConfig.enableImageGen = enableImageGen.checked;
+      tempConfig.screenshot = screenshotConfig;
+      if (imageGenSettings) imageGenSettings.style.display = enableImageGen.checked ? 'block' : 'none';
+      markChanged();
+    });
+
+    // Image gen provider
+    const imageGenProvider = this.shadowRoot.querySelector('#image-gen-provider') as HTMLSelectElement;
+    const customImageGenUrlGroup = this.shadowRoot.querySelector('#custom-image-gen-url-group') as HTMLElement;
+    imageGenProvider?.addEventListener('change', () => {
+      screenshotConfig.imageGenProvider = imageGenProvider.value as ScreenshotConfig['imageGenProvider'];
+      tempConfig.screenshot = screenshotConfig;
+      if (customImageGenUrlGroup) customImageGenUrlGroup.style.display = imageGenProvider.value === 'custom' ? 'block' : 'none';
+      markChanged();
+    });
+
+    // Custom image gen URL
+    const customImageGenUrl = this.shadowRoot.querySelector('#custom-image-gen-url') as HTMLInputElement;
+    customImageGenUrl?.addEventListener('input', () => {
+      screenshotConfig.customImageGenUrl = customImageGenUrl.value || undefined;
+      tempConfig.screenshot = screenshotConfig;
+      markChanged();
+    });
+
+    // Image size
+    const imageSizeSelect = this.shadowRoot.querySelector('#image-size-select') as HTMLSelectElement;
+    imageSizeSelect?.addEventListener('change', () => {
+      screenshotConfig.imageSize = imageSizeSelect.value as ScreenshotConfig['imageSize'];
       tempConfig.screenshot = screenshotConfig;
       markChanged();
     });

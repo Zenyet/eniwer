@@ -4822,11 +4822,11 @@ export class CommandPalette {
       .glass-form-group {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
       }
 
       .glass-form-group + .glass-form-group {
-        margin-top: 8px;
+        margin-top: 10px;
       }
 
       .glass-form-group.glass-form-toggle {
@@ -4834,6 +4834,7 @@ export class CommandPalette {
         align-items: center;
         justify-content: space-between;
         padding: 4px 0;
+        gap: 12px;
       }
 
       .glass-form-label {
@@ -4846,7 +4847,6 @@ export class CommandPalette {
         font-size: 11px;
         color: var(--text-tertiary);
         line-height: 1.4;
-        margin-top: -2px;
       }
 
       .glass-select {

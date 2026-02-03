@@ -165,11 +165,14 @@ class TheCircle {
         const selectedText = selection?.toString().trim() || '';
 
         if (selectedText && selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-
           // Store selected text for later use
           this.currentSelectedText = selectedText;
+
+          // Check if popover is enabled (default: true)
+          if (this.config.showSelectionPopover === false) return;
+
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
 
           // Get popover position from config (default to 'above')
           const position: PopoverPosition = this.config.popoverPosition || 'above';

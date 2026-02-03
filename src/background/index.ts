@@ -269,3 +269,57 @@ chrome.commands.onCommand.addListener(async (command) => {
 });
 
 console.log('The Panel: Background service worker initialized');
+
+// Setup context menu for image search
+chrome.runtime.onInstalled.addListener(() => {
+  // Create parent menu
+  chrome.contextMenus.create({
+    id: 'image-search-parent',
+    title: '搜图',
+    contexts: ['image'],
+  });
+
+  // Create search engine sub-menus
+  const searchEngines = [
+    { id: 'google', title: 'Google 搜图' },
+    { id: 'yandex', title: 'Yandex 搜图' },
+    { id: 'bing', title: 'Bing 搜图' },
+    { id: 'tineye', title: 'TinEye 搜图' },
+  ];
+
+  for (const engine of searchEngines) {
+    chrome.contextMenus.create({
+      id: `image-search-${engine.id}`,
+      parentId: 'image-search-parent',
+      title: engine.title,
+      contexts: ['image'],
+    });
+  }
+});
+
+// Handle context menu click
+chrome.contextMenus.onClicked.addListener((info, _tab) => {
+  if (!info.srcUrl) return;
+
+  const imageUrl = encodeURIComponent(info.srcUrl);
+  let searchUrl = '';
+
+  switch (info.menuItemId) {
+    case 'image-search-google':
+      searchUrl = `https://lens.google.com/uploadbyurl?url=${imageUrl}`;
+      break;
+    case 'image-search-yandex':
+      searchUrl = `https://yandex.com/images/search?source=collections&rpt=imageview&url=${imageUrl}`;
+      break;
+    case 'image-search-bing':
+      searchUrl = `https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIVSP&sbisrc=UrlPaste&q=imgurl:${imageUrl}`;
+      break;
+    case 'image-search-tineye':
+      searchUrl = `https://tineye.com/search?url=${imageUrl}`;
+      break;
+  }
+
+  if (searchUrl) {
+    chrome.tabs.create({ url: searchUrl });
+  }
+});

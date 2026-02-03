@@ -3364,7 +3364,6 @@ export class CommandPalette {
         if (streamingEl) {
           streamingEl.innerHTML = this.formatAIContent(fullText);
         }
-        this.scrollChatToBottom();
       };
 
       const response = await callAI(conversationHistory, systemPrompt, this.config, onChunk);
@@ -3398,7 +3397,6 @@ export class CommandPalette {
     if (content) {
       content.innerHTML = this.getContextChatContentHTML();
     }
-    this.scrollChatToBottom();
 
     // Re-enable input
     input.disabled = false;

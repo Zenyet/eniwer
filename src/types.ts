@@ -47,6 +47,9 @@ export interface MenuConfig {
   popoverPosition?: 'above' | 'below';
   history?: HistoryConfig;
   showSelectionPopover?: boolean;
+  translationFallback?: TranslationFallbackConfig;
+  translation?: TranslationConfig;
+  imageSearch?: ImageSearchConfig;
 }
 
 export interface StorageData {
@@ -116,7 +119,15 @@ export type MessageType =
   | 'SCREENSHOT'
   | 'CAPTURE_VISIBLE_TAB'
   | 'DOWNLOAD_IMAGE'
-  | 'GET_PAGE_CONTENT';
+  | 'GET_PAGE_CONTENT'
+  | 'GOOGLE_AUTH_LOGIN'
+  | 'GOOGLE_AUTH_LOGOUT'
+  | 'GOOGLE_AUTH_STATUS'
+  | 'SYNC_TO_CLOUD'
+  | 'SYNC_FROM_CLOUD'
+  | 'EXPORT_TO_DRIVE'
+  | 'FREE_TRANSLATE'
+  | 'SET_SYNC_ENABLED';
 
 export interface Message {
   type: MessageType;
@@ -191,3 +202,59 @@ export interface BrowseSession {
   endedAt?: number;
   entries: TrailEntry[];
 }
+
+// Google Auth types
+export interface GoogleUser {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export interface AuthState {
+  isLoggedIn: boolean;
+  user: GoogleUser | null;
+  syncEnabled: boolean;
+}
+
+// Translation fallback config
+export interface TranslationFallbackConfig {
+  enabled: boolean;
+}
+
+// Translation config
+export type TranslationProvider = 'ai' | 'google' | 'microsoft' | 'deeplx' | 'custom';
+
+export interface TranslationConfig {
+  provider: TranslationProvider;
+  deeplxApiKey?: string; // For DeepLX API key
+  customUrl?: string; // For custom provider URL
+}
+
+export const DEFAULT_TRANSLATION_CONFIG: TranslationConfig = {
+  provider: 'ai',
+};
+
+// Image search engines config
+export interface ImageSearchConfig {
+  google: boolean;
+  yandex: boolean;
+  bing: boolean;
+  tineye: boolean;
+}
+
+export const DEFAULT_IMAGE_SEARCH_CONFIG: ImageSearchConfig = {
+  google: true,
+  yandex: true,
+  bing: true,
+  tineye: true,
+};
+
+// Sync data structure
+export interface SyncData {
+  version: number;
+  timestamp: number;
+  config: Partial<MenuConfig>;
+  browseTrail?: BrowseSession[];
+}
+

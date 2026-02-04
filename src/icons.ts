@@ -1,4 +1,4 @@
-// SVG Icons for The Panel
+// SVG Icons for Eniwer
 // Using Lucide-style icons
 
 export const icons = {

@@ -1,6 +1,6 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession } from '../types';
+import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState } from '../types';
 import { icons } from '../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../utils/storage';
 import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../utils/taskStorage';
@@ -146,6 +146,9 @@ export class CommandPalette {
 
   // Recent saved tasks from IndexedDB
   private recentSavedTasks: SavedTask[] = [];
+
+  // Auth state for Google login
+  private authState: AuthState | null = null;
 
   constructor(config: MenuConfig) {
     this.config = config;
@@ -495,6 +498,13 @@ export class CommandPalette {
     this.tempConfig = JSON.parse(JSON.stringify(this.config));
     this.settingsChanged = false;
 
+    // Load auth state before rendering
+    this.loadAuthState().then(() => {
+      if (this.container && this.currentView === 'settings') {
+        this.renderCurrentView();
+      }
+    });
+
     // Set view state BEFORE rendering
     this.currentView = 'settings';
     this.viewStack = [];
@@ -757,6 +767,12 @@ export class CommandPalette {
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
             </button>
+            <button class="glass-footer-btn glass-btn-export-drive" title="导出到 Google Drive" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L4.5 12.5h5.5v9.5h4v-9.5h5.5L12 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 18.5L8 12.5L12 18.5L16 12.5L20 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
             ` : ''}
           </div>
         ` : `
@@ -838,6 +854,11 @@ export class CommandPalette {
       const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
       saveBtn?.addEventListener('click', () => {
         this.saveCurrentTask(saveBtn as HTMLButtonElement);
+      });
+
+      const exportDriveBtn = this.shadowRoot.querySelector('.glass-btn-export-drive');
+      exportDriveBtn?.addEventListener('click', () => {
+        this.exportToDrive(exportDriveBtn as HTMLButtonElement);
       });
     }
 
@@ -1009,6 +1030,62 @@ export class CommandPalette {
       btn.innerHTML = originalHTML;
       btn.classList.remove('saved');
     }, 1500);
+  }
+
+  private async exportToDrive(btn: HTMLButtonElement): Promise<void> {
+    if (!this.aiResultData || !this.aiResultData.content) return;
+
+    // Check if logged in
+    if (!this.authState?.isLoggedIn) {
+      this.showToast('请先登录 Google 账号');
+      return;
+    }
+
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin">
+        <circle cx="12" cy="12" r="10"></circle>
+        <path d="M12 6v6l4 2"></path>
+      </svg>
+    `;
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'EXPORT_TO_DRIVE',
+        payload: {
+          title: this.aiResultData.title,
+          content: this.aiResultData.content,
+          sourceUrl: this.aiResultData.sourceUrl || window.location.href,
+        },
+      });
+
+      if (response.success && response.fileUrl) {
+        btn.innerHTML = `
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        `;
+        this.showToast('已导出到 Google Docs');
+
+        // Open the doc in a new tab
+        setTimeout(() => {
+          window.open(response.fileUrl, '_blank');
+        }, 500);
+      } else {
+        this.showToast(response.error || '导出失败');
+        btn.innerHTML = originalHTML;
+      }
+    } catch (error) {
+      console.error('Export to Drive error:', error);
+      this.showToast('导出失败');
+      btn.innerHTML = originalHTML;
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+      }, 2000);
+    }
   }
 
   private updateUnifiedContent(): void {
@@ -1565,6 +1642,7 @@ export class CommandPalette {
     const isCustomProvider = config.apiProvider === 'custom';
     const screenshotConfig = config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
     const historyConfig = config.history || DEFAULT_HISTORY_CONFIG;
+    const imageSearchConfig = config.imageSearch || { google: true, yandex: true, bing: true, tineye: true };
 
     return `
       <div class="glass-search glass-draggable">
@@ -1586,6 +1664,36 @@ export class CommandPalette {
       <div class="glass-divider"></div>
       <div class="glass-body glass-settings-body">
         <div class="glass-settings-flat">
+          <!-- 账号 -->
+          <div class="glass-settings-section">
+            <div class="glass-settings-section-title">账号</div>
+            ${this.getAccountSettingsHTML()}
+          </div>
+
+          <!-- 翻译设置 -->
+          <div class="glass-settings-section">
+            <div class="glass-settings-section-title">翻译服务</div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">翻译引擎</label>
+              <select class="glass-select" id="translation-provider-select">
+                <option value="ai"${(config.translation?.provider || 'ai') === 'ai' ? ' selected' : ''}>AI 翻译 (使用配置的 AI 服务)</option>
+                <option value="google"${config.translation?.provider === 'google' ? ' selected' : ''}>Google 翻译</option>
+                <option value="microsoft"${config.translation?.provider === 'microsoft' ? ' selected' : ''}>微软翻译</option>
+                <option value="deeplx"${config.translation?.provider === 'deeplx' ? ' selected' : ''}>DeepLX</option>
+                <option value="custom"${config.translation?.provider === 'custom' ? ' selected' : ''}>自定义</option>
+              </select>
+            </div>
+            <div class="glass-form-group" id="translation-deeplx-key-group" style="display: ${config.translation?.provider === 'deeplx' ? 'flex' : 'none'}">
+              <label class="glass-form-label">DeepLX API Key</label>
+              <input type="text" class="glass-input" id="translation-deeplx-key" value="${config.translation?.deeplxApiKey || ''}" placeholder="请输入 API Key">
+            </div>
+            <div class="glass-form-group" id="translation-custom-url-group" style="display: ${config.translation?.provider === 'custom' ? 'flex' : 'none'}">
+              <label class="glass-form-label">自定义翻译地址</label>
+              <input type="text" class="glass-input" id="translation-custom-url" value="${config.translation?.customUrl || ''}" placeholder="http://localhost:1188/translate">
+            </div>
+            <span class="glass-form-hint" id="translation-hint">${this.getTranslationHint(config.translation?.provider || 'ai')}</span>
+          </div>
+
           <!-- 外观 -->
           <div class="glass-settings-section">
             <div class="glass-settings-section-title">外观</div>
@@ -1674,6 +1782,34 @@ export class CommandPalette {
                 <span class="glass-toggle-slider"></span>
               </label>
             </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">AI 生图</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+            <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
+              <div class="glass-form-group">
+                <label class="glass-form-label">生图服务</label>
+                <select class="glass-select" id="image-gen-provider">
+                  <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
+                  <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
+                </select>
+              </div>
+              <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
+                <label class="glass-form-label">自定义生图 API</label>
+                <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
+              </div>
+              <div class="glass-form-group">
+                <label class="glass-form-label">图片尺寸</label>
+                <select class="glass-select" id="image-size-select">
+                  <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
+                  <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
+                  <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <!-- 截图 -->
@@ -1708,34 +1844,40 @@ export class CommandPalette {
                 <option value="describe"${screenshotConfig.defaultAIAction === 'describe' ? ' selected' : ''}>描述</option>
               </select>
             </div>
+          </div>
+
+          <!-- 右键搜图 -->
+          <div class="glass-settings-section">
+            <div class="glass-settings-section-title">右键搜图</div>
             <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">AI 生图</label>
+              <label class="glass-form-label">Google 搜图</label>
               <label class="glass-toggle">
-                <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
+                <input type="checkbox" id="image-search-google" ${imageSearchConfig.google ? 'checked' : ''}>
                 <span class="glass-toggle-slider"></span>
               </label>
             </div>
-            <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
-              <div class="glass-form-group">
-                <label class="glass-form-label">生图服务</label>
-                <select class="glass-select" id="image-gen-provider">
-                  <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
-                  <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
-                </select>
-              </div>
-              <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
-                <label class="glass-form-label">自定义生图 API</label>
-                <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
-              </div>
-              <div class="glass-form-group">
-                <label class="glass-form-label">图片尺寸</label>
-                <select class="glass-select" id="image-size-select">
-                  <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
-                  <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
-                  <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
-                </select>
-              </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">Yandex 搜图</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="image-search-yandex" ${imageSearchConfig.yandex ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
             </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">Bing 搜图</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="image-search-bing" ${imageSearchConfig.bing ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">TinEye 搜图</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="image-search-tineye" ${imageSearchConfig.tineye ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+            <span class="glass-form-hint">在图片上右键可使用搜图功能</span>
           </div>
 
           <!-- 历史记录 -->
@@ -1811,6 +1953,76 @@ export class CommandPalette {
     const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
     saveBtn?.addEventListener('click', () => this.saveSettings());
 
+    // ===== Account settings =====
+    // Google login button
+    const googleLoginBtn = this.shadowRoot.querySelector('#google-login-btn');
+    googleLoginBtn?.addEventListener('click', () => this.handleGoogleLogin());
+
+    // Logout button
+    const logoutBtn = this.shadowRoot.querySelector('.glass-btn-logout');
+    logoutBtn?.addEventListener('click', () => this.handleGoogleLogout());
+
+    // Sync toggle (immediate action, not affected by save/cancel)
+    const syncToggle = this.shadowRoot.querySelector('#sync-enabled-toggle') as HTMLInputElement;
+    const syncActions = this.shadowRoot.querySelector('#sync-actions') as HTMLElement;
+    syncToggle?.addEventListener('change', () => {
+      if (syncActions) syncActions.style.display = syncToggle.checked ? 'flex' : 'none';
+      this.handleSyncToggle(syncToggle.checked);
+    });
+
+    // Sync buttons
+    const syncToCloudBtn = this.shadowRoot.querySelector('#sync-to-cloud-btn');
+    syncToCloudBtn?.addEventListener('click', () => this.handleSyncToCloud(syncToCloudBtn as HTMLButtonElement));
+
+    const syncFromCloudBtn = this.shadowRoot.querySelector('#sync-from-cloud-btn');
+    syncFromCloudBtn?.addEventListener('click', () => this.handleSyncFromCloud(syncFromCloudBtn as HTMLButtonElement));
+
+    // Translation provider select
+    const translationProviderSelect = this.shadowRoot.querySelector('#translation-provider-select') as HTMLSelectElement;
+    const translationDeeplxKeyGroup = this.shadowRoot.querySelector('#translation-deeplx-key-group') as HTMLElement;
+    const translationDeeplxKeyInput = this.shadowRoot.querySelector('#translation-deeplx-key') as HTMLInputElement;
+    const translationCustomUrlGroup = this.shadowRoot.querySelector('#translation-custom-url-group') as HTMLElement;
+    const translationCustomUrlInput = this.shadowRoot.querySelector('#translation-custom-url') as HTMLInputElement;
+    const translationHint = this.shadowRoot.querySelector('#translation-hint') as HTMLElement;
+
+    translationProviderSelect?.addEventListener('change', () => {
+      const provider = translationProviderSelect.value;
+      if (!tempConfig.translation) {
+        tempConfig.translation = { provider: provider as any };
+      }
+      tempConfig.translation.provider = provider as any;
+
+      // Show/hide DeepLX key input
+      if (translationDeeplxKeyGroup) {
+        translationDeeplxKeyGroup.style.display = provider === 'deeplx' ? 'flex' : 'none';
+      }
+      // Show/hide custom URL input
+      if (translationCustomUrlGroup) {
+        translationCustomUrlGroup.style.display = provider === 'custom' ? 'flex' : 'none';
+      }
+      // Update hint
+      if (translationHint) {
+        translationHint.textContent = this.getTranslationHint(provider);
+      }
+      markChanged();
+    });
+
+    translationDeeplxKeyInput?.addEventListener('input', () => {
+      if (!tempConfig.translation) {
+        tempConfig.translation = { provider: 'deeplx' };
+      }
+      tempConfig.translation.deeplxApiKey = translationDeeplxKeyInput.value;
+      markChanged();
+    });
+
+    translationCustomUrlInput?.addEventListener('input', () => {
+      if (!tempConfig.translation) {
+        tempConfig.translation = { provider: 'custom' };
+      }
+      tempConfig.translation.customUrl = translationCustomUrlInput.value;
+      markChanged();
+    });
+
     // Theme select
     const themeSelect = this.shadowRoot.querySelector('#theme-select') as HTMLSelectElement;
     themeSelect?.addEventListener('change', () => {
@@ -1835,7 +2047,7 @@ export class CommandPalette {
     const popoverPositionGroup = this.shadowRoot.querySelector('#popover-position-group') as HTMLElement;
     showPopoverToggle?.addEventListener('change', () => {
       tempConfig.showSelectionPopover = showPopoverToggle.checked;
-      if (popoverPositionGroup) popoverPositionGroup.style.display = showPopoverToggle.checked ? 'block' : 'none';
+      if (popoverPositionGroup) popoverPositionGroup.style.display = showPopoverToggle.checked ? 'flex' : 'none';
       markChanged();
     });
 
@@ -1862,8 +2074,8 @@ export class CommandPalette {
     providerSelect?.addEventListener('change', () => {
       const provider = providerSelect.value as MenuConfig['apiProvider'];
       const isCustom = provider === 'custom';
-      if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'block' : 'none';
-      if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
+      if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'flex' : 'none';
+      if (customModelGroup) customModelGroup.style.display = isCustom ? 'flex' : 'none';
       if (apiKeyHint) apiKeyHint.textContent = this.getAPIKeyHint(provider);
       tempConfig.apiProvider = provider;
       markChanged();
@@ -1962,6 +2174,37 @@ export class CommandPalette {
       markChanged();
     });
 
+    // Image search settings
+    const imageSearchConfig = tempConfig.imageSearch || { google: true, yandex: true, bing: true, tineye: true };
+
+    const imageSearchGoogle = this.shadowRoot.querySelector('#image-search-google') as HTMLInputElement;
+    imageSearchGoogle?.addEventListener('change', () => {
+      imageSearchConfig.google = imageSearchGoogle.checked;
+      tempConfig.imageSearch = imageSearchConfig;
+      markChanged();
+    });
+
+    const imageSearchYandex = this.shadowRoot.querySelector('#image-search-yandex') as HTMLInputElement;
+    imageSearchYandex?.addEventListener('change', () => {
+      imageSearchConfig.yandex = imageSearchYandex.checked;
+      tempConfig.imageSearch = imageSearchConfig;
+      markChanged();
+    });
+
+    const imageSearchBing = this.shadowRoot.querySelector('#image-search-bing') as HTMLInputElement;
+    imageSearchBing?.addEventListener('change', () => {
+      imageSearchConfig.bing = imageSearchBing.checked;
+      tempConfig.imageSearch = imageSearchConfig;
+      markChanged();
+    });
+
+    const imageSearchTineye = this.shadowRoot.querySelector('#image-search-tineye') as HTMLInputElement;
+    imageSearchTineye?.addEventListener('change', () => {
+      imageSearchConfig.tineye = imageSearchTineye.checked;
+      tempConfig.imageSearch = imageSearchConfig;
+      markChanged();
+    });
+
     // History settings
     const maxCount = this.shadowRoot.querySelector('#history-max-count') as HTMLSelectElement;
     maxCount?.addEventListener('change', () => {
@@ -2041,20 +2284,202 @@ export class CommandPalette {
       await this.loadRecentSavedTasks();
     }
 
-    this.tempConfig = null;
+    // Keep tempConfig for continued editing, just reset changed flag
+    this.tempConfig = JSON.parse(JSON.stringify(this.config));
     this.settingsChanged = false;
     this.showToast('设置已保存');
-
-    this.activeCommand = null;
-    this.currentView = 'commands';
-    this.viewStack = [];
-    this.renderCurrentView(true, true);
   }
 
   private getAPIKeyHint(provider: string): string {
     if (provider === 'groq') return '使用 Groq 免费服务无需配置 API Key';
     if (provider === 'custom') return '如果你的 API 需要认证，请填写 API Key';
     return `请填写你的 ${provider.toUpperCase()} API Key`;
+  }
+
+  // Account Settings HTML
+  private getAccountSettingsHTML(): string {
+    const auth = this.authState;
+    if (auth?.isLoggedIn && auth.user) {
+      return `
+        <div class="glass-account-info">
+          <div class="glass-account-avatar">
+            ${auth.user.picture
+              ? `<img src="${auth.user.picture}" alt="${this.escapeHtml(auth.user.name)}" />`
+              : `<div class="glass-account-avatar-placeholder">${auth.user.name.charAt(0).toUpperCase()}</div>`
+            }
+          </div>
+          <div class="glass-account-details">
+            <div class="glass-account-name">${this.escapeHtml(auth.user.name)}</div>
+            <div class="glass-account-email">${this.escapeHtml(auth.user.email)}</div>
+          </div>
+          <button class="glass-btn glass-btn-secondary glass-btn-logout" title="退出登录">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="glass-form-group glass-form-toggle">
+          <label class="glass-form-label">云同步</label>
+          <label class="glass-toggle">
+            <input type="checkbox" id="sync-enabled-toggle" ${auth.syncEnabled ? 'checked' : ''}>
+            <span class="glass-toggle-slider"></span>
+          </label>
+        </div>
+        <div class="glass-form-group" id="sync-actions" ${auth.syncEnabled ? '' : 'style="display: none"'}>
+          <div style="display: flex; gap: 8px;">
+            <button class="glass-btn glass-btn-sync-now" id="sync-to-cloud-btn" style="flex: 1;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 16 12 12 8 16"></polyline>
+                <line x1="12" y1="21" x2="12" y2="12"></line>
+                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+              </svg>
+              上传到云端
+            </button>
+            <button class="glass-btn glass-btn-sync-now" id="sync-from-cloud-btn" style="flex: 1;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="8 17 12 21 16 17"></polyline>
+                <line x1="12" y1="12" x2="12" y2="21"></line>
+                <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+              </svg>
+              从云端恢复
+            </button>
+          </div>
+        </div>
+        <span class="glass-form-hint">开启后，设置和浏览轨迹将自动同步到 Google Drive</span>
+      `;
+    } else {
+      return `
+        <div class="glass-account-login">
+          <button class="glass-btn glass-btn-google" id="google-login-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            使用 Google 账号登录
+          </button>
+          <span class="glass-form-hint">登录后可使用云同步和 Drive 导出功能</span>
+        </div>
+      `;
+    }
+  }
+
+  // Load auth state from background
+  private async loadAuthState(): Promise<void> {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_STATUS' });
+      this.authState = response;
+    } catch (error) {
+      console.error('Failed to load auth state:', error);
+      this.authState = { isLoggedIn: false, user: null, syncEnabled: false };
+    }
+  }
+
+  // Handle Google login
+  private async handleGoogleLogin(): Promise<void> {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_LOGIN' });
+      if (response.success) {
+        await this.loadAuthState();
+        this.renderCurrentView(true, true);
+        this.showToast('登录成功');
+      } else {
+        this.showToast(response.error || '登录失败');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      this.showToast('登录失败');
+    }
+  }
+
+  // Handle Google logout
+  private async handleGoogleLogout(): Promise<void> {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_LOGOUT' });
+      if (response.success) {
+        this.authState = { isLoggedIn: false, user: null, syncEnabled: false };
+        this.renderCurrentView(true, true);
+        this.showToast('已退出登录');
+      } else {
+        this.showToast(response.error || '退出失败');
+      }
+    } catch (error) {
+      console.error('Google logout error:', error);
+      this.showToast('退出失败');
+    }
+  }
+
+  // Handle sync toggle
+  private async handleSyncToggle(enabled: boolean): Promise<void> {
+    try {
+      await chrome.runtime.sendMessage({ type: 'SET_SYNC_ENABLED', payload: enabled });
+      if (this.authState) {
+        this.authState.syncEnabled = enabled;
+      }
+      if (enabled) {
+        // Trigger initial sync when enabled
+        await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
+        this.showToast('同步已开启');
+      } else {
+        this.showToast('同步已关闭');
+      }
+    } catch (error) {
+      console.error('Sync toggle error:', error);
+      this.showToast('操作失败');
+    }
+  }
+
+  // Manual sync to cloud
+  private async handleSyncToCloud(btn: HTMLButtonElement): Promise<void> {
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="glass-spinner"></span> 同步中...';
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
+      if (response.success) {
+        this.showToast('已上传到云端');
+      } else {
+        this.showToast(response.error || '上传失败');
+      }
+    } catch (error) {
+      console.error('Sync to cloud error:', error);
+      this.showToast('上传失败');
+    } finally {
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }
+  }
+
+  // Manual sync from cloud
+  private async handleSyncFromCloud(btn: HTMLButtonElement): Promise<void> {
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<span class="glass-spinner"></span> 同步中...';
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'SYNC_FROM_CLOUD' });
+      if (response.success) {
+        this.showToast('已从云端恢复');
+        // Reload config to reflect changes
+        const { getStorageData } = await import('../utils/storage');
+        const data = await getStorageData();
+        this.config = data.config;
+        this.tempConfig = JSON.parse(JSON.stringify(this.config));
+        this.renderCurrentView(true, true);
+      } else {
+        this.showToast(response.error || '恢复失败');
+      }
+    } catch (error) {
+      console.error('Sync from cloud error:', error);
+      this.showToast('恢复失败');
+    } finally {
+      btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }
   }
 
   private showToast(message: string): void {
@@ -2251,11 +2676,10 @@ export class CommandPalette {
         </div>
         <input
           type="text"
-          class="glass-input"
-          placeholder=""
+          class="glass-input glass-screenshot-input"
+          placeholder="输入问题，按回车询问 AI..."
           autocomplete="off"
           spellcheck="false"
-          readonly
         />
         <kbd class="glass-kbd">ESC</kbd>
       </div>
@@ -2284,14 +2708,6 @@ export class CommandPalette {
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
             复制
-          </button>
-          <button class="glass-btn glass-btn-ask">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-            询问AI
           </button>
           <button class="glass-btn glass-btn-describe">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2382,16 +2798,22 @@ export class CommandPalette {
       this.screenshotCallbacks?.onCopy?.();
     });
 
-    // Ask AI button
-    const askBtn = this.shadowRoot.querySelector('.glass-btn-ask');
-    askBtn?.addEventListener('click', () => {
-      const question = prompt('请输入你想问的问题：');
-      if (question) {
-        this.screenshotData!.isLoading = true;
-        this.renderScreenshotContent();
-        this.screenshotCallbacks?.onAskAI?.(question);
+    // Screenshot input - press Enter to ask AI
+    const screenshotInput = this.shadowRoot.querySelector('.glass-screenshot-input') as HTMLInputElement;
+    screenshotInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        const question = screenshotInput.value.trim();
+        if (question) {
+          this.screenshotData!.isLoading = true;
+          this.renderScreenshotContent();
+          this.screenshotCallbacks?.onAskAI?.(question);
+          screenshotInput.value = '';
+        }
       }
     });
+    // Focus the input
+    setTimeout(() => screenshotInput?.focus(), 100);
 
     // Describe button
     const describeBtn = this.shadowRoot.querySelector('.glass-btn-describe');
@@ -2890,6 +3312,12 @@ export class CommandPalette {
       this.settingsChanged = false;
       this.currentView = 'settings';
       this.viewStack = [];
+      // Load auth state
+      this.loadAuthState().then(() => {
+        if (this.container && this.currentView === 'settings') {
+          this.renderCurrentView(true, true);
+        }
+      });
       this.renderCurrentView(true, true);
       return;
     }
@@ -3496,6 +3924,17 @@ export class CommandPalette {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  private getTranslationHint(provider: string): string {
+    switch (provider) {
+      case 'ai': return '使用配置的 AI 服务商进行翻译，效果最佳但需要 API Key';
+      case 'google': return '使用 Google 翻译，免费，无需配置';
+      case 'microsoft': return '使用微软翻译，免费，无需配置';
+      case 'deeplx': return '使用 DeepLX 翻译服务，需要填写 API Key';
+      case 'custom': return '自定义翻译 API，接口格式: POST { text, source_lang, target_lang }';
+      default: return '';
+    }
   }
 
   private getStyles(): string {
@@ -4847,6 +5286,158 @@ export class CommandPalette {
         font-size: 11px;
         color: var(--text-tertiary);
         line-height: 1.4;
+      }
+
+      /* Account settings styles */
+      .glass-account-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        margin-bottom: 12px;
+      }
+
+      .glass-account-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+
+      .glass-account-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .glass-account-avatar-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+      }
+
+      .glass-account-details {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .glass-account-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .glass-account-email {
+        font-size: 12px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .glass-account-login {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .glass-btn-google {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 10px 16px;
+        background: var(--glass-bg-elevated);
+        border: 1px solid var(--glass-border);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-btn-google:hover {
+        background: var(--glass-bg-hover);
+        border-color: var(--glass-border-strong);
+      }
+
+      .glass-btn-google svg {
+        flex-shrink: 0;
+      }
+
+      .glass-btn-logout {
+        padding: 8px;
+        background: transparent;
+        border: 1px solid var(--glass-border);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .glass-btn-logout:hover {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #ef4444;
+      }
+
+      .glass-btn-secondary {
+        background: transparent;
+        border: 1px solid var(--glass-border);
+      }
+
+      .glass-btn-sync-now {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--glass-bg-elevated);
+        border: 1px solid var(--glass-border);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-btn-sync-now:hover {
+        background: var(--glass-bg-hover);
+        border-color: var(--glass-border-strong);
+      }
+
+      .glass-btn-sync-now:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .glass-btn-sync-now svg {
+        flex-shrink: 0;
+      }
+
+      .glass-spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--glass-border);
+        border-top-color: var(--text-primary);
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
       }
 
       .glass-select {

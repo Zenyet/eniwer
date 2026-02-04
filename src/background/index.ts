@@ -15,6 +15,10 @@ import {
   getCodeExplainPrompt,
   getSummarizePagePrompt,
 } from './ai-handler';
+import { googleLogin, googleLogout, getAuthStatus, setSyncEnabled } from './auth-handler';
+import { freeTranslate, shouldUseFreeTranslate } from './free-translate-handler';
+import { syncToCloud, syncFromCloud, setupAutoSync } from './sync-handler';
+import { exportToGoogleDocs } from './drive-export-handler';
 
 // Handle messages from content script
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
@@ -77,14 +81,61 @@ async function handleMessage(message: Message, _sender: chrome.runtime.MessageSe
     case 'OPEN_URL':
       return handleOpenURL(message.payload as string);
 
+    case 'GOOGLE_AUTH_LOGIN':
+      return googleLogin();
+
+    case 'GOOGLE_AUTH_LOGOUT':
+      return googleLogout();
+
+    case 'GOOGLE_AUTH_STATUS':
+      return getAuthStatus();
+
+    case 'SYNC_TO_CLOUD':
+      return syncToCloud();
+
+    case 'SYNC_FROM_CLOUD':
+      return syncFromCloud();
+
+    case 'EXPORT_TO_DRIVE':
+      return handleExportToDrive(message.payload as { title: string; content: string; sourceUrl?: string });
+
+    case 'FREE_TRANSLATE':
+      return handleFreeTranslate(message.payload as { text: string; targetLang: string; sourceLang?: string; provider?: string; customUrl?: string });
+
     default:
       return { success: false, error: 'Unknown message type' };
   }
 }
 
 // Non-streaming AI request handler
-async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: boolean; result?: string; error?: string }> {
+async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: boolean; result?: string; error?: string; provider?: string }> {
   const { action, text, config, systemPrompt: customPrompt } = payload;
+
+  // Check if we should use non-AI translation
+  if (action === 'translate' && !customPrompt) {
+    const translationProvider = config.translation?.provider || 'ai';
+    if (translationProvider !== 'ai') {
+      const customValue = translationProvider === 'deeplx'
+        ? config.translation?.deeplxApiKey
+        : config.translation?.customUrl;
+      return freeTranslate(
+        text,
+        config.preferredLanguage || 'zh-CN',
+        undefined,
+        translationProvider,
+        customValue
+      );
+    }
+    // Legacy fallback check
+    const useFreeTranslate = shouldUseFreeTranslate(
+      config.apiProvider,
+      config.apiKey,
+      config.translationFallback?.enabled
+    );
+    if (useFreeTranslate) {
+      return freeTranslate(text, config.preferredLanguage || 'zh-CN');
+    }
+  }
 
   let systemPrompt: string;
 
@@ -122,6 +173,42 @@ async function handleAIRequest(payload: AIRequestPayload): Promise<{ success: bo
 // Streaming AI request handler
 async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRequestPayload, signal: AbortSignal): Promise<void> {
   const { action, text, config, requestId, systemPrompt: customPrompt } = payload;
+
+  // Check if we should use non-AI translation
+  if (action === 'translate' && !customPrompt) {
+    const translationProvider = config.translation?.provider || 'ai';
+    let useNonAI = translationProvider !== 'ai';
+
+    // Legacy fallback check
+    if (!useNonAI) {
+      useNonAI = shouldUseFreeTranslate(
+        config.apiProvider,
+        config.apiKey,
+        config.translationFallback?.enabled
+      );
+    }
+
+    if (useNonAI) {
+      const provider = translationProvider !== 'ai' ? translationProvider : 'google';
+      const customValue = provider === 'deeplx'
+        ? config.translation?.deeplxApiKey
+        : config.translation?.customUrl;
+      const result = await freeTranslate(
+        text,
+        config.preferredLanguage || 'zh-CN',
+        undefined,
+        provider,
+        customValue
+      );
+      if (result.success && result.result) {
+        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk: result.result, fullText: result.result } });
+        port.postMessage({ type: 'AI_STREAM_END', payload: { requestId, ...result } });
+      } else {
+        port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: result.error || '翻译失败' } });
+      }
+      return;
+    }
+  }
 
   let systemPrompt: string;
 
@@ -251,6 +338,24 @@ async function handleOpenURL(url: string): Promise<{ success: boolean }> {
   }
 }
 
+// Export to Google Docs handler
+async function handleExportToDrive(payload: { title: string; content: string; sourceUrl?: string }): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
+  return exportToGoogleDocs(payload.title, payload.content, payload.sourceUrl);
+}
+
+// Free translation handler
+async function handleFreeTranslate(payload: { text: string; targetLang: string; sourceLang?: string; provider?: string; customUrl?: string }): Promise<{ success: boolean; result?: string; error?: string }> {
+  return freeTranslate(payload.text, payload.targetLang, payload.sourceLang, payload.provider as any, payload.customUrl);
+}
+
+// Handle sync enabled toggle (from settings UI)
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'SET_SYNC_ENABLED') {
+    setSyncEnabled(message.payload as boolean).then(() => sendResponse({ success: true }));
+    return true;
+  }
+});
+
 // Handle extension icon click
 chrome.action.onClicked.addListener(async (tab) => {
   if (tab.id) {
@@ -271,7 +376,23 @@ chrome.commands.onCommand.addListener(async (command) => {
 console.log('The Panel: Background service worker initialized');
 
 // Setup context menu for image search
-chrome.runtime.onInstalled.addListener(() => {
+async function setupImageSearchMenu() {
+  // Remove existing menus first
+  await chrome.contextMenus.removeAll();
+
+  // Get config
+  const result = await chrome.storage.local.get(['thecircle_data']);
+  const config = result.thecircle_data?.config?.imageSearch || {
+    google: true,
+    yandex: true,
+    bing: true,
+    tineye: true,
+  };
+
+  // Check if any engine is enabled
+  const enabledEngines = Object.entries(config).filter(([_, enabled]) => enabled);
+  if (enabledEngines.length === 0) return;
+
   // Create parent menu
   chrome.contextMenus.create({
     id: 'image-search-parent',
@@ -279,21 +400,39 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ['image'],
   });
 
-  // Create search engine sub-menus
+  // Create search engine sub-menus based on config
   const searchEngines = [
-    { id: 'google', title: 'Google 搜图' },
-    { id: 'yandex', title: 'Yandex 搜图' },
-    { id: 'bing', title: 'Bing 搜图' },
-    { id: 'tineye', title: 'TinEye 搜图' },
+    { id: 'google', title: 'Google 搜图', enabled: config.google },
+    { id: 'yandex', title: 'Yandex 搜图', enabled: config.yandex },
+    { id: 'bing', title: 'Bing 搜图', enabled: config.bing },
+    { id: 'tineye', title: 'TinEye 搜图', enabled: config.tineye },
   ];
 
   for (const engine of searchEngines) {
-    chrome.contextMenus.create({
-      id: `image-search-${engine.id}`,
-      parentId: 'image-search-parent',
-      title: engine.title,
-      contexts: ['image'],
-    });
+    if (engine.enabled) {
+      chrome.contextMenus.create({
+        id: `image-search-${engine.id}`,
+        parentId: 'image-search-parent',
+        title: engine.title,
+        contexts: ['image'],
+      });
+    }
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  setupImageSearchMenu();
+});
+
+// Listen for config changes to update context menu
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.thecircle_data) {
+    const oldConfig = changes.thecircle_data.oldValue?.config?.imageSearch;
+    const newConfig = changes.thecircle_data.newValue?.config?.imageSearch;
+    // Only rebuild menu if imageSearch config changed
+    if (JSON.stringify(oldConfig) !== JSON.stringify(newConfig)) {
+      setupImageSearchMenu();
+    }
   }
 });
 
@@ -323,3 +462,6 @@ chrome.contextMenus.onClicked.addListener((info, _tab) => {
     chrome.tabs.create({ url: searchUrl });
   }
 });
+
+// Setup auto-sync for cloud data
+setupAutoSync();

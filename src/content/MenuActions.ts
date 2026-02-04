@@ -195,6 +195,65 @@ export class MenuActions {
     onChunk?: OnChunkCallback,
     options: ExecuteAIOptions = {}
   ): Promise<{ type: string; result?: string }> {
+    // For translate action, check if we should use non-AI translation
+    if (action === 'translate') {
+      const translationProvider = this.config.translation?.provider || 'ai';
+
+      // Use non-AI translation provider
+      if (translationProvider !== 'ai') {
+        try {
+          const targetLang = options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN';
+          const customValue = translationProvider === 'deeplx'
+            ? this.config.translation?.deeplxApiKey
+            : this.config.translation?.customUrl;
+          const response = await chrome.runtime.sendMessage({
+            type: 'FREE_TRANSLATE',
+            payload: {
+              text,
+              targetLang,
+              provider: translationProvider,
+              customUrl: customValue,
+            },
+          });
+
+          if (response.success && response.result) {
+            if (onChunk) {
+              onChunk(response.result, response.result);
+            }
+            return { type: 'ai', result: response.result };
+          } else {
+            return { type: 'error', result: response.error || '翻译失败' };
+          }
+        } catch (error) {
+          return { type: 'error', result: `翻译失败: ${error}` };
+        }
+      }
+
+      // Legacy fallback: no API key and fallback not disabled
+      const fallbackEnabled = this.config.translationFallback?.enabled;
+      const hasApiKey = !!this.config.apiKey;
+      if (!hasApiKey && fallbackEnabled !== false) {
+        try {
+          const targetLang = options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN';
+          const response = await chrome.runtime.sendMessage({
+            type: 'FREE_TRANSLATE',
+            payload: { text, targetLang },
+          });
+
+          if (response.success && response.result) {
+            if (onChunk) {
+              onChunk(response.result, response.result);
+            }
+            return { type: 'ai', result: response.result };
+          } else {
+            return { type: 'error', result: response.error || '翻译失败' };
+          }
+        } catch (error) {
+          return { type: 'error', result: `翻译失败: ${error}` };
+        }
+      }
+    }
+
     const validationError = this.validateAIConfig();
     if (validationError) {
       return { type: 'error', result: validationError };

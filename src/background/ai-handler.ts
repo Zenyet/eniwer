@@ -453,10 +453,18 @@ async function callOpenAIVisionAPI(
   signal?: AbortSignal
 ): Promise<AIResponse> {
   const provider = config.apiProvider;
-  const providerConfig = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
-  const apiUrl = providerConfig.apiUrl;
-  const model = providerConfig.visionModel || providerConfig.model;
+  let apiUrl: string;
+  let model: string;
   const apiKey = config.apiKey;
+
+  if (provider === 'custom') {
+    apiUrl = config.customApiUrl!;
+    model = config.customModel!;
+  } else {
+    const providerConfig = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
+    apiUrl = providerConfig.apiUrl;
+    model = providerConfig.visionModel || providerConfig.model;
+  }
 
   const response = await fetch(apiUrl, {
     method: 'POST',

@@ -1,90 +1,77 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState } from '../types';
-import { icons } from '../icons';
-import { getStorageData, saveConfig, saveGlobalMenuItems } from '../utils/storage';
-import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../utils/taskStorage';
-import { loadBrowseTrailSessions, deleteTrailEntry, clearTrailHistory, exportTrailData } from './BrowseTrailPanel';
-import { loadChatSession, saveChatSession, createNewChatSession, createChatMessage, getContextChatSystemPrompt, buildConversationPrompt, parseReferences } from './ContextChatPanel';
-import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../utils/ai';
+import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState, AnnotationConfig, KnowledgeConfig } from '../../types';
+import { icons } from '../../icons';
+import { getStorageData, saveConfig, saveGlobalMenuItems } from '../../utils/storage';
+import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../../utils/taskStorage';
+import { loadBrowseTrailSessions, deleteTrailEntry, clearTrailHistory, exportTrailData } from '../BrowseTrailPanel';
+import { loadChatSession, saveChatSession, createNewChatSession, createChatMessage, getContextChatSystemPrompt, buildConversationPrompt, parseReferences } from '../ContextChatPanel';
+import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../../utils/ai';
+import { getAllAnnotations, deleteAnnotation as deleteAnnotationFromStorage } from '../annotation/storage';
+import { Annotation, ANNOTATION_COLORS } from '../../types/annotation';
 
-// View types for multi-view system
-export type ViewType =
-  | 'commands'
-  | 'ai-result'
-  | 'settings'
-  | 'settings-menu'
-  | 'screenshot'
-  | 'browseTrail'
-  | 'contextChat';
-
-export interface ViewState {
-  type: ViewType;
-  title: string;
-  data?: unknown;
-}
-
-export interface AIResultData {
-  title: string;
-  content: string;
-  originalText?: string;
-  isLoading: boolean;
-  resultType: 'translate' | 'general';
-  translateTargetLanguage?: string;
-  iconHtml?: string;
-  streamKey?: string; // Unique key to identify this stream
-  // Extended metadata
-  actionType?: string; // 'summarizePage' | 'translate' | 'summarize' | 'explain' etc.
-  sourceUrl?: string; // Source URL for page actions
-  sourceTitle?: string; // Source page title
-  createdAt?: number; // Creation timestamp
-}
-
-export interface CommandPaletteCallbacks {
-  onSelect: (item: MenuItem) => void;
-  onClose: () => void;
-}
-
-export interface AIResultCallbacks {
-  onStop?: () => void;
-  onTranslateLanguageChange?: (lang: string) => void;
-  onRefresh?: () => void; // For re-running the action (e.g., re-summarize)
-}
-
-export interface ScreenshotData {
-  dataUrl: string;
-  isLoading?: boolean;
-  result?: string;
-  generatedImageUrl?: string;
-}
-
-export interface ScreenshotCallbacks {
-  onSave?: () => void;
-  onCopy?: () => void;
-  onAskAI?: (question: string) => void;
-  onDescribe?: () => void;
-  onGenerateImage?: (prompt: string) => void;
-  onClose?: () => void;
-}
-
-export interface MinimizedTask {
+// Knowledge item - unified type for annotations and saved AI results
+interface KnowledgeItem {
   id: string;
+  type: 'annotation' | 'ai-result';
   title: string;
   content: string;
   originalText?: string;
-  resultType: 'translate' | 'general';
-  translateTargetLanguage?: string;
-  iconHtml?: string;
-  isLoading: boolean;
-  minimizedAt: number;
-  streamKey?: string; // Unique key to identify which stream this task belongs to
-  callbacks?: AIResultCallbacks; // Preserved callbacks for restore
-  // Extended metadata
-  actionType?: string; // 'summarizePage' | 'translate' | 'summarize' | 'explain' etc.
-  sourceUrl?: string; // Source URL for page actions
-  sourceTitle?: string; // Source page title
-  createdAt: number; // Creation timestamp
+  url: string;
+  pageTitle: string;
+  createdAt: number;
+  // For annotations
+  color?: string;
+  note?: string;
+  aiResult?: { type: string; content: string; thinking?: string };
+  // For AI results
+  actionType?: string;
+  thinking?: string;
 }
+
+// Import types from types module
+import {
+  ViewType,
+  ViewState,
+  AIResultData,
+  CommandPaletteCallbacks,
+  AIResultCallbacks,
+  ScreenshotData,
+  ScreenshotCallbacks,
+  MinimizedTask,
+} from './types';
+
+// Re-export types for external use
+export type {
+  ViewType,
+  ViewState,
+  AIResultData,
+  CommandPaletteCallbacks,
+  AIResultCallbacks,
+  ScreenshotData,
+  ScreenshotCallbacks,
+  MinimizedTask,
+};
+
+// Import styles from styles module
+import { getStyles } from './styles';
+
+// Import utility functions from utils module
+import {
+  escapeHtml,
+  formatAIContent,
+  getLoadingHTML,
+  getThinkingSectionHTML,
+  formatTimeAgo,
+  getTranslateLanguageSelectHTML,
+  getTranslationHint,
+  getAPIKeyHint,
+  getDefaultMinimizedIcon,
+  getActionIcon,
+  getTaskMetaInfo,
+  getSavedTaskMetaInfo,
+  getSourceInfoHTML,
+} from './utils';
 
 export class CommandPalette {
   private container: HTMLElement | null = null;
@@ -129,6 +116,25 @@ export class CommandPalette {
   private chatSession: ChatSession | null = null;
   private isChatStreaming = false;
   private isQuickAsk = false;
+
+  // Annotations state
+  private annotationsList: Annotation[] = [];
+  private annotationsSearch = '';
+  private annotationsFilter: 'all' | 'current' = 'all';
+
+  // Knowledge base state
+  private knowledgeItems: KnowledgeItem[] = [];
+  private knowledgeSearch = '';
+  private knowledgeFilter: 'all' | 'annotations' | 'ai-results' = 'all';
+
+  // Global search state
+  private globalSearchResults: {
+    commands: MenuItem[];
+    knowledge: KnowledgeItem[];
+    trails: TrailEntry[];
+  } = { commands: [], knowledge: [], trails: [] };
+  private searchDebounceTimer: number | null = null;
+  private isGlobalSearchLoading = false;
 
   // Drag state
   private isDragging = false;
@@ -268,6 +274,8 @@ export class CommandPalette {
       'screenshot': '截图',
       'browseTrail': '浏览轨迹',
       'contextChat': '上下文追问',
+      'annotations': '批注',
+      'knowledge': '知识库',
     };
     return titles[view];
   }
@@ -401,11 +409,14 @@ export class CommandPalette {
     }
   }
 
-  public streamUpdate(_chunk: string, fullText: string): void {
+  public streamUpdate(_chunk: string, fullText: string, thinking?: string): void {
     // Update active AI result if streamKey matches
     if (this.aiResultData && this.aiResultData.streamKey === this.currentStreamKey) {
       this.aiResultData.content = fullText;
       this.aiResultData.isLoading = true;
+      if (thinking) {
+        this.aiResultData.thinking = thinking;
+      }
       // Use unified content update if in commands view with active command
       if (this.currentView === 'commands' && this.activeCommand) {
         this.updateUnifiedContent();
@@ -422,15 +433,21 @@ export class CommandPalette {
       if (task) {
         task.content = fullText;
         task.isLoading = true;
+        if (thinking) {
+          task.thinking = thinking;
+        }
       }
     }
   }
 
-  public updateAIResult(content: string): void {
+  public updateAIResult(content: string, thinking?: string): void {
     // Update active AI result if streamKey matches
     if (this.aiResultData && this.aiResultData.streamKey === this.currentStreamKey) {
       this.aiResultData.content = content;
       this.aiResultData.isLoading = false;
+      if (thinking) {
+        this.aiResultData.thinking = thinking;
+      }
       // Use unified content update if in commands view with active command
       if (this.currentView === 'commands' && this.activeCommand) {
         this.updateUnifiedContent();
@@ -444,6 +461,9 @@ export class CommandPalette {
       const task = this.minimizedTasks.find(t => t.streamKey === this.currentStreamKey);
       if (task) {
         task.content = content;
+        if (thinking) {
+          task.thinking = thinking;
+        }
         const wasLoading = task.isLoading;
         task.isLoading = false;
         // Only re-render if loading state changed (to update the loading indicator)
@@ -547,7 +567,7 @@ export class CommandPalette {
     this.shadowRoot = this.container.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
-    style.textContent = this.getStyles();
+    style.textContent = getStyles();
     this.shadowRoot.appendChild(style);
 
     // Transparent overlay to capture clicks outside panel
@@ -665,6 +685,22 @@ export class CommandPalette {
           input?.focus();
         });
         break;
+      case 'annotations':
+        panel.innerHTML = this.getAnnotationsViewHTML();
+        this.bindAnnotationsEvents();
+        requestAnimationFrame(() => {
+          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+          input?.focus();
+        });
+        break;
+      case 'knowledge':
+        panel.innerHTML = this.getKnowledgeViewHTML();
+        this.bindKnowledgeEvents();
+        requestAnimationFrame(() => {
+          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+          input?.focus();
+        });
+        break;
     }
   }
 
@@ -698,7 +734,7 @@ export class CommandPalette {
         ${hasActiveCommand ? `
           <div class="glass-command-tag" data-action="${this.activeCommand?.action}">
             <span class="glass-command-tag-icon">${this.activeCommand?.icon || ''}</span>
-            <span class="glass-command-tag-label">${this.escapeHtml(this.activeCommand?.label || '')}</span>
+            <span class="glass-command-tag-label">${escapeHtml(this.activeCommand?.label || '')}</span>
             <button class="glass-command-tag-close">&times;</button>
           </div>
         ` : `
@@ -708,7 +744,7 @@ export class CommandPalette {
           type="text"
           class="glass-input"
           placeholder="${placeholder}"
-          value="${this.escapeHtml(inputValue)}"
+          value="${escapeHtml(inputValue)}"
           autocomplete="off"
           spellcheck="false"
           ${isAIAction && !needsInput ? 'readonly' : ''}
@@ -716,12 +752,13 @@ export class CommandPalette {
         <kbd class="glass-kbd">ESC</kbd>
       </div>
       <div class="glass-divider"></div>
-      ${hasActiveCommand && this.aiResultData ? this.getSourceInfoHTML(this.aiResultData) : ''}
+      ${hasActiveCommand && this.aiResultData ? getSourceInfoHTML(this.aiResultData) : ''}
       <div class="glass-body">
         ${hasActiveCommand ? `
           <div class="glass-ai-content-area">
-            ${isLoading && !this.aiResultData?.content ? this.getLoadingHTML() : ''}
-            ${this.aiResultData?.content ? `<div class="glass-ai-content">${this.formatAIContent(this.aiResultData.content)}</div>` : ''}
+            ${getThinkingSectionHTML(this.aiResultData?.thinking)}
+            ${isLoading && !this.aiResultData?.content ? getLoadingHTML() : ''}
+            ${this.aiResultData?.content ? `<div class="glass-ai-content">${formatAIContent(this.aiResultData.content)}</div>` : ''}
           </div>
         ` : `
           <div class="glass-commands"></div>
@@ -737,7 +774,7 @@ export class CommandPalette {
                 <rect x="6" y="6" width="12" height="12" rx="2"></rect>
               </svg>
             </button>
-            ${isTranslate ? this.getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
+            ${isTranslate ? getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
             ${isTranslate && this.aiResultData?.originalText ? `
               <button class="glass-footer-btn glass-btn-compare" title="对比原文">
                 ${icons.columns}
@@ -767,6 +804,14 @@ export class CommandPalette {
                 <polyline points="7 3 7 8 15 8"></polyline>
               </svg>
             </button>
+            ${this.aiResultData?.originalText ? `
+            <button class="glass-footer-btn glass-btn-annotate" title="保存到批注" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"></path>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+              </svg>
+            </button>
+            ` : ''}
             <button class="glass-footer-btn glass-btn-export-drive" title="导出到 Google Drive" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2L4.5 12.5h5.5v9.5h4v-9.5h5.5L12 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -860,6 +905,11 @@ export class CommandPalette {
       exportDriveBtn?.addEventListener('click', () => {
         this.exportToDrive(exportDriveBtn as HTMLButtonElement);
       });
+
+      const annotateBtn = this.shadowRoot.querySelector('.glass-btn-annotate');
+      annotateBtn?.addEventListener('click', () => {
+        this.saveToAnnotation(annotateBtn as HTMLButtonElement);
+      });
     }
 
     input?.addEventListener('input', () => {
@@ -924,6 +974,14 @@ export class CommandPalette {
           }
         }
       });
+    }
+
+    // Bind thinking toggle if present (for restored saved tasks)
+    if (hasActiveCommand) {
+      const contentArea = this.shadowRoot.querySelector('.glass-ai-content-area');
+      if (contentArea) {
+        this.bindThinkingToggle(contentArea);
+      }
     }
   }
 
@@ -995,6 +1053,7 @@ export class CommandPalette {
       await saveTask({
         title: this.aiResultData.title,
         content: this.aiResultData.content,
+        thinking: this.aiResultData.thinking,
         originalText: this.aiResultData.originalText,
         resultType: this.aiResultData.resultType,
         actionType: this.aiResultData.actionType || 'unknown',
@@ -1030,6 +1089,47 @@ export class CommandPalette {
       btn.innerHTML = originalHTML;
       btn.classList.remove('saved');
     }, 1500);
+  }
+
+  private async saveToAnnotation(btn: HTMLButtonElement): Promise<void> {
+    if (!this.aiResultData || !this.aiResultData.content || !this.aiResultData.originalText) return;
+
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="glass-spinner">
+        <circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="32"></circle>
+      </svg>
+    `;
+
+    try {
+      // Call the callback to save to annotation
+      if (this.aiResultCallbacks?.onSaveToAnnotation) {
+        this.aiResultCallbacks.onSaveToAnnotation(
+          this.aiResultData.originalText,
+          this.aiResultData.content,
+          this.aiResultData.thinking,
+          this.aiResultData.actionType
+        );
+      }
+
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+      btn.classList.add('saved');
+    } catch (error) {
+      console.error('Save to annotation error:', error);
+      this.showToast('保存失败');
+      btn.innerHTML = originalHTML;
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('saved');
+      }, 1500);
+    }
   }
 
   private async exportToDrive(btn: HTMLButtonElement): Promise<void> {
@@ -1095,10 +1195,49 @@ export class CommandPalette {
     const footer = this.shadowRoot.querySelector('.glass-ai-footer-actions');
 
     if (contentArea) {
+      // Handle thinking section separately
+      let thinkingSection = contentArea.querySelector('.glass-thinking-section');
+      if (this.aiResultData.thinking) {
+        if (!thinkingSection) {
+          // Create thinking section if it doesn't exist
+          const thinkingHTML = getThinkingSectionHTML(this.aiResultData.thinking);
+          contentArea.insertAdjacentHTML('afterbegin', thinkingHTML);
+          thinkingSection = contentArea.querySelector('.glass-thinking-section');
+          this.bindThinkingToggle(contentArea);
+        } else {
+          // Only update the thinking content, not the whole section
+          const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
+          if (thinkingContent) {
+            thinkingContent.innerHTML = formatAIContent(this.aiResultData.thinking);
+          }
+        }
+      }
+
+      // Handle loading indicator separately
+      let loadingEl = contentArea.querySelector('.glass-loading');
+      // Handle content separately
+      let contentEl = contentArea.querySelector('.glass-ai-content');
+
       if (this.aiResultData.isLoading && !this.aiResultData.content) {
-        contentArea.innerHTML = this.getLoadingHTML();
+        // Show loading, hide content
+        if (!loadingEl) {
+          contentArea.insertAdjacentHTML('beforeend', getLoadingHTML());
+        }
+        if (contentEl) {
+          contentEl.remove();
+        }
       } else if (this.aiResultData.content) {
-        contentArea.innerHTML = `<div class="glass-ai-content">${this.formatAIContent(this.aiResultData.content)}</div>`;
+        // Show content, hide loading
+        if (loadingEl) {
+          loadingEl.remove();
+        }
+        if (!contentEl) {
+          // Create content element if it doesn't exist
+          contentArea.insertAdjacentHTML('beforeend', `<div class="glass-ai-content">${formatAIContent(this.aiResultData.content)}</div>`);
+        } else {
+          // Update existing content
+          contentEl.innerHTML = formatAIContent(this.aiResultData.content);
+        }
       }
     }
 
@@ -1130,6 +1269,17 @@ export class CommandPalette {
     }
   }
 
+  private bindThinkingToggle(container: Element): void {
+    const thinkingSection = container.querySelector('.glass-thinking-section');
+    const thinkingHeader = thinkingSection?.querySelector('.glass-thinking-header');
+    if (thinkingHeader && thinkingSection && !thinkingHeader.hasAttribute('data-bound')) {
+      thinkingHeader.setAttribute('data-bound', 'true');
+      thinkingHeader.addEventListener('click', () => {
+        thinkingSection.classList.toggle('collapsed');
+      });
+    }
+  }
+
   // AI Result View
   private getAIResultViewHTML(): string {
     const data = this.aiResultData;
@@ -1145,9 +1295,9 @@ export class CommandPalette {
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
         </button>
-        <span class="glass-header-title">${this.escapeHtml(data.title)}</span>
+        <span class="glass-header-title">${escapeHtml(data.title)}</span>
         <div class="glass-header-actions">
-          ${isTranslate ? this.getTranslateLanguageSelectHTML(data.translateTargetLanguage || 'zh-CN') : ''}
+          ${isTranslate ? getTranslateLanguageSelectHTML(data.translateTargetLanguage || 'zh-CN') : ''}
           ${isTranslate ? `
             <button class="glass-header-btn glass-btn-compare" title="对比原文">
               ${icons.columns}
@@ -1182,105 +1332,13 @@ export class CommandPalette {
         </div>
       </div>
       <div class="glass-divider"></div>
-      ${this.getSourceInfoHTML(data)}
+      ${getSourceInfoHTML(data)}
       <div class="glass-body glass-ai-result-body">
         <div class="glass-ai-content" data-compare="false">
-          ${data.isLoading && !data.content ? this.getLoadingHTML() : this.formatAIContent(data.content)}
+          ${data.isLoading && !data.content ? getLoadingHTML() : formatAIContent(data.content)}
         </div>
       </div>
     `;
-  }
-
-  private getSourceInfoHTML(data: AIResultData): string {
-    const isPageAction = data.actionType === 'summarizePage';
-    const isTranslate = data.resultType === 'translate';
-
-    // Only show source info for page actions or translations with sourceUrl
-    if (!isPageAction && !isTranslate) return '';
-    if (!data.sourceUrl && !data.sourceTitle && !data.originalText) return '';
-
-    let titlePart = '';
-    let metaPart = '';
-
-    if (isPageAction) {
-      // Page summary: show page title as clickable link
-      const displayTitle = data.sourceTitle || (data.sourceUrl ? new URL(data.sourceUrl).hostname : '');
-      if (data.sourceUrl) {
-        titlePart = `<a class="glass-source-link" href="${this.escapeHtml(data.sourceUrl)}" target="_blank" title="${this.escapeHtml(data.sourceUrl)}">${this.escapeHtml(displayTitle)}</a>`;
-      } else if (displayTitle) {
-        titlePart = `<span class="glass-source-title">${this.escapeHtml(displayTitle)}</span>`;
-      }
-    } else if (isTranslate) {
-      // Translation: show source site domain
-      if (data.sourceUrl) {
-        try {
-          const hostname = new URL(data.sourceUrl).hostname;
-          titlePart = `<span class="glass-source-title">${this.escapeHtml(hostname)}</span>`;
-        } catch {
-          // ignore invalid URL
-        }
-      }
-    }
-
-    // Time info
-    if (data.createdAt) {
-      metaPart = this.formatTimeAgo(data.createdAt);
-    }
-
-    if (!titlePart && !metaPart) return '';
-
-    return `
-      <div class="glass-source-info">
-        <div class="glass-source-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <line x1="10" y1="14" x2="21" y2="3"></line>
-          </svg>
-        </div>
-        <div class="glass-source-content">
-          ${titlePart}
-          ${metaPart ? `<span class="glass-source-meta">${metaPart}</span>` : ''}
-        </div>
-      </div>
-    `;
-  }
-
-  private getTranslateLanguageSelectHTML(currentLang: string): string {
-    const languages = [
-      { value: 'zh-CN', label: '简体中文' },
-      { value: 'zh-TW', label: '繁体中文' },
-      { value: 'en', label: 'English' },
-      { value: 'ja', label: '日本語' },
-      { value: 'ko', label: '한국어' },
-      { value: 'es', label: 'Español' },
-      { value: 'fr', label: 'Français' },
-      { value: 'de', label: 'Deutsch' },
-    ];
-
-    const options = languages.map(({ value, label }) =>
-      `<option value="${value}"${value === currentLang ? ' selected' : ''}>${label}</option>`
-    ).join('');
-
-    return `<select class="glass-lang-select">${options}</select>`;
-  }
-
-  private getLoadingHTML(): string {
-    return `
-      <div class="glass-loading">
-        <div class="glass-spinner"></div>
-        <span>正在思考...</span>
-      </div>
-    `;
-  }
-
-  private formatAIContent(text: string): string {
-    if (!text) return '';
-    return text
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>');
   }
 
   private bindAIResultEvents(): void {
@@ -1563,14 +1621,6 @@ export class CommandPalette {
     }
   }
 
-  private getDefaultMinimizedIcon(): string {
-    return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="10"></circle>
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-    </svg>`;
-  }
-
   private updateAIResultContent(): void {
     if (!this.shadowRoot || !this.aiResultData) return;
 
@@ -1584,19 +1634,19 @@ export class CommandPalette {
           <div class="glass-compare-view">
             <div class="glass-compare-item">
               <div class="glass-compare-label">原文</div>
-              <div class="glass-compare-content">${this.formatAIContent(this.aiResultData.originalText)}</div>
+              <div class="glass-compare-content">${formatAIContent(this.aiResultData.originalText)}</div>
             </div>
             <div class="glass-compare-divider"></div>
             <div class="glass-compare-item">
               <div class="glass-compare-label">译文</div>
-              <div class="glass-compare-content">${this.aiResultData.isLoading && !this.aiResultData.content ? this.getLoadingHTML() : this.formatAIContent(this.aiResultData.content)}</div>
+              <div class="glass-compare-content">${this.aiResultData.isLoading && !this.aiResultData.content ? getLoadingHTML() : formatAIContent(this.aiResultData.content)}</div>
             </div>
           </div>
         `;
       } else {
         contentEl.innerHTML = this.aiResultData.isLoading && !this.aiResultData.content
-          ? this.getLoadingHTML()
-          : this.formatAIContent(this.aiResultData.content);
+          ? getLoadingHTML()
+          : formatAIContent(this.aiResultData.content);
       }
     }
 
@@ -1691,7 +1741,7 @@ export class CommandPalette {
               <label class="glass-form-label">自定义翻译地址</label>
               <input type="text" class="glass-input" id="translation-custom-url" value="${config.translation?.customUrl || ''}" placeholder="http://localhost:1188/translate">
             </div>
-            <span class="glass-form-hint" id="translation-hint">${this.getTranslationHint(config.translation?.provider || 'ai')}</span>
+            <span class="glass-form-hint" id="translation-hint">${getTranslationHint(config.translation?.provider || 'ai')}</span>
           </div>
 
           <!-- 外观 -->
@@ -1761,7 +1811,7 @@ export class CommandPalette {
                 <option value="gemini"${config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
                 <option value="custom"${config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
               </select>
-              <span class="glass-form-hint" id="api-key-hint">${this.getAPIKeyHint(config.apiProvider)}</span>
+              <span class="glass-form-hint" id="api-key-hint">${getAPIKeyHint(config.apiProvider)}</span>
             </div>
             <div class="glass-form-group">
               <label class="glass-form-label">API Key</label>
@@ -1781,6 +1831,14 @@ export class CommandPalette {
                 <input type="checkbox" id="streaming-toggle" ${config.useStreaming ? 'checked' : ''}>
                 <span class="glass-toggle-slider"></span>
               </label>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">思考模式</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="thinking-mode-toggle" ${config.useThinkingModel ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+              <span class="glass-form-hint">启用后使用推理模型进行深度思考</span>
             </div>
             <div class="glass-form-group glass-form-toggle">
               <label class="glass-form-label">AI 生图</label>
@@ -1908,6 +1966,65 @@ export class CommandPalette {
             </div>
           </div>
 
+          <!-- 批注 -->
+          <div class="glass-settings-section">
+            <div class="glass-settings-section-title">批注</div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">默认高亮颜色</label>
+              <div class="glass-color-picker" id="annotation-color-picker">
+                <button class="glass-color-option ${(config.annotation?.defaultColor || 'yellow') === 'yellow' ? 'active' : ''}" data-color="yellow" style="--color: #fef08a; --color-border: #fbbf24;"></button>
+                <button class="glass-color-option ${config.annotation?.defaultColor === 'green' ? 'active' : ''}" data-color="green" style="--color: #bbf7d0; --color-border: #4ade80;"></button>
+                <button class="glass-color-option ${config.annotation?.defaultColor === 'blue' ? 'active' : ''}" data-color="blue" style="--color: #bfdbfe; --color-border: #60a5fa;"></button>
+                <button class="glass-color-option ${config.annotation?.defaultColor === 'pink' ? 'active' : ''}" data-color="pink" style="--color: #fbcfe8; --color-border: #f472b6;"></button>
+                <button class="glass-color-option ${config.annotation?.defaultColor === 'purple' ? 'active' : ''}" data-color="purple" style="--color: #ddd6fe; --color-border: #a78bfa;"></button>
+              </div>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">自动保存 AI 结果</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="annotation-auto-save" ${config.annotation?.autoSaveAIResult ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+              <span class="glass-form-hint">翻译/解释等 AI 结果自动关联到高亮</span>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">默认显示当前页面</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="annotation-page-filter" ${config.annotation?.showPageFilter ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 知识库 -->
+          <div class="glass-settings-section">
+            <div class="glass-settings-section-title">知识库</div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">默认筛选</label>
+              <select class="glass-select" id="knowledge-filter-select">
+                <option value="all" ${(config.knowledge?.defaultFilter || 'all') === 'all' ? 'selected' : ''}>全部</option>
+                <option value="annotations" ${config.knowledge?.defaultFilter === 'annotations' ? 'selected' : ''}>仅批注</option>
+                <option value="ai-results" ${config.knowledge?.defaultFilter === 'ai-results' ? 'selected' : ''}>仅 AI 结果</option>
+              </select>
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">每组最大显示数量</label>
+              <select class="glass-select" id="knowledge-max-display">
+                <option value="20" ${(config.knowledge?.maxDisplayCount || 50) === 20 ? 'selected' : ''}>20 条</option>
+                <option value="50" ${config.knowledge?.maxDisplayCount === 50 ? 'selected' : ''}>50 条</option>
+                <option value="100" ${config.knowledge?.maxDisplayCount === 100 ? 'selected' : ''}>100 条</option>
+                <option value="200" ${config.knowledge?.maxDisplayCount === 200 ? 'selected' : ''}>200 条</option>
+              </select>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">按日期分组</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="knowledge-group-date" ${config.knowledge?.groupByDate !== false ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
           <!-- 重置 -->
           <div class="glass-settings-section">
             <div class="glass-form-group">
@@ -2002,7 +2119,7 @@ export class CommandPalette {
       }
       // Update hint
       if (translationHint) {
-        translationHint.textContent = this.getTranslationHint(provider);
+        translationHint.textContent = getTranslationHint(provider);
       }
       markChanged();
     });
@@ -2076,7 +2193,7 @@ export class CommandPalette {
       const isCustom = provider === 'custom';
       if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'flex' : 'none';
       if (customModelGroup) customModelGroup.style.display = isCustom ? 'flex' : 'none';
-      if (apiKeyHint) apiKeyHint.textContent = this.getAPIKeyHint(provider);
+      if (apiKeyHint) apiKeyHint.textContent = getAPIKeyHint(provider);
       tempConfig.apiProvider = provider;
       markChanged();
     });
@@ -2106,6 +2223,13 @@ export class CommandPalette {
     const streamingToggle = this.shadowRoot.querySelector('#streaming-toggle') as HTMLInputElement;
     streamingToggle?.addEventListener('change', () => {
       tempConfig.useStreaming = streamingToggle.checked;
+      markChanged();
+    });
+
+    // Thinking mode toggle
+    const thinkingModeToggle = this.shadowRoot.querySelector('#thinking-mode-toggle') as HTMLInputElement;
+    thinkingModeToggle?.addEventListener('change', () => {
+      tempConfig.useThinkingModel = thinkingModeToggle.checked;
       markChanged();
     });
 
@@ -2224,11 +2348,71 @@ export class CommandPalette {
     const clearBtn = this.shadowRoot.querySelector('#clear-history');
     clearBtn?.addEventListener('click', async () => {
       if (confirm('确定要清空所有历史记录吗？此操作不可撤销。')) {
-        const { clearAllTasks } = await import('../utils/taskStorage');
+        const { clearAllTasks } = await import('../../utils/taskStorage');
         await clearAllTasks();
         this.recentSavedTasks = [];
         this.showToast('历史记录已清空');
       }
+    });
+
+    // ===== Annotation settings =====
+    const annotationConfig = tempConfig.annotation || { ...DEFAULT_ANNOTATION_CONFIG };
+
+    // Color picker
+    const colorPicker = this.shadowRoot.querySelector('#annotation-color-picker');
+    colorPicker?.querySelectorAll('.glass-color-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const color = (btn as HTMLElement).dataset.color as AnnotationConfig['defaultColor'];
+        annotationConfig.defaultColor = color;
+        tempConfig.annotation = annotationConfig;
+        // Update active state
+        colorPicker.querySelectorAll('.glass-color-option').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        markChanged();
+      });
+    });
+
+    // Auto save AI result toggle
+    const annotationAutoSave = this.shadowRoot.querySelector('#annotation-auto-save') as HTMLInputElement;
+    annotationAutoSave?.addEventListener('change', () => {
+      annotationConfig.autoSaveAIResult = annotationAutoSave.checked;
+      tempConfig.annotation = annotationConfig;
+      markChanged();
+    });
+
+    // Page filter toggle
+    const annotationPageFilter = this.shadowRoot.querySelector('#annotation-page-filter') as HTMLInputElement;
+    annotationPageFilter?.addEventListener('change', () => {
+      annotationConfig.showPageFilter = annotationPageFilter.checked;
+      tempConfig.annotation = annotationConfig;
+      markChanged();
+    });
+
+    // ===== Knowledge settings =====
+    const knowledgeConfig = tempConfig.knowledge || { ...DEFAULT_KNOWLEDGE_CONFIG };
+
+    // Default filter select
+    const knowledgeFilterSelect = this.shadowRoot.querySelector('#knowledge-filter-select') as HTMLSelectElement;
+    knowledgeFilterSelect?.addEventListener('change', () => {
+      knowledgeConfig.defaultFilter = knowledgeFilterSelect.value as KnowledgeConfig['defaultFilter'];
+      tempConfig.knowledge = knowledgeConfig;
+      markChanged();
+    });
+
+    // Max display count select
+    const knowledgeMaxDisplay = this.shadowRoot.querySelector('#knowledge-max-display') as HTMLSelectElement;
+    knowledgeMaxDisplay?.addEventListener('change', () => {
+      knowledgeConfig.maxDisplayCount = parseInt(knowledgeMaxDisplay.value, 10);
+      tempConfig.knowledge = knowledgeConfig;
+      markChanged();
+    });
+
+    // Group by date toggle
+    const knowledgeGroupDate = this.shadowRoot.querySelector('#knowledge-group-date') as HTMLInputElement;
+    knowledgeGroupDate?.addEventListener('change', () => {
+      knowledgeConfig.groupByDate = knowledgeGroupDate.checked;
+      tempConfig.knowledge = knowledgeConfig;
+      markChanged();
     });
 
     // Reset button (immediate action)
@@ -2290,12 +2474,6 @@ export class CommandPalette {
     this.showToast('设置已保存');
   }
 
-  private getAPIKeyHint(provider: string): string {
-    if (provider === 'groq') return '使用 Groq 免费服务无需配置 API Key';
-    if (provider === 'custom') return '如果你的 API 需要认证，请填写 API Key';
-    return `请填写你的 ${provider.toUpperCase()} API Key`;
-  }
-
   // Account Settings HTML
   private getAccountSettingsHTML(): string {
     const auth = this.authState;
@@ -2304,13 +2482,13 @@ export class CommandPalette {
         <div class="glass-account-info">
           <div class="glass-account-avatar">
             ${auth.user.picture
-              ? `<img src="${auth.user.picture}" alt="${this.escapeHtml(auth.user.name)}" />`
+              ? `<img src="${auth.user.picture}" alt="${escapeHtml(auth.user.name)}" />`
               : `<div class="glass-account-avatar-placeholder">${auth.user.name.charAt(0).toUpperCase()}</div>`
             }
           </div>
           <div class="glass-account-details">
-            <div class="glass-account-name">${this.escapeHtml(auth.user.name)}</div>
-            <div class="glass-account-email">${this.escapeHtml(auth.user.email)}</div>
+            <div class="glass-account-name">${escapeHtml(auth.user.name)}</div>
+            <div class="glass-account-email">${escapeHtml(auth.user.email)}</div>
           </div>
           <button class="glass-btn glass-btn-secondary glass-btn-logout" title="退出登录">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2465,7 +2643,7 @@ export class CommandPalette {
       if (response.success) {
         this.showToast('已从云端恢复');
         // Reload config to reflect changes
-        const { getStorageData } = await import('../utils/storage');
+        const { getStorageData } = await import('../../utils/storage');
         const data = await getStorageData();
         this.config = data.config;
         this.tempConfig = JSON.parse(JSON.stringify(this.config));
@@ -2755,7 +2933,7 @@ export class CommandPalette {
       return `
         <div class="glass-screenshot-result">
           <div class="glass-screenshot-result-label">AI 分析结果</div>
-          <div class="glass-screenshot-result-text">${this.escapeHtml(this.screenshotData.result)}</div>
+          <div class="glass-screenshot-result-text">${escapeHtml(this.screenshotData.result)}</div>
           <div class="glass-screenshot-result-actions">
             <button class="glass-btn glass-btn-copy-result">复制结果</button>
           </div>
@@ -2862,15 +3040,76 @@ export class CommandPalette {
   private filterCommands(): void {
     if (!this.searchQuery) {
       this.filteredItems = this.sortByRecent(this.menuItems);
+      this.globalSearchResults = { commands: [], knowledge: [], trails: [] };
+      this.isGlobalSearchLoading = false;
     } else {
+      // Filter commands locally (instant)
       this.filteredItems = this.menuItems.filter(item => {
         const label = (item.customLabel || item.label).toLowerCase();
         const action = item.action.toLowerCase();
         return label.includes(this.searchQuery) || action.includes(this.searchQuery);
       });
+      this.globalSearchResults.commands = this.filteredItems;
+
+      // Debounced global search for knowledge and trails
+      if (this.searchDebounceTimer) {
+        clearTimeout(this.searchDebounceTimer);
+      }
+      this.isGlobalSearchLoading = true;
+      this.searchDebounceTimer = window.setTimeout(() => {
+        this.performGlobalSearch(this.searchQuery);
+      }, 150);
     }
     this.selectedIndex = 0;
     this.renderCommands();
+  }
+
+  private async performGlobalSearch(query: string): Promise<void> {
+    if (!query || query !== this.searchQuery) return;
+
+    try {
+      // Search knowledge base
+      const [annotations, savedTasks] = await Promise.all([
+        getAllAnnotations(),
+        getAllTasks(),
+      ]);
+
+      const knowledgeItems: KnowledgeItem[] = [
+        ...annotations.map(a => this.annotationToKnowledgeItem(a)),
+        ...savedTasks.map(t => this.savedTaskToKnowledgeItem(t)),
+      ];
+
+      const queryLower = query.toLowerCase();
+      this.globalSearchResults.knowledge = knowledgeItems
+        .filter(item =>
+          item.content.toLowerCase().includes(queryLower) ||
+          item.pageTitle.toLowerCase().includes(queryLower) ||
+          item.note?.toLowerCase().includes(queryLower) ||
+          item.aiResult?.content?.toLowerCase().includes(queryLower)
+        )
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 5);
+
+      // Search browse trails
+      const sessions = await loadBrowseTrailSessions();
+      const allEntries: TrailEntry[] = sessions.flatMap(s => s.entries);
+      this.globalSearchResults.trails = allEntries
+        .filter(entry =>
+          entry.title.toLowerCase().includes(queryLower) ||
+          entry.url.toLowerCase().includes(queryLower) ||
+          entry.summary?.toLowerCase().includes(queryLower)
+        )
+        .sort((a, b) => b.visitedAt - a.visitedAt)
+        .slice(0, 5);
+
+    } catch (error) {
+      console.error('Global search error:', error);
+    }
+
+    this.isGlobalSearchLoading = false;
+    if (query === this.searchQuery) {
+      this.renderCommands();
+    }
   }
 
   private getFilteredRecentTasks(): SavedTask[] {
@@ -2897,6 +3136,13 @@ export class CommandPalette {
     const container = this.shadowRoot.querySelector('.glass-commands');
     if (!container) return;
 
+    // If searching, show global search results
+    if (this.searchQuery) {
+      this.renderGlobalSearchResults(container as HTMLElement);
+      return;
+    }
+
+    // Normal command list
     if (this.filteredItems.length === 0) {
       container.innerHTML = `
         <div class="glass-empty">
@@ -2914,7 +3160,7 @@ export class CommandPalette {
         return `
           <div class="glass-item ${isSelected ? 'selected' : ''}" data-index="${index}">
             <div class="glass-item-icon">${displayIcon}</div>
-            <div class="glass-item-label">${this.escapeHtml(displayLabel)}</div>
+            <div class="glass-item-label">${escapeHtml(displayLabel)}</div>
             ${isRecent ? '<span class="glass-item-badge">最近</span>' : ''}
             ${shortcutKey ? `<kbd class="glass-item-key">${shortcutKey}</kbd>` : ''}
           </div>
@@ -2940,6 +3186,126 @@ export class CommandPalette {
     this.renderRecentTasks();
   }
 
+  private renderGlobalSearchResults(container: HTMLElement): void {
+    const { commands, knowledge, trails } = this.globalSearchResults;
+    const hasResults = commands.length > 0 || knowledge.length > 0 || trails.length > 0;
+
+    if (!hasResults && !this.isGlobalSearchLoading) {
+      container.innerHTML = `
+        <div class="glass-empty">
+          <span>没有找到匹配的结果</span>
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+
+    // Commands section
+    if (commands.length > 0) {
+      html += `
+        <div class="glass-search-section">
+          <div class="glass-search-section-title">${icons.command} 命令</div>
+          ${commands.slice(0, 5).map((item, index) => `
+            <div class="glass-item ${index === this.selectedIndex ? 'selected' : ''}" data-type="command" data-index="${index}" data-id="${item.id}">
+              <div class="glass-item-icon">${item.customIcon || item.icon}</div>
+              <div class="glass-item-label">${escapeHtml(item.customLabel || item.label)}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Knowledge section
+    if (knowledge.length > 0) {
+      html += `
+        <div class="glass-search-section">
+          <div class="glass-search-section-title">${icons.library} 知识库</div>
+          ${knowledge.map(item => {
+            const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
+            const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
+            const preview = item.content.substring(0, 60) + (item.content.length > 60 ? '...' : '');
+            return `
+              <div class="glass-search-result" data-type="knowledge" data-id="${item.id}" data-url="${escapeHtml(item.url)}">
+                <div class="glass-search-result-icon">${typeIcon}</div>
+                <div class="glass-search-result-content">
+                  <div class="glass-search-result-title">${typeLabel}</div>
+                  <div class="glass-search-result-preview">${escapeHtml(preview)}</div>
+                  <div class="glass-search-result-meta">${escapeHtml(item.pageTitle || '')}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // Browse trails section
+    if (trails.length > 0) {
+      html += `
+        <div class="glass-search-section">
+          <div class="glass-search-section-title">${icons.history} 浏览轨迹</div>
+          ${trails.map(entry => `
+            <div class="glass-search-result" data-type="trail" data-url="${escapeHtml(entry.url)}">
+              <div class="glass-search-result-icon">${icons.globe}</div>
+              <div class="glass-search-result-content">
+                <div class="glass-search-result-title">${escapeHtml(entry.title || '无标题')}</div>
+                ${entry.summary ? `<div class="glass-search-result-preview">${escapeHtml(entry.summary.substring(0, 60))}...</div>` : ''}
+                <div class="glass-search-result-meta">${new URL(entry.url).hostname}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Loading indicator
+    if (this.isGlobalSearchLoading && !hasResults) {
+      html += `
+        <div class="glass-search-loading">
+          <span class="glass-search-loading-spinner"></span>
+          <span>搜索中...</span>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+
+    // Bind command events
+    container.querySelectorAll('.glass-item[data-type="command"]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-id');
+        const item = this.menuItems.find(m => m.id === id);
+        if (item) {
+          this.selectedIndex = 0;
+          this.handleSelectItem(item);
+        }
+      });
+    });
+
+    // Bind knowledge events
+    container.querySelectorAll('.glass-search-result[data-type="knowledge"]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const url = el.getAttribute('data-url');
+        if (url) {
+          this.hide();
+          window.open(url, '_blank');
+        }
+      });
+    });
+
+    // Bind trail events
+    container.querySelectorAll('.glass-search-result[data-type="trail"]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const url = el.getAttribute('data-url');
+        if (url) {
+          this.hide();
+          window.open(url, '_blank');
+        }
+      });
+    });
+  }
+
   private renderMinimizedTasks(): void {
     if (!this.shadowRoot) return;
 
@@ -2954,13 +3320,13 @@ export class CommandPalette {
     section.innerHTML = `
       <div class="glass-section-label">进行中</div>
       ${this.minimizedTasks.map(task => {
-        const icon = task.iconHtml || this.getDefaultMinimizedIcon();
-        const meta = this.getTaskMetaInfo(task);
+        const icon = task.iconHtml || getDefaultMinimizedIcon();
+        const meta = getTaskMetaInfo(task);
         return `
           <div class="glass-minimized-task" data-task-id="${task.id}">
             <div class="glass-task-icon">${icon}</div>
             <div class="glass-task-info">
-              <div class="glass-task-title">${this.escapeHtml(task.title)}</div>
+              <div class="glass-task-title">${escapeHtml(task.title)}</div>
               <div class="glass-task-meta">${meta}</div>
             </div>
             ${task.isLoading ? '<div class="glass-minimized-task-loading"></div>' : ''}
@@ -3011,13 +3377,13 @@ export class CommandPalette {
     section.innerHTML = `
       <div class="glass-section-label">最近记录</div>
       ${filteredTasks.map(task => {
-        const icon = this.getActionIcon(task.actionType);
-        const meta = this.getSavedTaskMetaInfo(task);
+        const icon = getActionIcon(task.actionType);
+        const meta = getSavedTaskMetaInfo(task);
         return `
           <div class="glass-recent-task" data-task-id="${task.id}">
             <div class="glass-task-icon">${icon}</div>
             <div class="glass-task-info">
-              <div class="glass-task-title">${this.escapeHtml(task.title)}</div>
+              <div class="glass-task-title">${escapeHtml(task.title)}</div>
               <div class="glass-task-meta">${meta}</div>
             </div>
             <button class="glass-recent-close" data-task-id="${task.id}">&times;</button>
@@ -3052,112 +3418,6 @@ export class CommandPalette {
         }
       });
     });
-  }
-
-  private getActionIcon(actionType: string): string {
-    const iconMap: Record<string, string> = {
-      translate: icons.translate,
-      summarize: icons.summarize,
-      summarizePage: icons.summarizePage,
-      explain: icons.explain,
-      rewrite: icons.rewrite,
-      codeExplain: icons.codeExplain,
-    };
-    return iconMap[actionType] || icons.messageCircle;
-  }
-
-  private getSavedTaskMetaInfo(task: SavedTask): string {
-    const parts: string[] = [];
-
-    // Time info
-    const timeAgo = this.formatTimeAgo(task.savedAt);
-    parts.push(timeAgo);
-
-    // Type-specific info
-    if (task.actionType === 'summarizePage') {
-      // For page summary: show page title and source site
-      if (task.sourceTitle) {
-        parts.push(task.sourceTitle);
-      } else if (task.sourceUrl) {
-        try {
-          parts.push(new URL(task.sourceUrl).hostname);
-        } catch {
-          // ignore invalid URL
-        }
-      }
-    } else if (task.resultType === 'translate') {
-      // For translation: show source site domain
-      if (task.sourceUrl) {
-        try {
-          parts.push(new URL(task.sourceUrl).hostname);
-        } catch {
-          // ignore invalid URL
-        }
-      }
-      // Also show original text preview
-      if (task.originalText) {
-        const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
-        parts.push(`"${preview}"`);
-      }
-    }
-
-    return parts.join(' · ');
-  }
-
-  private getTaskMetaInfo(task: MinimizedTask): string {
-    const parts: string[] = [];
-
-    // Time info
-    const timeAgo = this.formatTimeAgo(task.createdAt);
-    parts.push(timeAgo);
-
-    // Type-specific info
-    if (task.actionType === 'summarizePage') {
-      // For page summary: show page title or source site
-      if (task.sourceTitle) {
-        parts.push(task.sourceTitle);
-      } else if (task.sourceUrl) {
-        try {
-          parts.push(new URL(task.sourceUrl).hostname);
-        } catch {
-          // ignore invalid URL
-        }
-      }
-    } else if (task.resultType === 'translate') {
-      // For translation: show source site domain
-      if (task.sourceUrl) {
-        try {
-          parts.push(new URL(task.sourceUrl).hostname);
-        } catch {
-          // ignore invalid URL
-        }
-      }
-      // Also show original text preview
-      if (task.originalText) {
-        const preview = task.originalText.slice(0, 30) + (task.originalText.length > 30 ? '...' : '');
-        parts.push(`"${preview}"`);
-      }
-    }
-
-    // Loading status
-    if (task.isLoading) {
-      parts.push('处理中');
-    }
-
-    return parts.join(' · ');
-  }
-
-  private formatTimeAgo(timestamp: number): string {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-
-    if (seconds < 60) return '刚刚';
-    if (minutes < 60) return `${minutes}分钟前`;
-    if (hours < 24) return `${hours}小时前`;
-    return new Date(timestamp).toLocaleDateString();
   }
 
   public async loadRecentSavedTasks(): Promise<void> {
@@ -3197,7 +3457,7 @@ export class CommandPalette {
 
     this.activeCommand = {
       id: `saved_${task.id}`,
-      icon: this.getActionIcon(task.actionType),
+      icon: getActionIcon(task.actionType),
       label: actionLabelMap[task.actionType] || task.title,
       action: task.actionType,
       enabled: true,
@@ -3208,6 +3468,7 @@ export class CommandPalette {
     this.aiResultData = {
       title: task.title,
       content: task.content,
+      thinking: task.thinking,
       originalText: task.originalText,
       isLoading: false,
       resultType: task.resultType,
@@ -3241,8 +3502,8 @@ export class CommandPalette {
     if (!this.aiResultData) return;
 
     const onChunk: OnChunkCallback | undefined = this.config.useStreaming
-      ? (_chunk: string, fullText: string) => {
-          this.streamUpdate(_chunk, fullText);
+      ? (_chunk: string, fullText: string, thinking?: string) => {
+          this.streamUpdate(_chunk, fullText, thinking);
         }
       : undefined;
 
@@ -3337,6 +3598,13 @@ export class CommandPalette {
     }
     if (item.action === 'contextChat') {
       this.showContextChat();
+      return;
+    }
+
+    // Annotations and Knowledge transition to their own views
+    // Call onSelect without hiding the panel first
+    if (item.action === 'annotations' || item.action === 'knowledge') {
+      this.callbacks?.onSelect(item);
       return;
     }
 
@@ -3452,11 +3720,11 @@ export class CommandPalette {
             try { domain = new URL(entry.url).hostname; } catch {}
 
             return `
-              <div class="glass-trail-entry" data-url="${this.escapeHtml(entry.url)}">
+              <div class="glass-trail-entry" data-url="${escapeHtml(entry.url)}">
                 <div class="glass-trail-entry-info">
-                  <div class="glass-trail-entry-title">${this.escapeHtml(entry.title || '无标题')}</div>
+                  <div class="glass-trail-entry-title">${escapeHtml(entry.title || '无标题')}</div>
                   <div class="glass-trail-entry-meta">
-                    <span class="glass-trail-entry-domain">${this.escapeHtml(domain)}</span>
+                    <span class="glass-trail-entry-domain">${escapeHtml(domain)}</span>
                     <span class="glass-trail-entry-time">${time}</span>
                   </div>
                 </div>
@@ -3683,7 +3951,7 @@ export class CommandPalette {
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="contextChat">
           <span class="glass-command-tag-icon">${icons.messageCircle}</span>
-          <span class="glass-command-tag-label">${this.escapeHtml(label)}</span>
+          <span class="glass-command-tag-label">${escapeHtml(label)}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
@@ -3733,11 +4001,11 @@ export class CommandPalette {
       let contentHtml = '';
       if (msg.references && msg.references.length > 0) {
         const refsHtml = msg.references.map(r =>
-          `<div class="glass-chat-reference">"${this.escapeHtml(r.text)}"</div>`
+          `<div class="glass-chat-reference">"${escapeHtml(r.text)}"</div>`
         ).join('');
         contentHtml = `<div class="glass-chat-references">${refsHtml}</div>`;
       }
-      contentHtml += `<div class="glass-chat-msg-text">${this.formatAIContent(msg.content)}</div>`;
+      contentHtml += `<div class="glass-chat-msg-text">${formatAIContent(msg.content)}</div>`;
 
       return `
         <div class="glass-chat-msg ${roleClass}">
@@ -3839,7 +4107,7 @@ export class CommandPalette {
       content.innerHTML = this.getContextChatContentHTML() + `
         <div class="glass-chat-msg glass-chat-msg-assistant glass-chat-streaming">
           <div class="glass-chat-msg-label">AI</div>
-          <div class="glass-chat-msg-text">${this.getLoadingHTML()}</div>
+          <div class="glass-chat-msg-text">${getLoadingHTML()}</div>
         </div>
       `;
       // Remove the empty assistant msg from the rendered chat (it shows in streaming div)
@@ -3861,16 +4129,45 @@ export class CommandPalette {
     );
 
     try {
-      const onChunk: OnChunkCallback = (_chunk, fullText) => {
+      const onChunk: OnChunkCallback = (_chunk, fullText, thinking) => {
         if (!this.chatSession) return;
         const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = fullText;
+          if (thinking) {
+            lastMsg.thinking = thinking;
+          }
         }
         // Update streaming message
         const streamingEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text');
         if (streamingEl) {
-          streamingEl.innerHTML = this.formatAIContent(fullText);
+          streamingEl.innerHTML = formatAIContent(fullText);
+        }
+        // Update thinking section in streaming message
+        if (thinking) {
+          const streamingMsg = this.shadowRoot?.querySelector('.glass-chat-streaming');
+          if (streamingMsg) {
+            let thinkingSection = streamingMsg.querySelector('.glass-thinking-section');
+            if (!thinkingSection) {
+              // Insert thinking section before the text
+              const textEl = streamingMsg.querySelector('.glass-chat-msg-text');
+              if (textEl) {
+                textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(thinking));
+                thinkingSection = streamingMsg.querySelector('.glass-thinking-section');
+                // Bind toggle event
+                const header = thinkingSection?.querySelector('.glass-thinking-header');
+                header?.addEventListener('click', () => {
+                  thinkingSection?.classList.toggle('collapsed');
+                });
+              }
+            } else {
+              // Update existing thinking content
+              const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
+              if (thinkingContent) {
+                thinkingContent.innerHTML = formatAIContent(thinking);
+              }
+            }
+          }
         }
       };
 
@@ -3880,6 +4177,9 @@ export class CommandPalette {
         const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = response.result;
+          if (response.thinking) {
+            lastMsg.thinking = response.thinking;
+          }
         }
       } else {
         const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
@@ -3920,2236 +4220,816 @@ export class CommandPalette {
     }
   }
 
-  private escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  // ========================================
+  // Annotations View Methods
+  // ========================================
+
+  // Callback for scrolling to annotation on current page
+  private onScrollToAnnotation: ((id: string) => boolean) | null = null;
+
+  public async showAnnotations(callbacks?: { onScrollToAnnotation?: (id: string) => boolean }): Promise<void> {
+    this.annotationsList = await getAllAnnotations();
+    this.annotationsSearch = '';
+    this.onScrollToAnnotation = callbacks?.onScrollToAnnotation || null;
+    this.currentView = 'annotations';
+    this.viewStack = [];
+    this.renderCurrentView(true, true);
   }
 
-  private getTranslationHint(provider: string): string {
-    switch (provider) {
-      case 'ai': return '使用配置的 AI 服务商进行翻译，效果最佳但需要 API Key';
-      case 'google': return '使用 Google 翻译，免费，无需配置';
-      case 'microsoft': return '使用微软翻译，免费，无需配置';
-      case 'deeplx': return '使用 DeepLX 翻译服务，需要填写 API Key';
-      case 'custom': return '自定义翻译 API，接口格式: POST { text, source_lang, target_lang }';
-      default: return '';
+  private getAnnotationsViewHTML(): string {
+    return `
+      <div class="glass-search glass-draggable">
+        <div class="glass-command-tag" data-action="annotations">
+          <span class="glass-command-tag-icon">${icons.highlighter}</span>
+          <span class="glass-command-tag-label">批注</span>
+          <button class="glass-command-tag-close">&times;</button>
+        </div>
+        <input
+          type="text"
+          class="glass-input"
+          placeholder="搜索批注..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <kbd class="glass-kbd">ESC</kbd>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-knowledge-filter">
+        <button class="glass-filter-btn ${this.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
+        <button class="glass-filter-btn ${this.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">当前页面</button>
+      </div>
+      <div class="glass-body">
+        <div class="glass-knowledge-content">
+          ${this.getAnnotationsContentHTML()}
+        </div>
+      </div>
+      <div class="glass-footer">
+        <div class="glass-knowledge-footer-info">
+          ${this.getFilteredAnnotations().length} 条批注
+        </div>
+        <div class="glass-brand">
+          <span class="glass-logo">${icons.logo}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private getFilteredAnnotations(): Annotation[] {
+    let filtered = this.annotationsList;
+
+    // Filter by page
+    if (this.annotationsFilter === 'current') {
+      const currentUrl = this.normalizeUrlForAnnotation(window.location.href);
+      filtered = filtered.filter(a => a.url === currentUrl);
+    }
+
+    // Filter by search
+    const query = this.annotationsSearch.toLowerCase();
+    if (query) {
+      filtered = filtered.filter(a =>
+        a.highlightText.toLowerCase().includes(query) ||
+        a.note?.toLowerCase().includes(query) ||
+        a.pageTitle.toLowerCase().includes(query) ||
+        a.aiResult?.content?.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort by creation date (newest first)
+    return filtered.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  private normalizeUrlForAnnotation(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return parsed.origin + parsed.pathname;
+    } catch {
+      return url;
     }
   }
 
-  private getStyles(): string {
+  private getAnnotationsContentHTML(): string {
+    const annotations = this.getFilteredAnnotations();
+
+    if (annotations.length === 0) {
+      return `
+        <div class="glass-knowledge-empty">
+          <div class="glass-knowledge-empty-icon">${icons.highlighter}</div>
+          <div class="glass-knowledge-empty-text">
+            ${this.annotationsSearch ? '没有找到匹配的批注' : (this.annotationsFilter === 'current' ? '当前页面没有批注' : '还没有批注')}
+          </div>
+          <div class="glass-knowledge-empty-hint">
+            ${this.annotationsSearch ? '试试其他关键词' : '选择文本后点击高亮按钮添加批注'}
+          </div>
+        </div>
+      `;
+    }
+
+    // Group by date
+    const groups = this.groupAnnotationsByDate(annotations);
+
+    return Object.entries(groups).map(([date, items]) => `
+      <div class="glass-knowledge-group">
+        <div class="glass-knowledge-date"><span>${date}</span></div>
+        <div class="glass-knowledge-entries">
+          ${items.map(annotation => this.getAnnotationEntryHTML(annotation)).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private groupAnnotationsByDate(annotations: Annotation[]): Record<string, Annotation[]> {
+    const groups: Record<string, Annotation[]> = {};
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+    for (const annotation of annotations) {
+      const date = new Date(annotation.createdAt).toDateString();
+      let label: string;
+
+      if (date === today) {
+        label = '今天';
+      } else if (date === yesterday) {
+        label = '昨天';
+      } else {
+        label = new Date(annotation.createdAt).toLocaleDateString('zh-CN', {
+          month: 'long',
+          day: 'numeric',
+          weekday: 'short',
+        });
+      }
+
+      if (!groups[label]) {
+        groups[label] = [];
+      }
+      groups[label].push(annotation);
+    }
+
+    return groups;
+  }
+
+  private getAnnotationEntryHTML(annotation: Annotation): string {
+    const colorConfig = ANNOTATION_COLORS[annotation.color];
+    const time = new Date(annotation.createdAt).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    let domain = '';
+    try { domain = new URL(annotation.url).hostname; } catch {}
+
+    const truncatedText = annotation.highlightText.length > 120
+      ? annotation.highlightText.substring(0, 120) + '...'
+      : annotation.highlightText;
+
+    const hasNote = annotation.note && annotation.note.trim().length > 0;
+    const hasAI = annotation.aiResult && annotation.aiResult.content;
+
     return `
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      /* Transparent overlay to capture clicks outside panel */
-      .glass-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 2147483646;
-      }
-
-      /* ========================================
-         Apple Liquid Glass Design System
-         Authentic iOS 26 / visionOS aesthetics
-         ======================================== */
-
-      :host {
-        /* Dark mode - Primary palette */
-        --glass-bg: rgba(28, 28, 30, 0.72);
-        --glass-bg-elevated: rgba(44, 44, 46, 0.65);
-        --glass-bg-hover: rgba(255, 255, 255, 0.08);
-        --glass-bg-selected: rgba(255, 255, 255, 0.12);
-        --glass-border: rgba(255, 255, 255, 0.08);
-        --glass-border-strong: rgba(255, 255, 255, 0.15);
-        --glass-divider: rgba(255, 255, 255, 0.06);
-
-        /* Text hierarchy */
-        --text-primary: rgba(255, 255, 255, 0.92);
-        --text-secondary: rgba(255, 255, 255, 0.55);
-        --text-tertiary: rgba(255, 255, 255, 0.35);
-
-        /* Shadows - subtle depth */
-        --shadow-panel:
-          0 0 0 0.5px rgba(255, 255, 255, 0.1),
-          0 24px 80px -12px rgba(0, 0, 0, 0.5),
-          0 12px 40px -8px rgba(0, 0, 0, 0.3);
-        --shadow-item: 0 1px 3px rgba(0, 0, 0, 0.12);
-
-        /* Blur values */
-        --blur-panel: 40px;
-        --blur-overlay: 8px;
-
-        /* Timing */
-        --duration-fast: 150ms;
-        --duration-normal: 250ms;
-        --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-
-      /* Light mode overrides */
-      .light {
-        --glass-bg: rgba(255, 255, 255, 0.72);
-        --glass-bg-elevated: rgba(255, 255, 255, 0.85);
-        --glass-bg-hover: rgba(0, 0, 0, 0.04);
-        --glass-bg-selected: rgba(0, 0, 0, 0.08);
-        --glass-border: rgba(0, 0, 0, 0.06);
-        --glass-border-strong: rgba(0, 0, 0, 0.12);
-        --glass-divider: rgba(0, 0, 0, 0.05);
-
-        --text-primary: rgba(0, 0, 0, 0.88);
-        --text-secondary: rgba(0, 0, 0, 0.50);
-        --text-tertiary: rgba(0, 0, 0, 0.30);
-
-        --shadow-panel:
-          0 0 0 0.5px rgba(0, 0, 0, 0.08),
-          0 24px 80px -12px rgba(0, 0, 0, 0.18),
-          0 12px 40px -8px rgba(0, 0, 0, 0.1);
-      }
-
-      /* ========================================
-         Main Panel - Liquid Glass container
-         ======================================== */
-      .glass-panel {
-        /* Reset inherited styles to prevent page style pollution */
-        text-align: left;
-        line-height: normal;
-        letter-spacing: normal;
-        word-spacing: normal;
-        text-transform: none;
-        text-indent: 0;
-        text-shadow: none;
-        direction: ltr;
-        white-space: normal;
-        cursor: default;
-        visibility: visible;
-
-        position: fixed;
-        top: 18%;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 520px;
-        max-width: calc(100vw - 40px);
-        max-height: 65vh;
-
-        background: var(--glass-bg);
-        backdrop-filter: blur(var(--blur-panel)) saturate(180%);
-        -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(180%);
-
-        border: 0.5px solid var(--glass-border-strong);
-        border-radius: 18px;
-        box-shadow: var(--shadow-panel);
-
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        z-index: 2147483647;
-
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
-        font-feature-settings: "kern" 1, "liga" 1;
-        -webkit-font-smoothing: antialiased;
-      }
-
-      .glass-panel.glass-panel-enter {
-        animation: panelIn var(--duration-normal) var(--ease-spring);
-      }
-
-      .glass-panel.glass-panel-enter-restored {
-        animation: panelInRestored var(--duration-normal) var(--ease-spring);
-      }
-
-      @keyframes panelIn {
-        from {
-          opacity: 0;
-          transform: translateX(-50%) translateY(-16px) scale(0.97);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(-50%) translateY(0) scale(1);
-        }
-      }
-
-      @keyframes panelInRestored {
-        from {
-          opacity: 0;
-          transform: translateY(-16px) scale(0.97);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-
-      .glass-panel-exit {
-        animation: panelOut var(--duration-fast) var(--ease-out) forwards;
-      }
-
-      @keyframes panelOut {
-        from {
-          opacity: 1;
-          transform: translateX(-50%) translateY(0) scale(1);
-        }
-        to {
-          opacity: 0;
-          transform: translateX(-50%) translateY(-8px) scale(0.98);
-        }
-      }
-
-      .glass-panel-exit-dragged {
-        animation: panelOutDragged var(--duration-fast) var(--ease-out) forwards;
-      }
-
-      @keyframes panelOutDragged {
-        from {
-          opacity: 1;
-          transform: scale(1);
-        }
-        to {
-          opacity: 0;
-          transform: translateY(-8px) scale(0.98);
-        }
-      }
-
-      /* ========================================
-         Search Bar
-         ======================================== */
-      .glass-search {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 16px;
-      }
-
-      .glass-search.glass-draggable {
-        cursor: move;
-        user-select: none;
-      }
-
-      .glass-search-icon {
-        color: var(--text-tertiary);
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 26px;
-        width: 18px;
-      }
-
-      .glass-search-icon svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      /* Command Tag (active command indicator) */
-      .glass-command-tag {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        height: 26px;
-        padding: 0 8px 0 6px;
-        background: var(--glass-bg-selected);
-        border: 0.5px solid var(--glass-border-strong);
-        border-radius: 8px;
-        flex-shrink: 0;
-        cursor: default;
-        box-sizing: border-box;
-      }
-
-      .glass-command-tag-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-primary);
-      }
-
-      .glass-command-tag-icon svg {
-        width: 14px;
-        height: 14px;
-      }
-
-      .glass-command-tag-label {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--text-primary);
-        white-space: nowrap;
-      }
-
-      .glass-command-tag-close {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 16px;
-        height: 16px;
-        border: none;
-        background: transparent;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        border-radius: 4px;
-        font-size: 14px;
-        line-height: 1;
-        margin-left: 2px;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-command-tag-close:hover {
-        color: var(--text-primary);
-      }
-
-      .glass-input {
-        flex: 1;
-        background: transparent;
-        border: none;
-        outline: none;
-        font-size: 16px;
-        font-weight: 400;
-        letter-spacing: -0.01em;
-        color: var(--text-primary);
-        font-family: inherit;
-      }
-
-      .glass-input:disabled {
-        cursor: default;
-      }
-
-      .glass-input::placeholder {
-        color: var(--text-tertiary);
-      }
-
-      .glass-kbd {
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        color: var(--text-tertiary);
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        height: 26px;
-        padding: 0 7px;
-        border-radius: 5px;
-        font-family: "SF Mono", ui-monospace, monospace;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-sizing: border-box;
-      }
-
-      /* ========================================
-         AI Content Area (unified interface)
-         ======================================== */
-      .glass-ai-content-area {
-        padding: 16px;
-        min-height: 100px;
-      }
-
-      .glass-ai-content-area .glass-ai-content {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-primary);
-      }
-
-      .glass-ai-content-area .glass-ai-content code {
-        background: var(--glass-bg-hover);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-family: "SF Mono", ui-monospace, monospace;
-        font-size: 13px;
-      }
-
-      /* Footer action buttons */
-      .glass-ai-footer-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .glass-footer-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        border: 0.5px solid var(--glass-border);
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-footer-btn:hover {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
-      }
-
-      .glass-footer-btn svg {
-        width: 16px;
-        height: 16px;
-      }
-
-      .glass-footer-btn.glass-btn-stop {
-        color: #ff6b6b;
-        border-color: rgba(255, 107, 107, 0.3);
-      }
-
-      .glass-footer-btn.glass-btn-stop:hover {
-        background: rgba(255, 107, 107, 0.15);
-        color: #ff5252;
-      }
-
-      .glass-footer-btn.copied,
-      .glass-footer-btn.saved {
-        color: #4ade80;
-        border-color: rgba(74, 222, 128, 0.3);
-      }
-
-      /* ========================================
-         Divider
-         ======================================== */
-      .glass-divider {
-        height: 0.5px;
-        background: var(--glass-divider);
-        margin: 0 16px;
-      }
-
-      /* ========================================
-         Commands List
-         ======================================== */
-      .glass-body {
-        flex: 1;
-        overflow-y: auto;
-        overscroll-behavior: contain;
-      }
-
-      .glass-commands {
-        padding: 8px;
-      }
-
-      .glass-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition:
-          background var(--duration-fast) var(--ease-out),
-          transform var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-item:hover {
-        background: var(--glass-bg-hover);
-      }
-
-      .glass-item.selected {
-        background: var(--glass-bg-selected);
-      }
-
-      .glass-item:active {
-        transform: scale(0.98);
-      }
-
-      .glass-item-icon {
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--glass-bg-elevated);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
-        color: var(--text-primary);
-        flex-shrink: 0;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-item.selected .glass-item-icon {
-        background: var(--text-primary);
-        border-color: transparent;
-        color: var(--glass-bg);
-      }
-
-      .glass-item-icon svg {
-        width: 16px;
-        height: 16px;
-      }
-
-      .glass-item-label {
-        flex: 1;
-        font-size: 14px;
-        font-weight: 450;
-        letter-spacing: -0.01em;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-item-badge {
-        font-size: 10px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        color: var(--text-tertiary);
-        background: var(--glass-bg-hover);
-        padding: 2px 6px;
-        border-radius: 4px;
-      }
-
-      .glass-item-key {
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--text-tertiary);
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        padding: 2px 6px;
-        border-radius: 5px;
-        font-family: "SF Mono", ui-monospace, monospace;
-        min-width: 20px;
-        text-align: center;
-      }
-
-      /* ========================================
-         Empty State
-         ======================================== */
-      .glass-empty {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
-        color: var(--text-tertiary);
-        font-size: 14px;
-      }
-
-      /* ========================================
-         Footer
-         ======================================== */
-      .glass-footer {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 16px;
-        border-top: 0.5px solid var(--glass-divider);
-      }
-
-      .glass-hints {
-        display: flex;
-        gap: 14px;
-        font-size: 12px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-hints span {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .glass-hints kbd {
-        font-size: 10px;
-        font-weight: 500;
-        color: var(--text-tertiary);
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        padding: 2px 5px;
-        border-radius: 4px;
-        font-family: "SF Mono", ui-monospace, monospace;
-      }
-
-      .glass-brand {
-        display: flex;
-        align-items: center;
-      }
-
-      .glass-logo {
-        width: 16px;
-        height: 16px;
-        color: var(--text-tertiary);
-        opacity: 0.6;
-      }
-
-      .glass-logo svg {
-        width: 100%;
-        height: 100%;
-      }
-
-      /* ========================================
-         Scrollbar - Minimal & Isolated
-         ======================================== */
-      .glass-body,
-      .glass-ai-content,
-      .glass-ai-result-body {
-        /* Firefox */
-        scrollbar-width: thin;
-        scrollbar-color: var(--glass-border) transparent;
-      }
-
-      .glass-body::-webkit-scrollbar,
-      .glass-ai-content::-webkit-scrollbar,
-      .glass-ai-result-body::-webkit-scrollbar {
-        width: 6px !important;
-        height: 6px !important;
-        background: transparent !important;
-      }
-
-      .glass-body::-webkit-scrollbar-track,
-      .glass-ai-content::-webkit-scrollbar-track,
-      .glass-ai-result-body::-webkit-scrollbar-track {
-        background: transparent !important;
-        border-radius: 3px;
-      }
-
-      .glass-body::-webkit-scrollbar-thumb,
-      .glass-ai-content::-webkit-scrollbar-thumb,
-      .glass-ai-result-body::-webkit-scrollbar-thumb {
-        background: var(--glass-border) !important;
-        border-radius: 3px;
-        border: none !important;
-      }
-
-      .glass-body::-webkit-scrollbar-thumb:hover,
-      .glass-ai-content::-webkit-scrollbar-thumb:hover,
-      .glass-ai-result-body::-webkit-scrollbar-thumb:hover {
-        background: var(--glass-border-strong) !important;
-      }
-
-      .glass-body::-webkit-scrollbar-corner,
-      .glass-ai-content::-webkit-scrollbar-corner,
-      .glass-ai-result-body::-webkit-scrollbar-corner {
-        background: transparent !important;
-      }
-
-      /* ========================================
-         Responsive
-         ======================================== */
-      @media (max-width: 580px) {
-        .glass-panel {
-          top: 12%;
-          width: calc(100vw - 24px);
-          max-height: 75vh;
-          border-radius: 14px;
-        }
-
-        .glass-hints {
-          display: none;
-        }
-
-        .glass-item-key {
-          display: none;
-        }
-
-        .glass-item-badge {
-          display: none;
-        }
-      }
-
-      /* ========================================
-         Reduced Motion
-         ======================================== */
-      @media (prefers-reduced-motion: reduce) {
-        .glass-panel,
-        .glass-item,
-        .glass-item-icon {
-          animation: none;
-          transition: none;
-        }
-      }
-
-      /* ========================================
-         Header with Back Button
-         ======================================== */
-      .glass-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 16px;
-      }
-
-      .glass-header.glass-draggable {
-        cursor: move;
-        user-select: none;
-      }
-
-      .glass-header.glass-draggable:active {
-        cursor: grabbing;
-      }
-
-      .glass-back-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border: none;
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-        color: var(--text-primary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-back-btn:hover {
-        background: var(--glass-bg-selected);
-      }
-
-      .glass-header-title {
-        flex: 1;
-        font-size: 16px;
-        font-weight: 600;
-        color: var(--text-primary);
-      }
-
-      .glass-header-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .glass-header-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border: none;
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-header-btn:hover {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
-      }
-
-      .glass-header-btn.active {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
-      }
-
-      .glass-header-btn svg {
-        width: 16px;
-        height: 16px;
-      }
-
-      .glass-header-btn.glass-btn-stop {
-        color: #ff6b6b;
-      }
-
-      .glass-header-btn.glass-btn-stop:hover {
-        background: rgba(255, 107, 107, 0.15);
-        color: #ff5252;
-      }
-
-      .glass-header-btn.copied {
-        color: #4ade80;
-      }
-
-      .glass-minimize-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border: none;
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-minimize-btn:hover {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
-      }
-
-      /* ========================================
-         Dragging State
-         ======================================== */
-      .glass-panel-dragging {
-        transition: none !important;
-        user-select: none;
-      }
-
-      /* ========================================
-         Minimized Icon
-         ======================================== */
-      .glass-minimized-icon {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: var(--glass-bg);
-        backdrop-filter: blur(var(--blur-panel)) saturate(180%);
-        -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(180%);
-        border: 0.5px solid var(--glass-border-strong);
-        box-shadow: var(--shadow-panel);
-        cursor: pointer;
-        z-index: 2147483647;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all var(--duration-fast) var(--ease-out);
-        animation: minimizedIn var(--duration-normal) var(--ease-spring);
-      }
-
-      @keyframes minimizedIn {
-        from {
-          opacity: 0;
-          transform: scale(0.5);
-        }
-        to {
-          opacity: 1;
-          transform: scale(1);
-        }
-      }
-
-      .glass-minimized-icon:hover {
-        transform: scale(1.08);
-        box-shadow:
-          0 0 0 0.5px rgba(255, 255, 255, 0.15),
-          0 12px 40px -8px rgba(0, 0, 0, 0.4);
-      }
-
-      .glass-minimized-icon:hover .glass-minimized-tooltip {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-        pointer-events: auto;
-      }
-
-      .glass-minimized-icon-inner {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-primary);
-      }
-
-      .glass-minimized-icon-inner svg {
-        width: 20px;
-        height: 20px;
-      }
-
-      .glass-minimized-loading {
-        position: absolute;
-        inset: -4px;
-        border: 2px solid transparent;
-        border-top-color: var(--text-primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-
-      .glass-minimized-tooltip {
-        position: absolute;
-        bottom: calc(100% + 8px);
-        left: 50%;
-        transform: translateX(-50%) translateY(4px);
-        padding: 6px 12px;
-        background: var(--glass-bg-elevated);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--text-primary);
-        white-space: nowrap;
-        opacity: 0;
-        pointer-events: none;
-        transition: all var(--duration-fast) var(--ease-out);
-        box-shadow: var(--shadow-item);
-      }
-
-      /* ========================================
-         Minimized Tasks Section (in Commands View)
-         ======================================== */
-      .glass-minimized-section:empty {
-        display: none;
-      }
-
-      .glass-minimized-section {
-        border-top: 0.5px solid var(--glass-divider);
-        padding: 8px 0;
-      }
-
-      .glass-section-label {
-        padding: 4px 16px 8px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-minimized-task {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        cursor: pointer;
-        border-radius: 10px;
-        margin: 0 8px 4px;
-        transition: background var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-minimized-task:hover {
-        background: var(--glass-bg-hover);
-      }
-
-      .glass-task-icon {
-        width: 36px;
-        height: 36px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--glass-bg-elevated);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 10px;
-        color: var(--text-primary);
-        flex-shrink: 0;
-      }
-
-      .glass-task-icon svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      .glass-task-info {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
-      .glass-task-title {
-        font-size: 14px;
-        font-weight: 500;
-        letter-spacing: -0.01em;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-task-meta {
-        font-size: 12px;
-        color: var(--text-tertiary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-minimized-task-loading {
-        width: 14px;
-        height: 14px;
-        border: 1.5px solid var(--glass-border);
-        border-top-color: var(--text-primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        flex-shrink: 0;
-      }
-
-      .glass-minimized-close {
-        width: 20px;
-        height: 20px;
-        border: none;
-        background: transparent;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        font-size: 16px;
-        line-height: 1;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-minimized-close:hover {
-        color: #ff6b6b;
-      }
-
-      /* ========================================
-         Recent Tasks Section (Saved Tasks from IndexedDB)
-         ======================================== */
-      .glass-recent-section:empty {
-        display: none;
-      }
-
-      .glass-recent-section {
-        border-top: 0.5px solid var(--glass-divider);
-        padding: 8px 0;
-      }
-
-      .glass-recent-task {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        cursor: pointer;
-        border-radius: 10px;
-        margin: 0 8px 4px;
-        transition: background var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-recent-task:hover {
-        background: var(--glass-bg-hover);
-      }
-
-      .glass-recent-close {
-        width: 20px;
-        height: 20px;
-        border: none;
-        background: transparent;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        font-size: 16px;
-        line-height: 1;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-recent-close:hover {
-        color: #ff6b6b;
-      }
-
-      /* ========================================
-         AI Result View
-         ======================================== */
-      .glass-source-info {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        background: var(--glass-bg-hover);
-        border-bottom: 0.5px solid var(--glass-divider);
-      }
-
-      .glass-source-icon {
-        color: var(--text-tertiary);
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-      }
-
-      .glass-source-content {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-      }
-
-      .glass-source-link {
-        color: var(--text-secondary);
-        text-decoration: none;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: color var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-source-link:hover {
-        color: var(--text-primary);
-        text-decoration: underline;
-      }
-
-      .glass-source-title {
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-source-meta {
-        color: var(--text-tertiary);
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      .glass-source-meta::before {
-        content: '·';
-        margin-right: 8px;
-      }
-
-      .glass-ai-result-body {
-        padding: 16px;
-      }
-
-      .glass-ai-content {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-primary);
-      }
-
-      .glass-ai-content code {
-        background: var(--glass-bg-hover);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-family: "SF Mono", ui-monospace, monospace;
-        font-size: 13px;
-      }
-
-      .glass-loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        padding: 40px 20px;
-        color: var(--text-secondary);
-      }
-
-      .glass-spinner {
-        width: 24px;
-        height: 24px;
-        border: 2px solid var(--glass-border);
-        border-top-color: var(--text-primary);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-
-      .glass-ai-footer {
-        padding: 12px 16px;
-        border-top: 0.5px solid var(--glass-divider);
-      }
-
-      .glass-ai-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-      }
-
-      .glass-btn {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 8px 14px;
-        border: 0.5px solid var(--glass-border);
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-        color: var(--text-primary);
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        white-space: nowrap;
-      }
-
-      .glass-btn:hover {
-        background: var(--glass-bg-selected);
-        border-color: var(--glass-border-strong);
-      }
-
-      .glass-btn.active {
-        background: rgba(59, 130, 246, 0.2);
-        border-color: rgba(59, 130, 246, 0.5);
-      }
-
-      .glass-btn.copied {
-        background: rgba(34, 197, 94, 0.2);
-        border-color: rgba(34, 197, 94, 0.5);
-      }
-
-      .glass-btn svg {
-        width: 14px;
-        height: 14px;
-      }
-
-      .glass-btn-stop {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: rgba(239, 68, 68, 0.3);
-      }
-
-      .glass-btn-stop:hover {
-        background: rgba(239, 68, 68, 0.2);
-      }
-
-      /* Compare View */
-      .glass-compare-view {
-        display: flex;
-        gap: 16px;
-      }
-
-      .glass-compare-item {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .glass-compare-label {
-        font-size: 11px;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-tertiary);
-        margin-bottom: 8px;
-      }
-
-      .glass-compare-content {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-primary);
-      }
-
-      .glass-compare-divider {
-        width: 1px;
-        background: var(--glass-divider);
-      }
-
-      .glass-panel-wide {
-        width: 680px;
-        max-width: calc(100vw - 40px);
-      }
-
-      /* Language Select */
-      .glass-lang-select {
-        appearance: none;
-        height: 32px;
-        padding: 0 28px 0 10px;
-        border: 0.5px solid var(--glass-border);
-        background: var(--glass-bg-hover);
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 8px center;
-        border-radius: 8px;
-        color: var(--text-primary);
-        font-size: 13px;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-lang-select:hover {
-        background-color: var(--glass-bg-selected);
-        border-color: var(--glass-border-strong);
-      }
-
-      /* ========================================
-         Settings Views
-         ======================================== */
-      .glass-settings-flat {
-        padding: 0;
-      }
-
-      .glass-settings-section {
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--glass-divider);
-      }
-
-      .glass-settings-section:last-child {
-        border-bottom: none;
-      }
-
-      .glass-settings-section-title {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-secondary);
-        margin-bottom: 10px;
-      }
-
-      .glass-settings-body {
-        max-height: 400px;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: var(--glass-border) transparent;
-      }
-
-      .glass-settings-body::-webkit-scrollbar {
-        width: 6px !important;
-        height: 6px !important;
-        background: transparent !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-track {
-        background: transparent !important;
-        border-radius: 3px;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-thumb {
-        background: var(--glass-border) !important;
-        border-radius: 3px;
-        border: none !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-thumb:hover {
-        background: var(--glass-border-strong) !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-corner {
-        background: transparent !important;
-      }
-
-      .glass-settings-list {
-        padding: 8px;
-      }
-
-      .glass-settings-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: background var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-settings-item:hover {
-        background: var(--glass-bg-hover);
-      }
-
-      .glass-settings-icon {
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--glass-bg-elevated);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
-        color: var(--text-primary);
-        flex-shrink: 0;
-      }
-
-      .glass-settings-icon svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      .glass-settings-label {
-        flex: 1;
-        font-size: 14px;
-        font-weight: 450;
-        color: var(--text-primary);
-      }
-
-      .glass-settings-arrow {
-        color: var(--text-tertiary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .glass-settings-arrow svg {
-        width: 14px;
-        height: 14px;
-      }
-
-      /* Form Elements */
-      .glass-form {
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .glass-form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .glass-form-group + .glass-form-group {
-        margin-top: 10px;
-      }
-
-      .glass-form-group.glass-form-toggle {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        padding: 4px 0;
-        gap: 12px;
-      }
-
-      .glass-form-label {
-        font-size: 13px;
-        font-weight: 500;
-        color: var(--text-primary);
-      }
-
-      .glass-form-hint {
-        font-size: 11px;
-        color: var(--text-tertiary);
-        line-height: 1.4;
-      }
-
-      /* Account settings styles */
-      .glass-account-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 8px 0;
-        margin-bottom: 12px;
-      }
-
-      .glass-account-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        overflow: hidden;
-        flex-shrink: 0;
-      }
-
-      .glass-account-avatar img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      .glass-account-avatar-placeholder {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-weight: 600;
-        font-size: 16px;
-      }
-
-      .glass-account-details {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .glass-account-name {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-account-email {
-        font-size: 12px;
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .glass-account-login {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .glass-btn-google {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        width: 100%;
-        padding: 10px 16px;
-        background: var(--glass-bg-elevated);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        color: var(--text-primary);
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-btn-google:hover {
-        background: var(--glass-bg-hover);
-        border-color: var(--glass-border-strong);
-      }
-
-      .glass-btn-google svg {
-        flex-shrink: 0;
-      }
-
-      .glass-btn-logout {
-        padding: 8px;
-        background: transparent;
-        border: 1px solid var(--glass-border);
-        border-radius: 6px;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .glass-btn-logout:hover {
-        background: rgba(239, 68, 68, 0.1);
-        border-color: rgba(239, 68, 68, 0.3);
-        color: #ef4444;
-      }
-
-      .glass-btn-secondary {
-        background: transparent;
-        border: 1px solid var(--glass-border);
-      }
-
-      .glass-btn-sync-now {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 12px;
-        background: var(--glass-bg-elevated);
-        border: 1px solid var(--glass-border);
-        border-radius: 6px;
-        color: var(--text-primary);
-        font-size: 12px;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-btn-sync-now:hover {
-        background: var(--glass-bg-hover);
-        border-color: var(--glass-border-strong);
-      }
-
-      .glass-btn-sync-now:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .glass-btn-sync-now svg {
-        flex-shrink: 0;
-      }
-
-      .glass-spinner {
-        display: inline-block;
-        width: 14px;
-        height: 14px;
-        border: 2px solid var(--glass-border);
-        border-top-color: var(--text-primary);
-        border-radius: 50%;
-        animation: spin 0.6s linear infinite;
-      }
-
-      .glass-select {
-        appearance: none;
-        width: 100%;
-        padding: 8px 32px 8px 10px;
-        border: 1px solid var(--glass-border);
-        background: var(--glass-bg-hover);
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        border-radius: 6px;
-        color: var(--text-primary);
-        font-size: 13px;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        box-sizing: border-box;
-      }
-
-      .glass-select:hover {
-        background-color: var(--glass-bg-selected);
-        border-color: var(--glass-border-strong);
-      }
-
-      .glass-select:focus {
-        outline: none;
-        border-color: rgba(59, 130, 246, 0.5);
-      }
-
-      .glass-input-field {
-        width: 100%;
-        padding: 8px 10px;
-        border: 1px solid var(--glass-border);
-        background: var(--glass-bg-hover);
-        border-radius: 6px;
-        color: var(--text-primary);
-        font-size: 13px;
-        outline: none;
-        transition: all var(--duration-fast) var(--ease-out);
-        box-sizing: border-box;
-      }
-
-      .glass-input-field:focus {
-        border-color: rgba(59, 130, 246, 0.5);
-        background: rgba(59, 130, 246, 0.1);
-      }
-
-      .glass-input-field::placeholder {
-        color: var(--text-tertiary);
-      }
-
-      /* Toggle Switch */
-      .glass-toggle {
-        position: relative;
-        display: inline-block;
-        width: 36px;
-        height: 20px;
-        flex-shrink: 0;
-      }
-
-      .glass-toggle input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-
-      .glass-toggle-slider {
-        position: absolute;
-        cursor: pointer;
-        inset: 0;
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 20px;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-toggle-slider::before {
-        content: "";
-        position: absolute;
-        height: 14px;
-        width: 14px;
-        left: 2px;
-        bottom: 2px;
-        background: var(--text-primary);
-        border-radius: 50%;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-toggle input:checked + .glass-toggle-slider {
-        background: rgba(59, 130, 246, 0.8);
-        border-color: rgba(59, 130, 246, 0.8);
-      }
-
-      .glass-toggle input:checked + .glass-toggle-slider::before {
-        transform: translateX(16px);
-        background: white;
-      }
-
-      .glass-toggle-small {
-        width: 32px;
-        height: 18px;
-      }
-
-      .glass-toggle-small .glass-toggle-slider::before {
-        height: 12px;
-        width: 12px;
-      }
-
-      .glass-toggle-small input:checked + .glass-toggle-slider::before {
-        transform: translateX(14px);
-      }
-
-      /* Menu Management */
-      .glass-menu-list {
-        padding: 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .glass-menu-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        border-radius: 10px;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-menu-item:hover {
-        background: var(--glass-bg-selected);
-      }
-
-      .glass-menu-item.dragging {
-        opacity: 0.5;
-      }
-
-      .glass-menu-item.drag-over {
-        border-color: rgba(59, 130, 246, 0.5);
-        background: rgba(59, 130, 246, 0.1);
-      }
-
-      .glass-menu-drag {
-        color: var(--text-tertiary);
-        cursor: grab;
-        font-size: 12px;
-        letter-spacing: 2px;
-      }
-
-      .glass-menu-icon {
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-primary);
-      }
-
-      .glass-menu-icon svg {
-        width: 16px;
-        height: 16px;
-      }
-
-      .glass-menu-label {
-        flex: 1;
-        font-size: 14px;
-        color: var(--text-primary);
-      }
-
-      .glass-menu-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border: none;
-        background: transparent;
-        border-radius: 6px;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-menu-btn:hover {
-        background: var(--glass-bg-hover);
-        color: var(--text-primary);
-      }
-
-      .glass-menu-delete:hover {
-        background: rgba(239, 68, 68, 0.1);
-        color: rgb(239, 68, 68);
-      }
-
-      /* Footer */
-      .glass-footer-hint {
-        font-size: 12px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-btn-danger {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 10px 16px;
-        background: rgba(239, 68, 68, 0.1);
-        border: 1px solid rgba(239, 68, 68, 0.3);
-        border-radius: 8px;
-        color: rgb(239, 68, 68);
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        width: 100%;
-      }
-
-      .glass-btn-danger:hover {
-        background: rgba(239, 68, 68, 0.2);
-        border-color: rgba(239, 68, 68, 0.5);
-      }
-
-      .glass-btn-reset {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 10px 16px;
-        background: var(--glass-bg-hover);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        color: var(--text-secondary);
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        width: 100%;
-      }
-
-      .glass-btn-reset:hover {
-        background: var(--glass-bg-selected);
-        border-color: var(--glass-border-strong);
-        color: var(--text-primary);
-      }
-
-      .glass-settings-footer {
-        justify-content: flex-end;
-      }
-
-      .glass-settings-footer-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      .glass-btn-cancel {
-        padding: 6px 16px;
-        background: var(--glass-bg-hover);
-        border: 1px solid var(--glass-border);
-        border-radius: 8px;
-        color: var(--text-secondary);
-        font-size: 13px;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-btn-cancel:hover {
-        background: var(--glass-bg-selected);
-        color: var(--text-primary);
-      }
-
-      .glass-btn-primary {
-        padding: 6px 16px;
-        background: var(--text-primary);
-        border: 1px solid transparent;
-        border-radius: 8px;
-        color: var(--glass-bg);
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-btn-primary:hover {
-        opacity: 0.85;
-      }
-
-      .glass-btn-add {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 10px 16px;
-        background: rgba(59, 130, 246, 0.1);
-        border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 8px;
-        color: rgb(59, 130, 246);
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-        width: 100%;
-      }
-
-      .glass-btn-add:hover {
-        background: rgba(59, 130, 246, 0.2);
-        border-color: rgba(59, 130, 246, 0.5);
-      }
-
-      /* Screenshot View */
-      .glass-screenshot-body {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        max-height: 400px;
-        overflow-y: auto;
-      }
-
-      .glass-screenshot-preview {
-        padding: 12px;
-        display: flex;
-        justify-content: center;
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-      }
-
-      .glass-screenshot-preview img {
-        max-width: 100%;
-        max-height: 200px;
-        border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-      }
-
-      .glass-screenshot-content {
-        padding: 0 12px 12px;
-      }
-
-      .glass-screenshot-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .glass-screenshot-actions .glass-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        padding: 6px 10px;
-        font-size: 12px;
-      }
-
-      .glass-screenshot-result {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .glass-screenshot-result-label,
-      .glass-screenshot-generated-label {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .glass-screenshot-result-text {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-primary);
-        white-space: pre-wrap;
-        max-height: 150px;
-        overflow-y: auto;
-        padding: 12px;
-        background: var(--glass-bg-hover);
-        border-radius: 8px;
-      }
-
-      .glass-screenshot-generated-img {
-        max-width: 100%;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-      }
-
-      .glass-screenshot-result-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-        margin-top: 8px;
-      }
-
-      .glass-loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        padding: 20px;
-        color: var(--text-secondary);
-      }
-
-      .glass-loading-spinner {
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--glass-border);
-        border-top-color: var(--text-primary);
-        border-radius: 50%;
-        animation: glass-spin 0.8s linear infinite;
-      }
-
-      @keyframes glass-spin {
-        to { transform: rotate(360deg); }
-      }
-
-      /* Toast */
-      .glass-toast {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%) translateY(20px);
-        padding: 10px 20px;
-        background: var(--glass-bg);
-        border: 0.5px solid var(--glass-border-strong);
-        border-radius: 20px;
-        color: var(--text-primary);
-        font-size: 13px;
-        opacity: 0;
-        transition: all var(--duration-fast) var(--ease-out);
-        z-index: 10;
-      }
-
-      .glass-toast.show {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-      }
-
-      /* View Transition */
-      .glass-view-transition {
-        animation: viewTransition var(--duration-fast) var(--ease-out);
-      }
-
-      @keyframes viewTransition {
-        from {
-          opacity: 0.8;
-        }
-        to {
-          opacity: 1;
-        }
-      }
-
-      /* ========================================
-         Browse Trail View
-         ======================================== */
-      .glass-trail-content {
-        padding: 8px;
-      }
-
-      .glass-trail-empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
-        text-align: center;
-      }
-
-      .glass-trail-empty-icon {
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-tertiary);
-        margin-bottom: 12px;
-      }
-
-      .glass-trail-empty-icon svg {
-        width: 32px;
-        height: 32px;
-      }
-
-      .glass-trail-empty-text {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-secondary);
-        margin-bottom: 4px;
-      }
-
-      .glass-trail-empty-hint {
-        font-size: 12px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-trail-group {
-        margin-bottom: 12px;
-      }
-
-      .glass-trail-date {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text-secondary);
-        padding: 4px 12px;
-        margin-bottom: 4px;
-      }
-
-      .glass-trail-entries {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-
-      .glass-trail-entry {
-        display: flex;
-        align-items: center;
-        padding: 10px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: background var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-trail-entry:hover {
-        background: var(--glass-bg-hover);
-      }
-
-      .glass-trail-entry-info {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .glass-trail-entry-title {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-bottom: 2px;
-      }
-
-      .glass-trail-entry-meta {
-        display: flex;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-trail-entry-domain {
-        max-width: 150px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .glass-trail-entry-delete {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 24px;
-        height: 24px;
-        border: none;
-        background: transparent;
-        color: var(--text-tertiary);
-        cursor: pointer;
-        border-radius: 6px;
-        font-size: 16px;
-        opacity: 0;
-        transition: all var(--duration-fast) var(--ease-out);
-        margin-left: 8px;
-        flex-shrink: 0;
-      }
-
-      .glass-trail-entry:hover .glass-trail-entry-delete {
-        opacity: 1;
-      }
-
-      .glass-trail-entry-delete:hover {
-        color: #ff6b6b;
-      }
-
-      .glass-trail-load-more {
-        display: flex;
-        justify-content: center;
-        padding: 12px 0;
-      }
-
-      .glass-btn-load-more {
-        background: var(--glass-bg-hover);
-        border: 0.5px solid var(--glass-border);
-        color: var(--text-secondary);
-        padding: 6px 16px;
-        border-radius: 8px;
-        font-size: 12px;
-        cursor: pointer;
-        transition: all var(--duration-fast) var(--ease-out);
-      }
-
-      .glass-btn-load-more:hover {
-        background: var(--glass-border);
-        color: var(--text-primary);
-      }
-
-      .glass-trail-footer-actions {
-        display: flex;
-        gap: 8px;
-      }
-
-      /* ========================================
-         Context Chat View
-         ======================================== */
-      .glass-chat-content {
-        padding: 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-
-      .glass-chat-empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
-        text-align: center;
-      }
-
-      .glass-chat-empty-icon {
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: var(--text-tertiary);
-        margin-bottom: 12px;
-      }
-
-      .glass-chat-empty-icon svg {
-        width: 32px;
-        height: 32px;
-      }
-
-      .glass-chat-empty-text {
-        font-size: 14px;
-        color: var(--text-secondary);
-      }
-
-      .glass-chat-msg {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .glass-chat-msg-label {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: var(--text-tertiary);
-      }
-
-      .glass-chat-msg-text {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-primary);
-      }
-
-      .glass-chat-msg-text code {
-        background: var(--glass-bg-hover);
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-family: "SF Mono", ui-monospace, monospace;
-        font-size: 13px;
-      }
-
-      .glass-chat-msg-user .glass-chat-msg-text {
-        background: var(--glass-bg-selected);
-        padding: 10px 14px;
-        border-radius: 12px;
-        border-top-left-radius: 4px;
-      }
-
-      .glass-chat-msg-assistant .glass-chat-msg-text {
-        background: var(--glass-bg-hover);
-        padding: 10px 14px;
-        border-radius: 12px;
-        border-top-left-radius: 4px;
-      }
-
-      .glass-chat-references {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        margin-bottom: 8px;
-      }
-
-      .glass-chat-reference {
-        font-size: 12px;
-        color: var(--text-secondary);
-        background: var(--glass-bg-hover);
-        padding: 6px 10px;
-        border-radius: 6px;
-        border-left: 3px solid var(--glass-border-strong);
-        font-style: italic;
-      }
-
-      .glass-chat-streaming .glass-chat-msg-text {
-        box-shadow: inset 0 0 0 1px var(--glass-border-strong);
-      }
-
-      .glass-chat-footer-actions {
-        display: flex;
-        gap: 8px;
-      }
+      <div class="glass-knowledge-entry" data-id="${annotation.id}" data-url="${escapeHtml(annotation.url)}" style="border-left: 3px solid ${colorConfig.border}">
+        <div class="glass-knowledge-entry-header">
+          <span class="glass-knowledge-entry-type">
+            <span class="glass-knowledge-entry-type-icon">${icons.highlighter}</span>
+            批注
+          </span>
+          <span class="glass-knowledge-entry-time">${time}</span>
+        </div>
+        <div class="glass-knowledge-entry-content">${escapeHtml(truncatedText)}</div>
+        ${hasNote ? `<div class="glass-knowledge-entry-note">${escapeHtml(annotation.note || '')}</div>` : ''}
+        ${hasAI ? `
+          <div class="glass-knowledge-entry-ai">
+            <span class="glass-knowledge-entry-ai-badge">AI ${this.getAIResultTypeLabel(annotation.aiResult?.type || 'translate')}</span>
+            <span class="glass-knowledge-entry-ai-preview">${escapeHtml(annotation.aiResult?.content?.substring(0, 60) || '')}...</span>
+          </div>
+        ` : ''}
+        <div class="glass-knowledge-entry-meta">
+          <span class="glass-knowledge-entry-page" title="${escapeHtml(annotation.pageTitle)}">${escapeHtml(annotation.pageTitle || domain)}</span>
+        </div>
+        <button class="glass-knowledge-entry-delete" data-id="${annotation.id}" title="删除">&times;</button>
+      </div>
     `;
   }
+
+  private getAIResultTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      translate: '翻译',
+      explain: '解释',
+      summarize: '总结',
+      rewrite: '改写',
+    };
+    return labels[type] || type;
+  }
+
+  private bindAnnotationsEvents(): void {
+    if (!this.shadowRoot) return;
+
+    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
+    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
+
+    if (searchArea) {
+      searchArea.addEventListener('mousedown', this.handleDragStart);
+    }
+
+    // Command tag close
+    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
+    tagClose?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+    });
+
+    // Filter buttons
+    const filterBtns = this.shadowRoot.querySelectorAll('.glass-filter-btn');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.annotationsFilter = (btn as HTMLElement).dataset.filter as 'all' | 'current';
+        const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+        if (content) {
+          content.innerHTML = this.getAnnotationsContentHTML();
+          this.bindAnnotationEntryEvents();
+        }
+        // Update filter button states
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // Update footer count
+        const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
+        if (footerInfo) {
+          footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+        }
+      });
+    });
+
+    // Search
+    input?.addEventListener('input', () => {
+      this.annotationsSearch = input.value.trim();
+      const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+      if (content) {
+        content.innerHTML = this.getAnnotationsContentHTML();
+        this.bindAnnotationEntryEvents();
+      }
+      // Update footer count
+      const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
+      if (footerInfo) {
+        footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+      }
+    });
+
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.currentView = 'commands';
+        this.viewStack = [];
+        this.renderCurrentView(true, true);
+      }
+    });
+
+    // Bind entry events
+    this.bindAnnotationEntryEvents();
+  }
+
+  private bindAnnotationEntryEvents(): void {
+    if (!this.shadowRoot) return;
+
+    // Entry click - navigate to the page and scroll to the annotation
+    const entries = this.shadowRoot.querySelectorAll('.glass-knowledge-entry');
+    entries.forEach(entry => {
+      entry.addEventListener('click', (e) => {
+        // Don't navigate if clicking delete button
+        if ((e.target as HTMLElement).classList.contains('glass-knowledge-entry-delete')) return;
+
+        const url = (entry as HTMLElement).dataset.url;
+        const id = (entry as HTMLElement).dataset.id;
+        if (url) {
+          // If on the same page, scroll to the annotation
+          const currentUrl = this.normalizeUrlForAnnotation(window.location.href);
+          if (url === currentUrl) {
+            this.hide();
+            // Try to scroll to the annotation after hiding
+            if (id && this.onScrollToAnnotation) {
+              setTimeout(() => {
+                this.onScrollToAnnotation?.(id);
+              }, 300); // Wait for panel to hide
+            }
+          } else {
+            // Navigate to the page (annotation will be visible when page loads)
+            window.location.href = url;
+          }
+        }
+      });
+    });
+
+    // Delete buttons
+    const deleteButtons = this.shadowRoot.querySelectorAll('.glass-knowledge-entry-delete');
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = (btn as HTMLElement).dataset.id;
+        if (id && confirm('确定要删除这条批注吗？')) {
+          await deleteAnnotationFromStorage(id);
+          // Remove from local list
+          this.annotationsList = this.annotationsList.filter(a => a.id !== id);
+          // Re-render content
+          const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+          if (content) {
+            content.innerHTML = this.getAnnotationsContentHTML();
+            this.bindAnnotationEntryEvents();
+          }
+          // Update footer count
+          const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
+          if (footerInfo) {
+            footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+          }
+        }
+      });
+    });
+  }
+
+  // ========================================
+  // Knowledge Base View Methods
+  // ========================================
+
+  public async showKnowledge(): Promise<void> {
+    try {
+      // Load all data
+      const [annotations, savedTasks] = await Promise.all([
+        getAllAnnotations(),
+        getAllTasks(),
+      ]);
+
+      // Convert to unified format
+      this.knowledgeItems = [
+        ...annotations.map(a => this.annotationToKnowledgeItem(a)),
+        ...savedTasks.map(t => this.savedTaskToKnowledgeItem(t)),
+      ];
+
+      // Sort by date (newest first)
+      this.knowledgeItems.sort((a, b) => b.createdAt - a.createdAt);
+
+      this.knowledgeSearch = '';
+      this.knowledgeFilter = 'all';
+      this.currentView = 'knowledge';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+    } catch (error) {
+      console.error('The Panel: Failed to load knowledge base', error);
+      // Still show the view with empty content
+      this.knowledgeItems = [];
+      this.knowledgeSearch = '';
+      this.knowledgeFilter = 'all';
+      this.currentView = 'knowledge';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+    }
+  }
+
+  private annotationToKnowledgeItem(annotation: Annotation): KnowledgeItem {
+    return {
+      id: `ann_${annotation.id}`,
+      type: 'annotation',
+      title: annotation.highlightText.substring(0, 50) + (annotation.highlightText.length > 50 ? '...' : ''),
+      content: annotation.highlightText,
+      url: annotation.url,
+      pageTitle: annotation.pageTitle,
+      createdAt: annotation.createdAt,
+      color: annotation.color,
+      note: annotation.note,
+      aiResult: annotation.aiResult ? {
+        type: annotation.aiResult.type,
+        content: annotation.aiResult.content,
+        thinking: annotation.aiResult.thinking,
+      } : undefined,
+    };
+  }
+
+  private savedTaskToKnowledgeItem(task: SavedTask): KnowledgeItem {
+    return {
+      id: `task_${task.id}`,
+      type: 'ai-result',
+      title: task.title,
+      content: task.content,
+      originalText: task.originalText,
+      url: task.sourceUrl || '',
+      pageTitle: task.sourceTitle || '',
+      createdAt: task.createdAt,
+      actionType: task.actionType,
+      thinking: task.thinking,
+    };
+  }
+
+  private getKnowledgeViewHTML(): string {
+    return `
+      <div class="glass-search glass-draggable">
+        <div class="glass-command-tag" data-action="knowledge">
+          <span class="glass-command-tag-icon">${icons.library}</span>
+          <span class="glass-command-tag-label">知识库</span>
+          <button class="glass-command-tag-close">&times;</button>
+        </div>
+        <input
+          type="text"
+          class="glass-input"
+          placeholder="搜索知识库..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <kbd class="glass-kbd">ESC</kbd>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-knowledge-filter">
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">批注</button>
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">AI 结果</button>
+      </div>
+      <div class="glass-body">
+        <div class="glass-knowledge-content">
+          ${this.getKnowledgeContentHTML()}
+        </div>
+      </div>
+      <div class="glass-footer">
+        <div class="glass-footer-content">
+          <div class="glass-knowledge-footer-info">
+            ${this.getFilteredKnowledgeItems().length} 条记录
+          </div>
+          <button class="glass-footer-btn glass-btn-export-knowledge" title="导出">
+            ${icons.download}
+          </button>
+        </div>
+        <div class="glass-brand">
+          <span class="glass-logo">${icons.logo}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  private getFilteredKnowledgeItems(): KnowledgeItem[] {
+    let filtered = this.knowledgeItems;
+
+    // Filter by type
+    if (this.knowledgeFilter === 'annotations') {
+      filtered = filtered.filter(item => item.type === 'annotation');
+    } else if (this.knowledgeFilter === 'ai-results') {
+      filtered = filtered.filter(item => item.type === 'ai-result');
+    }
+
+    // Filter by search
+    const query = this.knowledgeSearch.toLowerCase();
+    if (query) {
+      filtered = filtered.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.content.toLowerCase().includes(query) ||
+        item.pageTitle.toLowerCase().includes(query) ||
+        item.note?.toLowerCase().includes(query) ||
+        item.originalText?.toLowerCase().includes(query) ||
+        item.aiResult?.content?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }
+
+  private getKnowledgeContentHTML(): string {
+    const items = this.getFilteredKnowledgeItems();
+
+    if (items.length === 0) {
+      return `
+        <div class="glass-knowledge-empty">
+          <div class="glass-knowledge-empty-icon">${icons.library}</div>
+          <div class="glass-knowledge-empty-text">
+            ${this.knowledgeSearch ? '没有找到匹配的记录' : '知识库为空'}
+          </div>
+          <div class="glass-knowledge-empty-hint">
+            ${this.knowledgeSearch ? '试试其他关键词' : '批注和 AI 结果会自动保存到这里'}
+          </div>
+        </div>
+      `;
+    }
+
+    // Group by date
+    const groups = this.groupKnowledgeByDate(items);
+
+    return Object.entries(groups).map(([date, groupItems]) => `
+      <div class="glass-knowledge-group">
+        <div class="glass-knowledge-date"><span>${date}</span></div>
+        <div class="glass-knowledge-entries">
+          ${groupItems.map(item => this.getKnowledgeItemHTML(item)).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private groupKnowledgeByDate(items: KnowledgeItem[]): Record<string, KnowledgeItem[]> {
+    const groups: Record<string, KnowledgeItem[]> = {};
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+    for (const item of items) {
+      const date = new Date(item.createdAt).toDateString();
+      let label: string;
+
+      if (date === today) {
+        label = '今天';
+      } else if (date === yesterday) {
+        label = '昨天';
+      } else {
+        label = new Date(item.createdAt).toLocaleDateString('zh-CN', {
+          month: 'long',
+          day: 'numeric',
+          weekday: 'short',
+        });
+      }
+
+      if (!groups[label]) {
+        groups[label] = [];
+      }
+      groups[label].push(item);
+    }
+
+    return groups;
+  }
+
+  private getKnowledgeItemHTML(item: KnowledgeItem): string {
+    const time = new Date(item.createdAt).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    let domain = '';
+    try { domain = new URL(item.url).hostname; } catch {}
+
+    const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
+    const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
+    const colorStyle = item.color ? `border-left: 3px solid ${ANNOTATION_COLORS[item.color as keyof typeof ANNOTATION_COLORS]?.border || '#fbbf24'}` : '';
+
+    const truncatedContent = item.content.length > 120
+      ? item.content.substring(0, 120) + '...'
+      : item.content;
+
+    return `
+      <div class="glass-knowledge-entry" data-id="${item.id}" data-type="${item.type}" data-url="${escapeHtml(item.url)}" style="${colorStyle}">
+        <div class="glass-knowledge-entry-header">
+          <span class="glass-knowledge-entry-type">
+            <span class="glass-knowledge-entry-type-icon">${typeIcon}</span>
+            ${typeLabel}
+          </span>
+          <span class="glass-knowledge-entry-time">${time}</span>
+        </div>
+        <div class="glass-knowledge-entry-content">${escapeHtml(truncatedContent)}</div>
+        ${item.note ? `<div class="glass-knowledge-entry-note">${escapeHtml(item.note)}</div>` : ''}
+        ${item.aiResult ? `
+          <div class="glass-knowledge-entry-ai">
+            <span class="glass-knowledge-entry-ai-badge">AI ${this.getAIResultTypeLabel(item.aiResult.type)}</span>
+            <span class="glass-knowledge-entry-ai-preview">${escapeHtml(item.aiResult.content.substring(0, 60))}...</span>
+          </div>
+        ` : ''}
+        <div class="glass-knowledge-entry-meta">
+          <span class="glass-knowledge-entry-page" title="${escapeHtml(item.pageTitle)}">${escapeHtml(item.pageTitle || domain)}</span>
+        </div>
+        <button class="glass-knowledge-entry-delete" data-id="${item.id}" title="删除">&times;</button>
+      </div>
+    `;
+  }
+
+  private getActionTypeLabel(actionType?: string): string {
+    const labels: Record<string, string> = {
+      translate: '翻译',
+      summarize: '总结',
+      explain: '解释',
+      rewrite: '改写',
+      summarizePage: '页面总结',
+      codeExplain: '代码解释',
+    };
+    return labels[actionType || ''] || 'AI 结果';
+  }
+
+  private bindKnowledgeEvents(): void {
+    if (!this.shadowRoot) return;
+
+    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
+    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
+
+    if (searchArea) {
+      searchArea.addEventListener('mousedown', this.handleDragStart);
+    }
+
+    // Command tag close
+    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
+    tagClose?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+    });
+
+    // Filter buttons
+    const filterBtns = this.shadowRoot.querySelectorAll('.glass-filter-btn');
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.knowledgeFilter = (btn as HTMLElement).dataset.filter as 'all' | 'annotations' | 'ai-results';
+        const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+        if (content) {
+          content.innerHTML = this.getKnowledgeContentHTML();
+          this.bindKnowledgeEntryEvents();
+        }
+        // Update filter button states
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // Update footer count
+        this.updateKnowledgeFooter();
+      });
+    });
+
+    // Search
+    input?.addEventListener('input', () => {
+      this.knowledgeSearch = input.value.trim();
+      const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+      if (content) {
+        content.innerHTML = this.getKnowledgeContentHTML();
+        this.bindKnowledgeEntryEvents();
+      }
+      this.updateKnowledgeFooter();
+    });
+
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.currentView = 'commands';
+        this.viewStack = [];
+        this.renderCurrentView(true, true);
+      }
+    });
+
+    // Export button
+    const exportBtn = this.shadowRoot.querySelector('.glass-btn-export-knowledge');
+    exportBtn?.addEventListener('click', () => {
+      this.exportKnowledge();
+    });
+
+    // Bind entry events
+    this.bindKnowledgeEntryEvents();
+  }
+
+  private updateKnowledgeFooter(): void {
+    const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
+    if (footerInfo) {
+      footerInfo.textContent = `${this.getFilteredKnowledgeItems().length} 条记录`;
+    }
+  }
+
+  private bindKnowledgeEntryEvents(): void {
+    if (!this.shadowRoot) return;
+
+    // Entry click - open detail view for AI results, navigate for annotations
+    const entries = this.shadowRoot.querySelectorAll('.glass-knowledge-entry');
+    entries.forEach(entry => {
+      entry.addEventListener('click', (e) => {
+        // Don't navigate if clicking delete button
+        if ((e.target as HTMLElement).classList.contains('glass-knowledge-entry-delete')) return;
+
+        const id = (entry as HTMLElement).dataset.id;
+        const type = (entry as HTMLElement).dataset.type;
+        const url = (entry as HTMLElement).dataset.url;
+
+        if (type === 'ai-result' && id) {
+          // Open AI result in detail view like recent tasks
+          const item = this.knowledgeItems.find(i => i.id === id);
+          if (item) {
+            this.openKnowledgeAIResult(item);
+          }
+        } else if (url) {
+          // For annotations, navigate to the page
+          window.open(url, '_blank');
+        }
+      });
+    });
+
+    // Delete buttons
+    const deleteButtons = this.shadowRoot.querySelectorAll('.glass-knowledge-entry-delete');
+    deleteButtons.forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const id = (btn as HTMLElement).dataset.id;
+        if (id && confirm('确定要删除这条记录吗？')) {
+          // Delete from storage
+          if (id.startsWith('ann_')) {
+            await deleteAnnotationFromStorage(id.replace('ann_', ''));
+          } else if (id.startsWith('task_')) {
+            await deleteTask(parseInt(id.replace('task_', '')));
+          }
+          // Remove from local list
+          this.knowledgeItems = this.knowledgeItems.filter(item => item.id !== id);
+          // Re-render content
+          const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
+          if (content) {
+            content.innerHTML = this.getKnowledgeContentHTML();
+            this.bindKnowledgeEntryEvents();
+          }
+          this.updateKnowledgeFooter();
+        }
+      });
+    });
+  }
+
+  private openKnowledgeAIResult(item: KnowledgeItem): void {
+    // Create a mock active command to show the command tag
+    const actionLabelMap: Record<string, string> = {
+      translate: '翻译',
+      summarize: '总结',
+      summarizePage: '总结页面',
+      explain: '解释',
+      rewrite: '改写',
+      codeExplain: '代码解释',
+    };
+
+    const actionType = item.actionType || 'translate';
+
+    this.activeCommand = {
+      id: `knowledge_${item.id}`,
+      icon: getActionIcon(actionType),
+      label: actionLabelMap[actionType] || item.title,
+      action: actionType,
+      enabled: true,
+      order: 0,
+    };
+
+    // Show the AI result content
+    this.aiResultData = {
+      title: item.title,
+      content: item.content,
+      thinking: item.thinking,
+      originalText: item.originalText,
+      isLoading: false,
+      resultType: actionType === 'translate' ? 'translate' : 'general',
+      actionType: actionType,
+      sourceUrl: item.url,
+      sourceTitle: item.pageTitle,
+      createdAt: item.createdAt,
+    };
+
+    // Set up callbacks for translate actions
+    if (actionType === 'translate' && item.originalText) {
+      const originalText = item.originalText;
+      this.aiResultCallbacks = {
+        onStop: () => abortAllRequests(),
+        onTranslateLanguageChange: async (targetLang: string) => {
+          await this.retranslate(originalText, targetLang);
+        },
+      };
+    } else {
+      this.aiResultCallbacks = {};
+    }
+
+    // Switch to commands view to show the result
+    this.currentView = 'commands';
+    this.viewStack = [];
+    this.renderCurrentView(true, true);
+  }
+
+  private exportKnowledge(): void {
+    const items = this.getFilteredKnowledgeItems();
+
+    let markdown = `# 知识库导出\n\n`;
+    markdown += `导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
+    markdown += `总计: ${items.length} 条记录\n\n---\n\n`;
+
+    const groups = this.groupKnowledgeByDate(items);
+
+    for (const [date, groupItems] of Object.entries(groups)) {
+      markdown += `## ${date}\n\n`;
+
+      for (const item of groupItems) {
+        const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
+        markdown += `### ${typeLabel}\n\n`;
+
+        if (item.pageTitle) {
+          markdown += `**来源**: [${item.pageTitle}](${item.url})\n\n`;
+        }
+
+        if (item.originalText) {
+          markdown += `**原文**:\n> ${item.originalText}\n\n`;
+        }
+
+        markdown += `**内容**:\n${item.content}\n\n`;
+
+        if (item.note) {
+          markdown += `**笔记**: ${item.note}\n\n`;
+        }
+
+        if (item.aiResult) {
+          markdown += `**AI ${this.getAIResultTypeLabel(item.aiResult.type)}**:\n${item.aiResult.content}\n\n`;
+        }
+
+        markdown += `---\n\n`;
+      }
+    }
+
+    // Download as file
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `knowledge-export-${new Date().toISOString().split('T')[0]}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Styles are now imported from ./styles.ts
+  // Utility functions (escapeHtml, getTranslationHint, etc.) are imported from ./utils.ts
 }

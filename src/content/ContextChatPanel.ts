@@ -59,11 +59,12 @@ export function createNewChatSession(url: string, title: string): ChatSession {
   };
 }
 
-export function createChatMessage(role: 'user' | 'assistant', content: string, references?: { text: string }[]): ChatMessage {
+export function createChatMessage(role: 'user' | 'assistant', content: string, references?: { text: string }[], thinking?: string): ChatMessage {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     role,
     content,
+    thinking,
     timestamp: Date.now(),
     references,
   };

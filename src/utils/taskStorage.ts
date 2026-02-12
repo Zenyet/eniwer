@@ -4,6 +4,7 @@ export interface SavedTask {
   id: string;
   title: string;
   content: string;
+  thinking?: string;
   originalText?: string;
   resultType: 'translate' | 'general';
   actionType: string;

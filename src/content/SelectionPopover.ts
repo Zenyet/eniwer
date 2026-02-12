@@ -1,11 +1,22 @@
 import { icons } from "../icons";
+import { AnnotationColor, ANNOTATION_COLORS } from "../types/annotation";
 import { appendToShadow, removeFromShadow } from "./ShadowHost";
 
 export interface SelectionPopoverCallbacks {
   onTranslate: () => void;
+  onHighlight?: (color: AnnotationColor) => void;
+  onNote?: () => void;
+  onMore?: () => void;
 }
 
 export type PopoverPosition = "above" | "below";
+
+// Color button order
+const COLOR_ORDER: AnnotationColor[] = ['yellow', 'green', 'blue', 'pink', 'purple'];
+
+// Icons for the popover
+const noteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>`;
+const moreIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`;
 
 export class SelectionPopover {
   private popover: HTMLElement | null = null;
@@ -116,7 +127,9 @@ export class SelectionPopover {
     rect: DOMRect,
     position: PopoverPosition,
   ): { left: number; top: number } {
-    const popoverWidth = 32;
+    // Width now accounts for color buttons + divider + action buttons
+    // 5 colors (20px each) + divider (1px + 8px margins) + note (24px) + translate (24px) + more (24px) + gaps + padding
+    const popoverWidth = 200;
     const popoverHeight = 32;
     const gap = 8;
 
@@ -152,10 +165,34 @@ export class SelectionPopover {
     this.popover.style.left = `${left}px`;
     this.popover.style.top = `${top}px`;
 
+    // Build color buttons
+    const colorButtons = COLOR_ORDER.map(color => {
+      const config = ANNOTATION_COLORS[color];
+      return `
+        <button
+          class="thecircle-selection-popover-color-btn"
+          data-action="highlight"
+          data-color="${color}"
+          title="${config.label}"
+          style="background-color: ${config.bg}; border-color: ${config.border}"
+        ></button>
+      `;
+    }).join('');
+
     this.popover.innerHTML = `
       <div class="thecircle-selection-popover-container">
+        <div class="thecircle-selection-popover-colors">
+          ${colorButtons}
+        </div>
+        <div class="thecircle-selection-popover-divider"></div>
+        <button class="thecircle-selection-popover-btn" data-action="note" title="添加批注">
+          ${noteIcon}
+        </button>
         <button class="thecircle-selection-popover-btn" data-action="translate" title="翻译">
           ${icons.translate}
+        </button>
+        <button class="thecircle-selection-popover-btn" data-action="more" title="更多">
+          ${moreIcon}
         </button>
       </div>
     `;
@@ -163,18 +200,50 @@ export class SelectionPopover {
     appendToShadow(this.popover);
 
     // Setup event listeners
-    const translateBtn = this.popover.querySelector(
-      '[data-action="translate"]',
-    );
+    this.setupEventListeners();
+
+    // Prevent popover from being hidden when clicking on it
+    this.popover.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  private setupEventListeners(): void {
+    if (!this.popover) return;
+
+    // Color buttons
+    const colorBtns = this.popover.querySelectorAll('[data-action="highlight"]');
+    colorBtns.forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const color = (btn as HTMLElement).dataset.color as AnnotationColor;
+        this.callbacks?.onHighlight?.(color);
+        this.hide();
+      });
+    });
+
+    // Note button
+    const noteBtn = this.popover.querySelector('[data-action="note"]');
+    noteBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.callbacks?.onNote?.();
+      this.hide();
+    });
+
+    // Translate button
+    const translateBtn = this.popover.querySelector('[data-action="translate"]');
     translateBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.callbacks?.onTranslate();
       this.hide();
     });
 
-    // Prevent popover from being hidden when clicking on it
-    this.popover.addEventListener("mousedown", (e) => {
+    // More button
+    const moreBtn = this.popover.querySelector('[data-action="more"]');
+    moreBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
+      this.callbacks?.onMore?.();
+      this.hide();
     });
   }
 }

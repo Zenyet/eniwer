@@ -2,6 +2,8 @@ import { CommandPalette } from './CommandPalette';
 import { MenuActions } from './MenuActions';
 import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { TrailRecorder } from './BrowseTrailPanel';
+import { AnnotationSystem } from './annotation';
+import { AnnotationColor, AnnotationAIResult, AIResultType } from '../types/annotation';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
 import { abortAllRequests } from '../utils/ai';
@@ -18,6 +20,7 @@ class TheCircle {
   private menuActions: MenuActions;
   private selectionPopover: SelectionPopover;
   private trailRecorder: TrailRecorder;
+  private annotationSystem: AnnotationSystem;
   private selectionMenuItems: MenuItem[] = DEFAULT_SELECTION_MENU;
   private globalMenuItems: MenuItem[] = DEFAULT_GLOBAL_MENU;
   private config: MenuConfig = DEFAULT_CONFIG;
@@ -33,11 +36,17 @@ class TheCircle {
     this.menuActions = new MenuActions(DEFAULT_CONFIG);
     this.selectionPopover = new SelectionPopover();
     this.trailRecorder = new TrailRecorder();
+    this.annotationSystem = new AnnotationSystem();
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
       onToast: (message) => this.showToast(message),
     });
     this.menuActions.setCommandPalette(this.commandPalette);
+
+    // Set up annotation system callbacks
+    this.annotationSystem.setCallbacks({
+      onToast: (message) => this.showToast(message),
+    });
 
     this.init();
   }
@@ -60,6 +69,10 @@ class TheCircle {
     this.setupMessageListener();
     this.setupStorageListener();
     this.setupSelectionListener();
+
+    // Initialize annotation system (restore highlights)
+    await this.annotationSystem.init();
+
     console.log('The Panel: Initialized with Command Palette');
   }
 
@@ -151,7 +164,9 @@ class TheCircle {
           if (el.classList?.contains('thecircle-selection-popover') ||
               el.classList?.contains('thecircle-result-panel') ||
               el.classList?.contains('thecircle-palette') ||
-              el.classList?.contains('thecircle-toast')) {
+              el.classList?.contains('thecircle-toast') ||
+              el.classList?.contains('thecircle-note-popup') ||
+              el.classList?.contains('thecircle-highlight')) {
             return;
           }
         }
@@ -180,9 +195,12 @@ class TheCircle {
           // Get popover position from config (default to 'above')
           const position: PopoverPosition = this.config.popoverPosition || 'above';
 
-          // Show the selection popover
+          // Show the selection popover with annotation callbacks
           this.selectionPopover.show(rect, {
             onTranslate: () => this.handleSelectionTranslate(),
+            onHighlight: (color: AnnotationColor) => this.handleSelectionHighlight(color),
+            onNote: () => this.handleSelectionNote(),
+            onMore: () => this.handleSelectionMore(),
           }, position);
         } else {
           // No selection, hide popover
@@ -200,7 +218,9 @@ class TheCircle {
           if (el.classList?.contains('thecircle-selection-popover') ||
               el.classList?.contains('thecircle-result-panel') ||
               el.classList?.contains('thecircle-palette') ||
-              el.classList?.contains('thecircle-toast')) {
+              el.classList?.contains('thecircle-toast') ||
+              el.classList?.contains('thecircle-note-popup') ||
+              el.classList?.contains('thecircle-highlight')) {
             return;
           }
         }
@@ -211,6 +231,81 @@ class TheCircle {
         this.selectionPopover.hide();
       }
     });
+  }
+
+  private async handleSelectionHighlight(color: AnnotationColor): Promise<void> {
+    await this.annotationSystem.createHighlight(color);
+  }
+
+  private async handleSelectionNote(): Promise<void> {
+    await this.annotationSystem.createHighlightWithNote();
+  }
+
+  private async handleSaveToAnnotation(
+    originalText: string,
+    content: string,
+    thinking?: string,
+    actionType?: string
+  ): Promise<void> {
+    // Map action type to AI result type
+    const typeMap: Record<string, AIResultType> = {
+      translate: 'translate',
+      explain: 'explain',
+      summarize: 'summarize',
+      rewrite: 'rewrite',
+    };
+
+    const aiResult: AnnotationAIResult = {
+      type: typeMap[actionType || ''] || 'translate',
+      content,
+      thinking,
+      createdAt: Date.now(),
+    };
+
+    // Try to create a highlight with the original text selected
+    // First, try to find and select the original text on the page
+    const found = this.findAndSelectText(originalText);
+    if (found) {
+      await this.annotationSystem.createHighlightWithAI('yellow', aiResult);
+    } else {
+      this.showToast('无法定位原文，请手动选择文本');
+    }
+  }
+
+  private findAndSelectText(text: string): boolean {
+    // Try to find the text on the page and select it
+    const trimmedText = text.trim().substring(0, 100); // Use first 100 chars for matching
+
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    let node: Text | null;
+    while ((node = walker.nextNode() as Text | null)) {
+      const nodeText = node.textContent || '';
+      const index = nodeText.indexOf(trimmedText);
+      if (index !== -1) {
+        // Found the text, create a selection
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, Math.min(index + text.length, nodeText.length));
+
+        const selection = window.getSelection();
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private handleSelectionMore(): void {
+    // Show the command palette with selection menu items
+    this.showMenu();
   }
 
   private async handleSelectionTranslate(): Promise<void> {
@@ -237,9 +332,9 @@ class TheCircle {
       this.menuActions.setSelectedText(originalText);
 
       const onChunk = this.config.useStreaming
-        ? (chunk: string, fullText: string) => {
+        ? (chunk: string, fullText: string, thinking?: string) => {
             if (runId !== translateRunId) return;
-            this.commandPalette.streamUpdate(chunk, fullText);
+            this.commandPalette.streamUpdate(chunk, fullText, thinking);
           }
         : undefined;
 
@@ -252,7 +347,7 @@ class TheCircle {
       if (result.type === 'error') {
         this.commandPalette.updateAIResult(result.result || '未知错误');
       } else if (result.type === 'ai') {
-        this.commandPalette.updateAIResult(result.result || '');
+        this.commandPalette.updateAIResult(result.result || '', result.thinking);
       }
     };
 
@@ -262,6 +357,9 @@ class TheCircle {
       onStop: () => abortAllRequests(),
       onTranslateLanguageChange: (targetLang) => {
         void runTranslate(targetLang);
+      },
+      onSaveToAnnotation: (originalText, content, thinking, actionType) => {
+        void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
       },
     }, {
       originalText,
@@ -407,6 +505,20 @@ class TheCircle {
       return;
     }
 
+    // Handle annotations action - show annotations view in command palette
+    if (item.action === 'annotations') {
+      await this.commandPalette.showAnnotations({
+        onScrollToAnnotation: (id) => this.annotationSystem.scrollToAnnotation(id),
+      });
+      return;
+    }
+
+    // Handle knowledge action - show knowledge base view in command palette
+    if (item.action === 'knowledge') {
+      await this.commandPalette.showKnowledge();
+      return;
+    }
+
     // Show loading for AI actions
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
 
@@ -421,9 +533,9 @@ class TheCircle {
           this.menuActions.setSelectedText(originalText);
 
           const onChunk = this.config.useStreaming
-            ? (chunk: string, fullText: string) => {
+            ? (chunk: string, fullText: string, thinking?: string) => {
                 if (runId !== translateRunId) return;
-                this.commandPalette.streamUpdate(chunk, fullText);
+                this.commandPalette.streamUpdate(chunk, fullText, thinking);
               }
             : undefined;
 
@@ -436,7 +548,7 @@ class TheCircle {
           if (result.type === 'error') {
             this.commandPalette.updateAIResult(result.result || '未知错误');
           } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '');
+            this.commandPalette.updateAIResult(result.result || '', result.thinking);
           }
         };
 
@@ -446,6 +558,9 @@ class TheCircle {
           onStop: () => abortAllRequests(),
           onTranslateLanguageChange: (targetLang) => {
             void runTranslate(targetLang);
+          },
+          onSaveToAnnotation: (originalText, content, thinking, actionType) => {
+            void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
           },
         }, {
           originalText,
@@ -479,8 +594,8 @@ class TheCircle {
           });
 
           const onChunk = this.config.useStreaming
-            ? (chunk: string, fullText: string) => {
-                this.commandPalette.streamUpdate(chunk, fullText);
+            ? (chunk: string, fullText: string, thinking?: string) => {
+                this.commandPalette.streamUpdate(chunk, fullText, thinking);
               }
             : undefined;
 
@@ -489,7 +604,7 @@ class TheCircle {
           if (result.type === 'error') {
             this.commandPalette.updateAIResult(result.result || '未知错误');
           } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '');
+            this.commandPalette.updateAIResult(result.result || '', result.thinking);
           }
         } : undefined;
 
@@ -498,6 +613,9 @@ class TheCircle {
         const restored = this.commandPalette.showAIResult(item.label, {
           onStop: () => abortAllRequests(),
           onRefresh,
+          onSaveToAnnotation: (originalText, content, thinking, actionType) => {
+            void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
+          },
         }, {
           originalText,
           resultType: 'general',
@@ -511,8 +629,8 @@ class TheCircle {
         if (restored) return;
 
         const onChunk = this.config.useStreaming
-          ? (chunk: string, fullText: string) => {
-              this.commandPalette.streamUpdate(chunk, fullText);
+          ? (chunk: string, fullText: string, thinking?: string) => {
+              this.commandPalette.streamUpdate(chunk, fullText, thinking);
             }
           : undefined;
 
@@ -521,7 +639,7 @@ class TheCircle {
         if (result.type === 'error') {
           this.commandPalette.updateAIResult(result.result || '未知错误');
         } else if (result.type === 'ai') {
-          this.commandPalette.updateAIResult(result.result || '');
+          this.commandPalette.updateAIResult(result.result || '', result.thinking);
         }
       }
     } else {

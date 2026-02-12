@@ -5,6 +5,7 @@ import { MenuConfig, ScreenshotConfig } from '../types';
 interface ProviderConfig {
   apiUrl: string;
   model: string;
+  thinkingModel?: string;
   visionModel?: string;
 }
 
@@ -17,16 +18,19 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   openai: {
     apiUrl: 'https://api.openai.com/v1/chat/completions',
     model: 'gpt-4o-mini',
+    thinkingModel: 'o3-mini',
     visionModel: 'gpt-4o-mini',
   },
   anthropic: {
     apiUrl: 'https://api.anthropic.com/v1/messages',
     model: 'claude-3-5-sonnet-20241022',
+    thinkingModel: 'claude-3-5-sonnet-20241022',
     visionModel: 'claude-3-5-sonnet-20241022',
   },
   gemini: {
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     model: 'gemini-1.5-flash',
+    thinkingModel: 'gemini-2.0-flash-thinking-exp',
     visionModel: 'gemini-1.5-flash',
   },
 };
@@ -34,10 +38,11 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
 export interface AIResponse {
   success: boolean;
   result?: string;
+  thinking?: string;
   error?: string;
 }
 
-export type OnChunkCallback = (chunk: string, fullText: string) => void;
+export type OnChunkCallback = (chunk: string, fullText: string, thinking?: string) => void;
 
 // Main text AI call
 export async function callAI(
@@ -95,6 +100,7 @@ async function callOpenAICompatibleAPI(
   let apiUrl: string;
   let model: string;
   let apiKey = config.apiKey;
+  const useThinking = config.useThinkingModel && provider === 'openai';
 
   if (provider === 'custom') {
     apiUrl = config.customApiUrl!;
@@ -102,16 +108,43 @@ async function callOpenAICompatibleAPI(
   } else {
     const providerConfig = PROVIDER_CONFIGS[provider];
     apiUrl = providerConfig.apiUrl;
-    model = providerConfig.model;
+    // Use thinking model if enabled and available
+    model = useThinking && providerConfig.thinkingModel
+      ? providerConfig.thinkingModel
+      : providerConfig.model;
   }
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
-    },
-    body: JSON.stringify({
+  // Check if using OpenAI o1/o3 thinking models
+  const isOpenAIThinkingModel = useThinking && (model.startsWith('o1') || model.startsWith('o3'));
+
+  // Check for DeepSeek reasoner model (custom provider)
+  const isDeepSeekReasoner = provider === 'custom' && config.customModel?.includes('deepseek-reasoner');
+
+  // Build request body based on model type
+  let requestBody: Record<string, unknown>;
+
+  if (isOpenAIThinkingModel) {
+    // OpenAI o1/o3 models: no system prompt, no temperature, use max_completion_tokens, no streaming
+    requestBody = {
+      model,
+      messages: [
+        { role: 'user', content: `${systemPrompt}\n\n${prompt}` },
+      ],
+      max_completion_tokens: 16384,
+    };
+  } else if (isDeepSeekReasoner) {
+    // DeepSeek reasoner: no temperature/top_p/presence_penalty/frequency_penalty
+    requestBody = {
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 32768,
+      stream: useStreaming,
+    };
+  } else {
+    requestBody = {
       model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -120,7 +153,16 @@ async function callOpenAICompatibleAPI(
       temperature: 0.7,
       max_tokens: 2048,
       stream: useStreaming,
-    }),
+    };
+  }
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+    },
+    body: JSON.stringify(requestBody),
     signal,
   });
 
@@ -129,12 +171,30 @@ async function callOpenAICompatibleAPI(
     return { success: false, error: `API 错误: ${error}` };
   }
 
+  // OpenAI thinking models don't support streaming
+  if (isOpenAIThinkingModel) {
+    const data = await response.json();
+    const result = data.choices?.[0]?.message?.content;
+    if (result) {
+      return { success: true, result };
+    }
+    return { success: false, error: 'AI 无响应' };
+  }
+
   if (useStreaming && onChunk) {
-    return await processOpenAIStream(response, onChunk, signal);
+    return await processOpenAIStream(response, onChunk, signal, isDeepSeekReasoner);
   }
 
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content;
+
+  // Handle DeepSeek reasoner response
+  if (isDeepSeekReasoner) {
+    const reasoning = data.choices?.[0]?.message?.reasoning_content;
+    if (result) {
+      return { success: true, result, thinking: reasoning };
+    }
+  }
 
   if (result) {
     return { success: true, result };
@@ -146,7 +206,8 @@ async function callOpenAICompatibleAPI(
 async function processOpenAIStream(
   response: Response,
   onChunk: OnChunkCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  isDeepSeekReasoner?: boolean
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -155,6 +216,7 @@ async function processOpenAIStream(
 
   const decoder = new TextDecoder();
   let fullText = '';
+  let thinkingText = '';
 
   try {
     while (true) {
@@ -178,9 +240,18 @@ async function processOpenAIStream(
           try {
             const parsed = JSON.parse(data);
             const content = parsed.choices?.[0]?.delta?.content;
+            // Handle DeepSeek reasoner's reasoning_content in streaming
+            if (isDeepSeekReasoner) {
+              const reasoning = parsed.choices?.[0]?.delta?.reasoning_content;
+              if (reasoning) {
+                thinkingText += reasoning;
+                // Stream thinking content in real-time
+                onChunk('', fullText, thinkingText);
+              }
+            }
             if (content) {
               fullText += content;
-              onChunk(content, fullText);
+              onChunk(content, fullText, thinkingText || undefined);
             }
           } catch {
             // Skip invalid JSON lines
@@ -190,7 +261,7 @@ async function processOpenAIStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText };
+      return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
     return { success: false, error: 'AI 无响应' };
   } finally {
@@ -208,23 +279,35 @@ async function callAnthropicAPI(
   signal?: AbortSignal
 ): Promise<AIResponse> {
   const providerConfig = PROVIDER_CONFIGS.anthropic;
+  const useThinking = config.useThinkingModel;
+
+  // Build request body
+  const requestBody: Record<string, unknown> = {
+    model: providerConfig.model,
+    max_tokens: useThinking ? 16384 : 2048,
+    system: systemPrompt,
+    messages: [
+      { role: 'user', content: prompt },
+    ],
+    stream: useStreaming,
+  };
+
+  // Add thinking parameter for extended thinking
+  if (useThinking) {
+    requestBody.thinking = {
+      type: 'enabled',
+      budget_tokens: 10000,
+    };
+  }
 
   const response = await fetch(providerConfig.apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': config.apiKey!,
-      'anthropic-version': '2023-06-01',
+      'anthropic-version': useThinking ? '2025-01-01' : '2023-06-01',
     },
-    body: JSON.stringify({
-      model: providerConfig.model,
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-      stream: useStreaming,
-    }),
+    body: JSON.stringify(requestBody),
     signal,
   });
 
@@ -234,14 +317,30 @@ async function callAnthropicAPI(
   }
 
   if (useStreaming && onChunk) {
-    return await processAnthropicStream(response, onChunk, signal);
+    return await processAnthropicStream(response, onChunk, signal, useThinking);
   }
 
   const data = await response.json();
-  const result = data.content?.[0]?.text;
 
-  if (result) {
-    return { success: true, result };
+  // Handle extended thinking response
+  if (useThinking) {
+    let result = '';
+    let thinking = '';
+    for (const block of data.content || []) {
+      if (block.type === 'thinking') {
+        thinking = block.thinking;
+      } else if (block.type === 'text') {
+        result = block.text;
+      }
+    }
+    if (result) {
+      return { success: true, result, thinking: thinking || undefined };
+    }
+  } else {
+    const result = data.content?.[0]?.text;
+    if (result) {
+      return { success: true, result };
+    }
   }
 
   return { success: false, error: 'AI 无响应' };
@@ -250,7 +349,8 @@ async function callAnthropicAPI(
 async function processAnthropicStream(
   response: Response,
   onChunk: OnChunkCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  useThinking?: boolean
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -259,6 +359,8 @@ async function processAnthropicStream(
 
   const decoder = new TextDecoder();
   let fullText = '';
+  let thinkingText = '';
+  let currentBlockType = '';
 
   try {
     while (true) {
@@ -280,10 +382,22 @@ async function processAnthropicStream(
 
           try {
             const parsed = JSON.parse(data);
-            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              const content = parsed.delta.text;
-              fullText += content;
-              onChunk(content, fullText);
+
+            // Track content block type for thinking mode
+            if (useThinking && parsed.type === 'content_block_start') {
+              currentBlockType = parsed.content_block?.type || '';
+            }
+
+            if (parsed.type === 'content_block_delta') {
+              if (useThinking && currentBlockType === 'thinking' && parsed.delta?.thinking) {
+                thinkingText += parsed.delta.thinking;
+                // Stream thinking content in real-time
+                onChunk('', fullText, thinkingText);
+              } else if (parsed.delta?.text) {
+                const content = parsed.delta.text;
+                fullText += content;
+                onChunk(content, fullText, thinkingText || undefined);
+              }
             }
           } catch {
             // Skip invalid JSON lines
@@ -293,7 +407,7 @@ async function processAnthropicStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText };
+      return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
     return { success: false, error: 'AI 无响应' };
   } finally {
@@ -311,8 +425,12 @@ async function callGeminiAPI(
   signal?: AbortSignal
 ): Promise<AIResponse> {
   const providerConfig = PROVIDER_CONFIGS.gemini;
+  const useThinking = config.useThinkingModel;
+  const model = useThinking && providerConfig.thinkingModel
+    ? providerConfig.thinkingModel
+    : providerConfig.model;
   const endpoint = useStreaming ? 'streamGenerateContent' : 'generateContent';
-  const apiUrl = `${providerConfig.apiUrl}/${providerConfig.model}:${endpoint}?key=${config.apiKey}${useStreaming ? '&alt=sse' : ''}`;
+  const apiUrl = `${providerConfig.apiUrl}/${model}:${endpoint}?key=${config.apiKey}${useStreaming ? '&alt=sse' : ''}`;
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -328,8 +446,8 @@ async function callGeminiAPI(
         },
       ],
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 2048,
+        temperature: useThinking ? undefined : 0.7,
+        maxOutputTokens: useThinking ? 16384 : 2048,
       },
     }),
     signal,
@@ -341,14 +459,31 @@ async function callGeminiAPI(
   }
 
   if (useStreaming && onChunk) {
-    return await processGeminiStream(response, onChunk, signal);
+    return await processGeminiStream(response, onChunk, signal, useThinking);
   }
 
   const data = await response.json();
-  const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  if (result) {
-    return { success: true, result };
+  // Handle thinking model response (may contain thought parts)
+  if (useThinking) {
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    let result = '';
+    let thinking = '';
+    for (const part of parts) {
+      if (part.thought) {
+        thinking = part.text || '';
+      } else if (part.text) {
+        result = part.text;
+      }
+    }
+    if (result) {
+      return { success: true, result, thinking: thinking || undefined };
+    }
+  } else {
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (result) {
+      return { success: true, result };
+    }
   }
 
   return { success: false, error: 'AI 无响应' };
@@ -357,7 +492,8 @@ async function callGeminiAPI(
 async function processGeminiStream(
   response: Response,
   onChunk: OnChunkCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  useThinking?: boolean
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -366,6 +502,7 @@ async function processGeminiStream(
 
   const decoder = new TextDecoder();
   let fullText = '';
+  let thinkingText = '';
 
   try {
     while (true) {
@@ -387,10 +524,21 @@ async function processGeminiStream(
 
           try {
             const parsed = JSON.parse(data);
-            const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (content) {
-              fullText += content;
-              onChunk(content, fullText);
+            const parts = parsed.candidates?.[0]?.content?.parts || [];
+
+            for (const part of parts) {
+              if (useThinking && part.thought) {
+                // This is a thought part
+                if (part.text) {
+                  thinkingText += part.text;
+                  // Stream thinking content in real-time
+                  onChunk('', fullText, thinkingText);
+                }
+              } else if (part.text) {
+                const content = part.text;
+                fullText += content;
+                onChunk(content, fullText, thinkingText || undefined);
+              }
             }
           } catch {
             // Skip invalid JSON lines
@@ -400,7 +548,7 @@ async function processGeminiStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText };
+      return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
     return { success: false, error: 'AI 无响应' };
   } finally {

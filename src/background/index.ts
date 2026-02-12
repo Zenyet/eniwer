@@ -242,9 +242,9 @@ async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRe
   }
 
   try {
-    const result = await callAI(text, systemPrompt, config, (chunk, fullText) => {
+    const result = await callAI(text, systemPrompt, config, (chunk, fullText, thinking) => {
       if (!signal.aborted) {
-        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText } });
+        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText, thinking } });
       }
     }, signal);
 
@@ -269,9 +269,9 @@ async function handleStreamingVisionRequest(port: chrome.runtime.Port, payload: 
   const { imageDataUrl, prompt, config, requestId } = payload;
 
   try {
-    const result = await callVisionAI(imageDataUrl, prompt, config, (chunk, fullText) => {
+    const result = await callVisionAI(imageDataUrl, prompt, config, (chunk, fullText, thinking) => {
       if (!signal.aborted) {
-        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText } });
+        port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk, fullText, thinking } });
       }
     }, signal);
 

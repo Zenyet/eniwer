@@ -33,6 +33,22 @@ export interface HistoryConfig {
   panelDisplayCount: number; // Number of tasks to display in panel
 }
 
+// Annotation config
+export type AnnotationColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+
+export interface AnnotationConfig {
+  defaultColor: AnnotationColor;
+  autoSaveAIResult: boolean; // Auto save AI results to annotations
+  showPageFilter: boolean; // Show current page filter by default
+}
+
+// Knowledge base config
+export interface KnowledgeConfig {
+  defaultFilter: 'all' | 'annotations' | 'ai-results';
+  maxDisplayCount: number; // Maximum items to display per group
+  groupByDate: boolean;
+}
+
 export interface MenuConfig {
   shortcut: string;
   theme: 'dark' | 'light' | 'system';
@@ -43,6 +59,7 @@ export interface MenuConfig {
   customApiUrl?: string;
   customModel?: string;
   useStreaming: boolean;
+  useThinkingModel?: boolean;
   screenshot?: ScreenshotConfig;
   popoverPosition?: 'above' | 'below';
   history?: HistoryConfig;
@@ -50,6 +67,8 @@ export interface MenuConfig {
   translationFallback?: TranslationFallbackConfig;
   translation?: TranslationConfig;
   imageSearch?: ImageSearchConfig;
+  annotation?: AnnotationConfig;
+  knowledge?: KnowledgeConfig;
 }
 
 export interface StorageData {
@@ -74,6 +93,18 @@ export const DEFAULT_HISTORY_CONFIG: HistoryConfig = {
   panelDisplayCount: 10,
 };
 
+export const DEFAULT_ANNOTATION_CONFIG: AnnotationConfig = {
+  defaultColor: 'yellow',
+  autoSaveAIResult: false,
+  showPageFilter: false,
+};
+
+export const DEFAULT_KNOWLEDGE_CONFIG: KnowledgeConfig = {
+  defaultFilter: 'all',
+  maxDisplayCount: 50,
+  groupByDate: true,
+};
+
 export const DEFAULT_CONFIG: MenuConfig = {
   shortcut: 'Double+Shift',
   theme: 'system',
@@ -85,6 +116,8 @@ export const DEFAULT_CONFIG: MenuConfig = {
   popoverPosition: 'above',
   history: DEFAULT_HISTORY_CONFIG,
   showSelectionPopover: true,
+  annotation: DEFAULT_ANNOTATION_CONFIG,
+  knowledge: DEFAULT_KNOWLEDGE_CONFIG,
 };
 
 export const DEFAULT_SELECTION_MENU: MenuItem[] = [
@@ -101,9 +134,11 @@ export const DEFAULT_SELECTION_MENU: MenuItem[] = [
 export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
   { id: 'contextChat', icon: icons.messageCircle, label: '上下文追问', action: 'contextChat', enabled: true, order: 0 },
   { id: 'summarizePage', icon: icons.summarizePage, label: '总结页面', action: 'summarizePage', enabled: true, order: 1 },
-  { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 2 },
-  { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 3 },
-  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 4 },
+  { id: 'knowledge', icon: icons.library, label: '知识库', action: 'knowledge', enabled: true, order: 2 },
+  { id: 'annotations', icon: icons.highlighter, label: '批注', action: 'annotations', enabled: true, order: 3 },
+  { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 4 },
+  { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 5 },
+  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 6 },
 ];
 
 export type MessageType =
@@ -161,6 +196,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  thinking?: string;
   timestamp: number;
   references?: { text: string }[];
 }

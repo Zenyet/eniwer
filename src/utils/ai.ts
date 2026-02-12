@@ -5,10 +5,11 @@ import { MenuConfig, ScreenshotConfig, Message } from '../types';
 interface AIResponse {
   success: boolean;
   result?: string;
+  thinking?: string;
   error?: string;
 }
 
-export type OnChunkCallback = (chunk: string, fullText: string) => void;
+export type OnChunkCallback = (chunk: string, fullText: string, thinking?: string) => void;
 
 // Active request tracking for cancellation
 interface ActiveRequest {
@@ -146,17 +147,18 @@ async function callStreamingAI(
       }
     };
 
-    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; success?: boolean; result?: string; error?: string } }) => {
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string } }) => {
       if (message.payload?.requestId !== requestId) return;
 
       if (message.type === 'AI_STREAM_CHUNK') {
-        onChunk(message.payload.chunk || '', message.payload.fullText || '');
+        onChunk(message.payload.chunk || '', message.payload.fullText || '', message.payload.thinking);
       } else if (message.type === 'AI_STREAM_END') {
         cleanup();
         port.disconnect();
         resolve({
           success: message.payload.success || false,
           result: message.payload.result,
+          thinking: message.payload.thinking,
           error: message.payload.error,
           requestId,
         });
@@ -216,17 +218,18 @@ async function callStreamingVisionAI(
       }
     };
 
-    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; success?: boolean; result?: string; error?: string } }) => {
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string } }) => {
       if (message.payload?.requestId !== requestId) return;
 
       if (message.type === 'AI_STREAM_CHUNK') {
-        onChunk(message.payload.chunk || '', message.payload.fullText || '');
+        onChunk(message.payload.chunk || '', message.payload.fullText || '', message.payload.thinking);
       } else if (message.type === 'AI_STREAM_END') {
         cleanup();
         port.disconnect();
         resolve({
           success: message.payload.success || false,
           result: message.payload.result,
+          thinking: message.payload.thinking,
           error: message.payload.error,
           requestId,
         });

@@ -59,7 +59,7 @@ export class MenuActions {
     item: MenuItem,
     onChunk?: OnChunkCallback,
     options: ExecuteAIOptions = {}
-  ): Promise<{ type: string; result?: string; url?: string }> {
+  ): Promise<{ type: string; result?: string; url?: string; thinking?: string }> {
     switch (item.action) {
       case 'translate':
         return this.handleTranslate(onChunk, options);
@@ -94,7 +94,7 @@ export class MenuActions {
     }
   }
 
-  private async handleTranslate(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+  private async handleTranslate(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要翻译的文字' };
     }
@@ -102,7 +102,7 @@ export class MenuActions {
     return this.callAIAction('translate', this.selectedText, onChunk, options);
   }
 
-  private async handleSummarize(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+  private async handleSummarize(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要总结的文字' };
     }
@@ -110,7 +110,7 @@ export class MenuActions {
     return this.callAIAction('summarize', this.selectedText, onChunk, options);
   }
 
-  private async handleExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
+  private async handleExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要解释的文字' };
     }
@@ -118,7 +118,7 @@ export class MenuActions {
     return this.callAIAction('explain', this.selectedText, onChunk);
   }
 
-  private async handleRewrite(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
+  private async handleRewrite(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要改写的文字' };
     }
@@ -126,7 +126,7 @@ export class MenuActions {
     return this.callAIAction('rewrite', this.selectedText, onChunk);
   }
 
-  private async handleCodeExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string }> {
+  private async handleCodeExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
       return { type: 'error', result: '请先选择要解释的代码' };
     }
@@ -134,7 +134,7 @@ export class MenuActions {
     return this.callAIAction('codeExplain', this.selectedText, onChunk);
   }
 
-  private async handleSummarizePage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
+  private async handleSummarizePage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
     return this.callAIAction('summarizePage', document.body.innerText.slice(0, 10000), onChunk, options);
   }
 
@@ -194,7 +194,7 @@ export class MenuActions {
     text: string,
     onChunk?: OnChunkCallback,
     options: ExecuteAIOptions = {}
-  ): Promise<{ type: string; result?: string }> {
+  ): Promise<{ type: string; result?: string; thinking?: string }> {
     // For translate action, check if we should use non-AI translation
     if (action === 'translate') {
       const translationProvider = this.config.translation?.provider || 'ai';
@@ -294,7 +294,7 @@ export class MenuActions {
       const response = await callAI(text, systemPrompt, this.config, onChunk);
 
       if (response.success) {
-        return { type: 'ai', result: response.result };
+        return { type: 'ai', result: response.result, thinking: response.thinking };
       } else {
         return { type: 'error', result: response.error || 'AI 请求失败' };
       }

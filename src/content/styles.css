@@ -175,8 +175,333 @@
 }
 
 .thecircle-selection-popover-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Selection Popover - Color Buttons */
+.thecircle-selection-popover-colors {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+}
+
+.thecircle-selection-popover-color-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.thecircle-selection-popover-color-btn:hover {
+  transform: scale(1.15);
+}
+
+.thecircle-selection-popover-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--glass-border);
+  margin: 0 4px;
+}
+
+/* ========================================
+   Note Popup (Annotation)
+   ======================================== */
+.thecircle-note-popup {
+  position: fixed;
+  z-index: 2147483647;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.thecircle-note-popup-exit {
+  animation: thecircle-fade-out 0.15s ease-out forwards;
+}
+
+.thecircle-note-popup-container {
+  width: 280px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px var(--glass-shadow);
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.thecircle-note-popup-quote {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+  font-style: italic;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thecircle-note-popup-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.thecircle-note-popup-color-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.thecircle-note-popup-color-btn:hover {
+  transform: scale(1.1);
+}
+
+.thecircle-note-popup-color-btn.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--glass-bg);
+}
+
+.thecircle-note-popup-input {
   width: 100%;
-  height: 100%;
+  padding: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.thecircle-note-popup-input:focus {
+  background: var(--input-focus-bg);
+  border-color: #3b82f6;
+}
+
+.thecircle-note-popup-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.thecircle-note-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.thecircle-note-popup-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.thecircle-note-popup-btn-delete {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.thecircle-note-popup-btn-delete:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.thecircle-note-popup-btn-save {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+}
+
+.thecircle-note-popup-btn-save:hover {
+  background: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.6);
+}
+
+/* Light mode adjustments for note popup */
+:host(.light) .thecircle-note-popup-btn-delete,
+.light .thecircle-note-popup-btn-delete {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #dc2626;
+}
+
+:host(.light) .thecircle-note-popup-btn-delete:hover,
+.light .thecircle-note-popup-btn-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+:host(.light) .thecircle-note-popup-btn-save,
+.light .thecircle-note-popup-btn-save {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
+  color: #2563eb;
+}
+
+:host(.light) .thecircle-note-popup-btn-save:hover,
+.light .thecircle-note-popup-btn-save:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+@media (prefers-color-scheme: light) {
+  :host:not(.dark) .thecircle-note-popup-btn-delete {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #dc2626;
+  }
+
+  :host:not(.dark) .thecircle-note-popup-btn-delete:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  :host:not(.dark) .thecircle-note-popup-btn-save {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.25);
+    color: #2563eb;
+  }
+
+  :host:not(.dark) .thecircle-note-popup-btn-save:hover {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+}
+
+/* Note Popup - AI Result */
+.thecircle-note-popup-container.has-ai-result {
+  width: 340px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.thecircle-note-popup-ai-result {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: var(--input-bg);
+  border-radius: 8px;
+  border: 1px solid var(--input-border);
+}
+
+.thecircle-note-popup-ai-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.thecircle-note-popup-ai-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  text-transform: uppercase;
+}
+
+.thecircle-note-popup-ai-lang {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.thecircle-note-popup-ai-thinking {
+  margin-bottom: 8px;
+}
+
+.thecircle-note-popup-ai-thinking-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.thecircle-note-popup-ai-thinking-header:hover {
+  color: var(--text-primary);
+}
+
+.thecircle-note-popup-ai-chevron {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.thecircle-note-popup-ai-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.thecircle-note-popup-ai-thinking-content {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  margin-top: 6px;
+  max-height: 100px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.thecircle-note-popup-ai-thinking-content.collapsed {
+  display: none;
+}
+
+.thecircle-note-popup-ai-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* Light mode adjustments for AI result */
+:host(.light) .thecircle-note-popup-ai-badge,
+.light .thecircle-note-popup-ai-badge {
+  background: rgba(59, 130, 246, 0.12);
+  color: #2563eb;
+}
+
+:host(.light) .thecircle-note-popup-ai-thinking-content,
+.light .thecircle-note-popup-ai-thinking-content {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+@media (prefers-color-scheme: light) {
+  :host:not(.dark) .thecircle-note-popup-ai-badge {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+  }
+
+  :host:not(.dark) .thecircle-note-popup-ai-thinking-content {
+    background: rgba(0, 0, 0, 0.05);
+  }
 }
 
 /* ========================================

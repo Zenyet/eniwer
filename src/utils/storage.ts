@@ -2,10 +2,43 @@ import { StorageData, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MEN
 
 const STORAGE_KEY = 'thecircle_data';
 
+// Merge new default menu items into existing items (preserves user customizations)
+function mergeMenuItems(existing: MenuItem[], defaults: MenuItem[]): MenuItem[] {
+  const existingIds = new Set(existing.map(item => item.id));
+  const newItems = defaults.filter(item => !existingIds.has(item.id));
+
+  if (newItems.length === 0) {
+    return existing;
+  }
+
+  // Add new items at the end, adjusting order
+  const maxOrder = Math.max(...existing.map(item => item.order), -1);
+  const mergedNewItems = newItems.map((item, index) => ({
+    ...item,
+    order: maxOrder + 1 + index,
+  }));
+
+  return [...existing, ...mergedNewItems];
+}
+
 export async function getStorageData(): Promise<StorageData> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
   if (result[STORAGE_KEY]) {
-    return result[STORAGE_KEY] as StorageData;
+    const data = result[STORAGE_KEY] as StorageData;
+
+    // Auto-merge new default menu items
+    const mergedGlobalMenu = mergeMenuItems(data.globalMenuItems, DEFAULT_GLOBAL_MENU);
+    const mergedSelectionMenu = mergeMenuItems(data.selectionMenuItems, DEFAULT_SELECTION_MENU);
+
+    // Save if there were new items added
+    if (mergedGlobalMenu.length !== data.globalMenuItems.length ||
+        mergedSelectionMenu.length !== data.selectionMenuItems.length) {
+      data.globalMenuItems = mergedGlobalMenu;
+      data.selectionMenuItems = mergedSelectionMenu;
+      await chrome.storage.local.set({ [STORAGE_KEY]: data });
+    }
+
+    return data;
   }
   return {
     config: DEFAULT_CONFIG,

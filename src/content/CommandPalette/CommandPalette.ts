@@ -10,24 +10,28 @@ import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '.
 import { getAllAnnotations, deleteAnnotation as deleteAnnotationFromStorage } from '../annotation/storage';
 import { Annotation, ANNOTATION_COLORS } from '../../types/annotation';
 
-// Knowledge item - unified type for annotations and saved AI results
-interface KnowledgeItem {
-  id: string;
-  type: 'annotation' | 'ai-result';
-  title: string;
-  content: string;
-  originalText?: string;
-  url: string;
-  pageTitle: string;
-  createdAt: number;
-  // For annotations
-  color?: string;
-  note?: string;
-  aiResult?: { type: string; content: string; thinking?: string };
-  // For AI results
-  actionType?: string;
-  thinking?: string;
-}
+// Import views
+import {
+  // Settings View
+  getSettingsViewHTML as getSettingsViewHTMLFromModule,
+  getAccountSettingsHTML as getAccountSettingsHTMLFromModule,
+  getMenuSettingsHTML as getMenuSettingsHTMLFromModule,
+  // Annotations View
+  getFilteredAnnotations,
+  getAnnotationsContentHTML as getAnnotationsContentHTMLFromModule,
+  normalizeUrlForAnnotation,
+  // Knowledge View
+  KnowledgeItem,
+  annotationToKnowledgeItem,
+  savedTaskToKnowledgeItem,
+  getFilteredKnowledgeItems,
+  getKnowledgeContentHTML as getKnowledgeContentHTMLFromModule,
+  getActionTypeLabel,
+  getAIResultTypeLabel,
+  groupKnowledgeByDate,
+  exportKnowledgeToJSON,
+  exportKnowledgeToMarkdown,
+} from './views';
 
 // Import types from types module
 import {
@@ -1687,359 +1691,13 @@ export class CommandPalette {
 
   // Settings Views
   private getSettingsViewHTML(): string {
-    // Use tempConfig if available, otherwise use config
     const config = this.tempConfig || this.config;
-    const isCustomProvider = config.apiProvider === 'custom';
-    const screenshotConfig = config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
-    const historyConfig = config.history || DEFAULT_HISTORY_CONFIG;
-    const imageSearchConfig = config.imageSearch || { google: true, yandex: true, bing: true, tineye: true };
-
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="settings">
-          <span class="glass-command-tag-icon">${icons.settings}</span>
-          <span class="glass-command-tag-label">设置</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input"
-          placeholder=""
-          autocomplete="off"
-          spellcheck="false"
-          readonly
-        />
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-body glass-settings-body">
-        <div class="glass-settings-flat">
-          <!-- 账号 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">账号</div>
-            ${this.getAccountSettingsHTML()}
-          </div>
-
-          <!-- 翻译设置 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">翻译服务</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">翻译引擎</label>
-              <select class="glass-select" id="translation-provider-select">
-                <option value="ai"${(config.translation?.provider || 'ai') === 'ai' ? ' selected' : ''}>AI 翻译 (使用配置的 AI 服务)</option>
-                <option value="google"${config.translation?.provider === 'google' ? ' selected' : ''}>Google 翻译</option>
-                <option value="microsoft"${config.translation?.provider === 'microsoft' ? ' selected' : ''}>微软翻译</option>
-                <option value="deeplx"${config.translation?.provider === 'deeplx' ? ' selected' : ''}>DeepLX</option>
-                <option value="custom"${config.translation?.provider === 'custom' ? ' selected' : ''}>自定义</option>
-              </select>
-            </div>
-            <div class="glass-form-group" id="translation-deeplx-key-group" style="display: ${config.translation?.provider === 'deeplx' ? 'flex' : 'none'}">
-              <label class="glass-form-label">DeepLX API Key</label>
-              <input type="text" class="glass-input" id="translation-deeplx-key" value="${config.translation?.deeplxApiKey || ''}" placeholder="请输入 API Key">
-            </div>
-            <div class="glass-form-group" id="translation-custom-url-group" style="display: ${config.translation?.provider === 'custom' ? 'flex' : 'none'}">
-              <label class="glass-form-label">自定义翻译地址</label>
-              <input type="text" class="glass-input" id="translation-custom-url" value="${config.translation?.customUrl || ''}" placeholder="http://localhost:1188/translate">
-            </div>
-            <span class="glass-form-hint" id="translation-hint">${getTranslationHint(config.translation?.provider || 'ai')}</span>
-          </div>
-
-          <!-- 外观 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">外观</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">主题</label>
-              <select class="glass-select" id="theme-select">
-                <option value="system"${config.theme === 'system' ? ' selected' : ''}>跟随系统</option>
-                <option value="dark"${config.theme === 'dark' ? ' selected' : ''}>深色</option>
-                <option value="light"${config.theme === 'light' ? ' selected' : ''}>浅色</option>
-              </select>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">选中文本弹出框</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="show-popover-toggle" ${config.showSelectionPopover !== false ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group" id="popover-position-group"${config.showSelectionPopover === false ? ' style="display: none"' : ''}>
-              <label class="glass-form-label">弹出位置</label>
-              <select class="glass-select" id="popover-position-select">
-                <option value="above"${config.popoverPosition === 'above' ? ' selected' : ''}>选中文本上方</option>
-                <option value="below"${config.popoverPosition === 'below' ? ' selected' : ''}>选中文本下方</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 语言 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">语言</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">翻译目标语言</label>
-              <select class="glass-select" id="translate-lang-select">
-                <option value="zh-CN"${config.preferredLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${config.preferredLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="en"${config.preferredLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="ja"${config.preferredLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-                <option value="ko"${config.preferredLanguage === 'ko' ? ' selected' : ''}>한국어</option>
-                <option value="es"${config.preferredLanguage === 'es' ? ' selected' : ''}>Español</option>
-                <option value="fr"${config.preferredLanguage === 'fr' ? ' selected' : ''}>Français</option>
-                <option value="de"${config.preferredLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
-              </select>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">总结输出语言</label>
-              <select class="glass-select" id="summary-lang-select">
-                <option value="auto"${config.summaryLanguage === 'auto' ? ' selected' : ''}>自动检测</option>
-                <option value="zh-CN"${config.summaryLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${config.summaryLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="en"${config.summaryLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="ja"${config.summaryLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- AI 服务 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">AI 服务</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">服务商</label>
-              <select class="glass-select" id="api-provider-select">
-                <option value="groq"${config.apiProvider === 'groq' ? ' selected' : ''}>Groq (免费)</option>
-                <option value="openai"${config.apiProvider === 'openai' ? ' selected' : ''}>OpenAI</option>
-                <option value="anthropic"${config.apiProvider === 'anthropic' ? ' selected' : ''}>Anthropic</option>
-                <option value="gemini"${config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
-                <option value="custom"${config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
-              </select>
-              <span class="glass-form-hint" id="api-key-hint">${getAPIKeyHint(config.apiProvider)}</span>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">API Key</label>
-              <input type="password" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key">
-            </div>
-            <div class="glass-form-group" id="custom-url-group"${isCustomProvider ? '' : ' style="display: none"'}>
-              <label class="glass-form-label">API URL</label>
-              <input type="text" class="glass-input-field" id="custom-url-input" value="${config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
-            </div>
-            <div class="glass-form-group" id="custom-model-group"${isCustomProvider ? '' : ' style="display: none"'}>
-              <label class="glass-form-label">模型名称</label>
-              <input type="text" class="glass-input-field" id="custom-model-input" value="${config.customModel || ''}" placeholder="gpt-4">
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">流式传输</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="streaming-toggle" ${config.useStreaming ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">思考模式</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="thinking-mode-toggle" ${config.useThinkingModel ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-              <span class="glass-form-hint">启用后使用推理模型进行深度思考</span>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">AI 生图</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
-              <div class="glass-form-group">
-                <label class="glass-form-label">生图服务</label>
-                <select class="glass-select" id="image-gen-provider">
-                  <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
-                  <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
-                </select>
-              </div>
-              <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
-                <label class="glass-form-label">自定义生图 API</label>
-                <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
-              </div>
-              <div class="glass-form-group">
-                <label class="glass-form-label">图片尺寸</label>
-                <select class="glass-select" id="image-size-select">
-                  <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
-                  <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
-                  <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- 截图 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">截图</div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">保存到文件</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="save-to-file" ${screenshotConfig.saveToFile ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">复制到剪贴板</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="copy-to-clipboard" ${screenshotConfig.copyToClipboard ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">AI 分析</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="enable-ai" ${screenshotConfig.enableAI ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">默认 AI 操作</label>
-              <select class="glass-select" id="default-ai-action">
-                <option value="none"${screenshotConfig.defaultAIAction === 'none' ? ' selected' : ''}>无</option>
-                <option value="ask"${screenshotConfig.defaultAIAction === 'ask' ? ' selected' : ''}>询问</option>
-                <option value="describe"${screenshotConfig.defaultAIAction === 'describe' ? ' selected' : ''}>描述</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 右键搜图 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">右键搜图</div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">Google 搜图</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="image-search-google" ${imageSearchConfig.google ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">Yandex 搜图</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="image-search-yandex" ${imageSearchConfig.yandex ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">Bing 搜图</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="image-search-bing" ${imageSearchConfig.bing ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">TinEye 搜图</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="image-search-tineye" ${imageSearchConfig.tineye ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-            <span class="glass-form-hint">在图片上右键可使用搜图功能</span>
-          </div>
-
-          <!-- 历史记录 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">历史记录</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">最大保存数量</label>
-              <select class="glass-select" id="history-max-count">
-                <option value="50" ${historyConfig.maxSaveCount === 50 ? 'selected' : ''}>50 条</option>
-                <option value="100" ${historyConfig.maxSaveCount === 100 ? 'selected' : ''}>100 条</option>
-                <option value="200" ${historyConfig.maxSaveCount === 200 ? 'selected' : ''}>200 条</option>
-                <option value="500" ${historyConfig.maxSaveCount === 500 ? 'selected' : ''}>500 条</option>
-              </select>
-              <span class="glass-form-hint">超过此数量时，最旧的记录将被自动删除</span>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">面板显示数量</label>
-              <select class="glass-select" id="history-display-count">
-                <option value="5" ${historyConfig.panelDisplayCount === 5 ? 'selected' : ''}>5 条</option>
-                <option value="10" ${historyConfig.panelDisplayCount === 10 ? 'selected' : ''}>10 条</option>
-                <option value="15" ${historyConfig.panelDisplayCount === 15 ? 'selected' : ''}>15 条</option>
-                <option value="20" ${historyConfig.panelDisplayCount === 20 ? 'selected' : ''}>20 条</option>
-              </select>
-              <span class="glass-form-hint">命令面板中显示的最近记录数量</span>
-            </div>
-            <div class="glass-form-group">
-              <button id="clear-history" class="glass-btn glass-btn-danger">清空所有历史记录</button>
-            </div>
-          </div>
-
-          <!-- 批注 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">批注</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">默认高亮颜色</label>
-              <div class="glass-color-picker" id="annotation-color-picker">
-                <button class="glass-color-option ${(config.annotation?.defaultColor || 'yellow') === 'yellow' ? 'active' : ''}" data-color="yellow" style="--color: #fef08a; --color-border: #fbbf24;"></button>
-                <button class="glass-color-option ${config.annotation?.defaultColor === 'green' ? 'active' : ''}" data-color="green" style="--color: #bbf7d0; --color-border: #4ade80;"></button>
-                <button class="glass-color-option ${config.annotation?.defaultColor === 'blue' ? 'active' : ''}" data-color="blue" style="--color: #bfdbfe; --color-border: #60a5fa;"></button>
-                <button class="glass-color-option ${config.annotation?.defaultColor === 'pink' ? 'active' : ''}" data-color="pink" style="--color: #fbcfe8; --color-border: #f472b6;"></button>
-                <button class="glass-color-option ${config.annotation?.defaultColor === 'purple' ? 'active' : ''}" data-color="purple" style="--color: #ddd6fe; --color-border: #a78bfa;"></button>
-              </div>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">自动保存 AI 结果</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="annotation-auto-save" ${config.annotation?.autoSaveAIResult ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-              <span class="glass-form-hint">翻译/解释等 AI 结果自动关联到高亮</span>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">默认显示当前页面</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="annotation-page-filter" ${config.annotation?.showPageFilter ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 知识库 -->
-          <div class="glass-settings-section">
-            <div class="glass-settings-section-title">知识库</div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">默认筛选</label>
-              <select class="glass-select" id="knowledge-filter-select">
-                <option value="all" ${(config.knowledge?.defaultFilter || 'all') === 'all' ? 'selected' : ''}>全部</option>
-                <option value="annotations" ${config.knowledge?.defaultFilter === 'annotations' ? 'selected' : ''}>仅批注</option>
-                <option value="ai-results" ${config.knowledge?.defaultFilter === 'ai-results' ? 'selected' : ''}>仅 AI 结果</option>
-              </select>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">每组最大显示数量</label>
-              <select class="glass-select" id="knowledge-max-display">
-                <option value="20" ${(config.knowledge?.maxDisplayCount || 50) === 20 ? 'selected' : ''}>20 条</option>
-                <option value="50" ${config.knowledge?.maxDisplayCount === 50 ? 'selected' : ''}>50 条</option>
-                <option value="100" ${config.knowledge?.maxDisplayCount === 100 ? 'selected' : ''}>100 条</option>
-                <option value="200" ${config.knowledge?.maxDisplayCount === 200 ? 'selected' : ''}>200 条</option>
-              </select>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">按日期分组</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="knowledge-group-date" ${config.knowledge?.groupByDate !== false ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 重置 -->
-          <div class="glass-settings-section">
-            <div class="glass-form-group">
-              <button class="glass-btn glass-btn-reset">重置为默认设置</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="glass-footer glass-settings-footer">
-        <div class="glass-settings-footer-actions">
-          <button class="glass-btn glass-btn-cancel">取消</button>
-          <button class="glass-btn glass-btn-primary glass-btn-save">保存</button>
-        </div>
-      </div>
-    `;
+    return getSettingsViewHTMLFromModule(
+      config,
+      this.authState,
+      icons,
+      () => this.getAccountSettingsHTML()
+    );
   }
 
   private bindSettingsEvents(): void {
@@ -2476,73 +2134,7 @@ export class CommandPalette {
 
   // Account Settings HTML
   private getAccountSettingsHTML(): string {
-    const auth = this.authState;
-    if (auth?.isLoggedIn && auth.user) {
-      return `
-        <div class="glass-account-info">
-          <div class="glass-account-avatar">
-            ${auth.user.picture
-              ? `<img src="${auth.user.picture}" alt="${escapeHtml(auth.user.name)}" />`
-              : `<div class="glass-account-avatar-placeholder">${auth.user.name.charAt(0).toUpperCase()}</div>`
-            }
-          </div>
-          <div class="glass-account-details">
-            <div class="glass-account-name">${escapeHtml(auth.user.name)}</div>
-            <div class="glass-account-email">${escapeHtml(auth.user.email)}</div>
-          </div>
-          <button class="glass-btn glass-btn-secondary glass-btn-logout" title="退出登录">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="glass-form-group glass-form-toggle">
-          <label class="glass-form-label">云同步</label>
-          <label class="glass-toggle">
-            <input type="checkbox" id="sync-enabled-toggle" ${auth.syncEnabled ? 'checked' : ''}>
-            <span class="glass-toggle-slider"></span>
-          </label>
-        </div>
-        <div class="glass-form-group" id="sync-actions" ${auth.syncEnabled ? '' : 'style="display: none"'}>
-          <div style="display: flex; gap: 8px;">
-            <button class="glass-btn glass-btn-sync-now" id="sync-to-cloud-btn" style="flex: 1;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="16 16 12 12 8 16"></polyline>
-                <line x1="12" y1="21" x2="12" y2="12"></line>
-                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-              </svg>
-              上传到云端
-            </button>
-            <button class="glass-btn glass-btn-sync-now" id="sync-from-cloud-btn" style="flex: 1;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="8 17 12 21 16 17"></polyline>
-                <line x1="12" y1="12" x2="12" y2="21"></line>
-                <path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-              </svg>
-              从云端恢复
-            </button>
-          </div>
-        </div>
-        <span class="glass-form-hint">开启后，设置和浏览轨迹将自动同步到 Google Drive</span>
-      `;
-    } else {
-      return `
-        <div class="glass-account-login">
-          <button class="glass-btn glass-btn-google" id="google-login-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            使用 Google 账号登录
-          </button>
-          <span class="glass-form-hint">登录后可使用云同步和 Drive 导出功能</span>
-        </div>
-      `;
-    }
+    return getAccountSettingsHTMLFromModule(this.authState);
   }
 
   // Load auth state from background
@@ -2681,60 +2273,7 @@ export class CommandPalette {
   // Menu Settings
   private getMenuSettingsHTML(): string {
     const items = this.settingsMenuItems.length > 0 ? this.settingsMenuItems : DEFAULT_GLOBAL_MENU;
-    const sortedItems = [...items].sort((a, b) => a.order - b.order);
-
-    return `
-      <div class="glass-header">
-        <button class="glass-back-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 12H5M12 19l-7-7 7-7"/>
-          </svg>
-        </button>
-        <span class="glass-header-title">菜单管理</span>
-        <div class="glass-header-actions"></div>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-body">
-        <div class="glass-menu-list" id="menu-list">
-          ${sortedItems.map(item => this.getMenuItemHTML(item)).join('')}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <button class="glass-btn glass-btn-add">+ 添加自定义菜单项</button>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private getMenuItemHTML(item: MenuItem): string {
-    const isCustom = (item as CustomMenuItem).isCustom;
-    return `
-      <div class="glass-menu-item" data-id="${item.id}" draggable="true">
-        <span class="glass-menu-drag">⋮⋮</span>
-        <span class="glass-menu-icon">${item.customIcon || item.icon}</span>
-        <span class="glass-menu-label">${item.customLabel || item.label}</span>
-        ${isCustom ? `
-          <button class="glass-menu-btn glass-menu-edit" data-id="${item.id}" title="编辑">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>
-            </svg>
-          </button>
-          <button class="glass-menu-btn glass-menu-delete" data-id="${item.id}" title="删除">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-            </svg>
-          </button>
-        ` : ''}
-        <label class="glass-toggle glass-toggle-small">
-          <input type="checkbox" data-id="${item.id}" ${item.enabled ? 'checked' : ''}>
-          <span class="glass-toggle-slider"></span>
-        </label>
-      </div>
-    `;
+    return getMenuSettingsHTMLFromModule(items, icons);
   }
 
   private bindMenuSettingsEvents(): void {
@@ -3223,7 +2762,7 @@ export class CommandPalette {
           <div class="glass-search-section-title">${icons.library} 知识库</div>
           ${knowledge.map(item => {
             const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
-            const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
+            const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
             const preview = item.content.substring(0, 60) + (item.content.length > 60 ? '...' : '');
             return `
               <div class="glass-search-result" data-type="knowledge" data-id="${item.id}" data-url="${escapeHtml(item.url)}">
@@ -4265,7 +3804,7 @@ export class CommandPalette {
       </div>
       <div class="glass-footer">
         <div class="glass-knowledge-footer-info">
-          ${this.getFilteredAnnotations().length} 条批注
+          ${this.getLocalFilteredAnnotations().length} 条批注
         </div>
         <div class="glass-brand">
           <span class="glass-logo">${icons.logo}</span>
@@ -4274,148 +3813,23 @@ export class CommandPalette {
     `;
   }
 
-  private getFilteredAnnotations(): Annotation[] {
-    let filtered = this.annotationsList;
-
-    // Filter by page
-    if (this.annotationsFilter === 'current') {
-      const currentUrl = this.normalizeUrlForAnnotation(window.location.href);
-      filtered = filtered.filter(a => a.url === currentUrl);
-    }
-
-    // Filter by search
-    const query = this.annotationsSearch.toLowerCase();
-    if (query) {
-      filtered = filtered.filter(a =>
-        a.highlightText.toLowerCase().includes(query) ||
-        a.note?.toLowerCase().includes(query) ||
-        a.pageTitle.toLowerCase().includes(query) ||
-        a.aiResult?.content?.toLowerCase().includes(query)
-      );
-    }
-
-    // Sort by creation date (newest first)
-    return filtered.sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  private normalizeUrlForAnnotation(url: string): string {
-    try {
-      const parsed = new URL(url);
-      return parsed.origin + parsed.pathname;
-    } catch {
-      return url;
-    }
+  private getLocalFilteredAnnotations(): Annotation[] {
+    return getFilteredAnnotations(
+      this.annotationsList,
+      this.annotationsFilter,
+      this.annotationsSearch,
+      window.location.href
+    );
   }
 
   private getAnnotationsContentHTML(): string {
-    const annotations = this.getFilteredAnnotations();
-
-    if (annotations.length === 0) {
-      return `
-        <div class="glass-knowledge-empty">
-          <div class="glass-knowledge-empty-icon">${icons.highlighter}</div>
-          <div class="glass-knowledge-empty-text">
-            ${this.annotationsSearch ? '没有找到匹配的批注' : (this.annotationsFilter === 'current' ? '当前页面没有批注' : '还没有批注')}
-          </div>
-          <div class="glass-knowledge-empty-hint">
-            ${this.annotationsSearch ? '试试其他关键词' : '选择文本后点击高亮按钮添加批注'}
-          </div>
-        </div>
-      `;
-    }
-
-    // Group by date
-    const groups = this.groupAnnotationsByDate(annotations);
-
-    return Object.entries(groups).map(([date, items]) => `
-      <div class="glass-knowledge-group">
-        <div class="glass-knowledge-date"><span>${date}</span></div>
-        <div class="glass-knowledge-entries">
-          ${items.map(annotation => this.getAnnotationEntryHTML(annotation)).join('')}
-        </div>
-      </div>
-    `).join('');
-  }
-
-  private groupAnnotationsByDate(annotations: Annotation[]): Record<string, Annotation[]> {
-    const groups: Record<string, Annotation[]> = {};
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    for (const annotation of annotations) {
-      const date = new Date(annotation.createdAt).toDateString();
-      let label: string;
-
-      if (date === today) {
-        label = '今天';
-      } else if (date === yesterday) {
-        label = '昨天';
-      } else {
-        label = new Date(annotation.createdAt).toLocaleDateString('zh-CN', {
-          month: 'long',
-          day: 'numeric',
-          weekday: 'short',
-        });
-      }
-
-      if (!groups[label]) {
-        groups[label] = [];
-      }
-      groups[label].push(annotation);
-    }
-
-    return groups;
-  }
-
-  private getAnnotationEntryHTML(annotation: Annotation): string {
-    const colorConfig = ANNOTATION_COLORS[annotation.color];
-    const time = new Date(annotation.createdAt).toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    let domain = '';
-    try { domain = new URL(annotation.url).hostname; } catch {}
-
-    const truncatedText = annotation.highlightText.length > 120
-      ? annotation.highlightText.substring(0, 120) + '...'
-      : annotation.highlightText;
-
-    const hasNote = annotation.note && annotation.note.trim().length > 0;
-    const hasAI = annotation.aiResult && annotation.aiResult.content;
-
-    return `
-      <div class="glass-knowledge-entry" data-id="${annotation.id}" data-url="${escapeHtml(annotation.url)}" style="border-left: 3px solid ${colorConfig.border}">
-        <div class="glass-knowledge-entry-header">
-          <span class="glass-knowledge-entry-type">
-            <span class="glass-knowledge-entry-type-icon">${icons.highlighter}</span>
-            批注
-          </span>
-          <span class="glass-knowledge-entry-time">${time}</span>
-        </div>
-        <div class="glass-knowledge-entry-content">${escapeHtml(truncatedText)}</div>
-        ${hasNote ? `<div class="glass-knowledge-entry-note">${escapeHtml(annotation.note || '')}</div>` : ''}
-        ${hasAI ? `
-          <div class="glass-knowledge-entry-ai">
-            <span class="glass-knowledge-entry-ai-badge">AI ${this.getAIResultTypeLabel(annotation.aiResult?.type || 'translate')}</span>
-            <span class="glass-knowledge-entry-ai-preview">${escapeHtml(annotation.aiResult?.content?.substring(0, 60) || '')}...</span>
-          </div>
-        ` : ''}
-        <div class="glass-knowledge-entry-meta">
-          <span class="glass-knowledge-entry-page" title="${escapeHtml(annotation.pageTitle)}">${escapeHtml(annotation.pageTitle || domain)}</span>
-        </div>
-        <button class="glass-knowledge-entry-delete" data-id="${annotation.id}" title="删除">&times;</button>
-      </div>
-    `;
-  }
-
-  private getAIResultTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      translate: '翻译',
-      explain: '解释',
-      summarize: '总结',
-      rewrite: '改写',
-    };
-    return labels[type] || type;
+    return getAnnotationsContentHTMLFromModule(
+      this.annotationsList,
+      this.annotationsFilter,
+      this.annotationsSearch,
+      window.location.href,
+      icons
+    );
   }
 
   private bindAnnotationsEvents(): void {
@@ -4453,7 +3867,7 @@ export class CommandPalette {
         // Update footer count
         const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
         if (footerInfo) {
-          footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+          footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
         }
       });
     });
@@ -4469,7 +3883,7 @@ export class CommandPalette {
       // Update footer count
       const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
       if (footerInfo) {
-        footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+        footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
       }
     });
 
@@ -4500,7 +3914,7 @@ export class CommandPalette {
         const id = (entry as HTMLElement).dataset.id;
         if (url) {
           // If on the same page, scroll to the annotation
-          const currentUrl = this.normalizeUrlForAnnotation(window.location.href);
+          const currentUrl = normalizeUrlForAnnotation(window.location.href);
           if (url === currentUrl) {
             this.hide();
             // Try to scroll to the annotation after hiding
@@ -4536,7 +3950,7 @@ export class CommandPalette {
           // Update footer count
           const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
           if (footerInfo) {
-            footerInfo.textContent = `${this.getFilteredAnnotations().length} 条批注`;
+            footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
           }
         }
       });
@@ -4555,10 +3969,10 @@ export class CommandPalette {
         getAllTasks(),
       ]);
 
-      // Convert to unified format
+      // Convert to unified format using extracted functions
       this.knowledgeItems = [
-        ...annotations.map(a => this.annotationToKnowledgeItem(a)),
-        ...savedTasks.map(t => this.savedTaskToKnowledgeItem(t)),
+        ...annotations.map(a => annotationToKnowledgeItem(a)),
+        ...savedTasks.map(t => savedTaskToKnowledgeItem(t)),
       ];
 
       // Sort by date (newest first)
@@ -4579,40 +3993,6 @@ export class CommandPalette {
       this.viewStack = [];
       this.renderCurrentView(true, true);
     }
-  }
-
-  private annotationToKnowledgeItem(annotation: Annotation): KnowledgeItem {
-    return {
-      id: `ann_${annotation.id}`,
-      type: 'annotation',
-      title: annotation.highlightText.substring(0, 50) + (annotation.highlightText.length > 50 ? '...' : ''),
-      content: annotation.highlightText,
-      url: annotation.url,
-      pageTitle: annotation.pageTitle,
-      createdAt: annotation.createdAt,
-      color: annotation.color,
-      note: annotation.note,
-      aiResult: annotation.aiResult ? {
-        type: annotation.aiResult.type,
-        content: annotation.aiResult.content,
-        thinking: annotation.aiResult.thinking,
-      } : undefined,
-    };
-  }
-
-  private savedTaskToKnowledgeItem(task: SavedTask): KnowledgeItem {
-    return {
-      id: `task_${task.id}`,
-      type: 'ai-result',
-      title: task.title,
-      content: task.content,
-      originalText: task.originalText,
-      url: task.sourceUrl || '',
-      pageTitle: task.sourceTitle || '',
-      createdAt: task.createdAt,
-      actionType: task.actionType,
-      thinking: task.thinking,
-    };
   }
 
   private getKnowledgeViewHTML(): string {
@@ -4646,7 +4026,7 @@ export class CommandPalette {
       <div class="glass-footer">
         <div class="glass-footer-content">
           <div class="glass-knowledge-footer-info">
-            ${this.getFilteredKnowledgeItems().length} 条记录
+            ${this.getLocalFilteredKnowledgeItems().length} 条记录
           </div>
           <button class="glass-footer-btn glass-btn-export-knowledge" title="导出">
             ${icons.download}
@@ -4659,144 +4039,17 @@ export class CommandPalette {
     `;
   }
 
-  private getFilteredKnowledgeItems(): KnowledgeItem[] {
-    let filtered = this.knowledgeItems;
-
-    // Filter by type
-    if (this.knowledgeFilter === 'annotations') {
-      filtered = filtered.filter(item => item.type === 'annotation');
-    } else if (this.knowledgeFilter === 'ai-results') {
-      filtered = filtered.filter(item => item.type === 'ai-result');
-    }
-
-    // Filter by search
-    const query = this.knowledgeSearch.toLowerCase();
-    if (query) {
-      filtered = filtered.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.content.toLowerCase().includes(query) ||
-        item.pageTitle.toLowerCase().includes(query) ||
-        item.note?.toLowerCase().includes(query) ||
-        item.originalText?.toLowerCase().includes(query) ||
-        item.aiResult?.content?.toLowerCase().includes(query)
-      );
-    }
-
-    return filtered;
+  private getLocalFilteredKnowledgeItems(): KnowledgeItem[] {
+    return getFilteredKnowledgeItems(this.knowledgeItems, this.knowledgeFilter, this.knowledgeSearch);
   }
 
   private getKnowledgeContentHTML(): string {
-    const items = this.getFilteredKnowledgeItems();
-
-    if (items.length === 0) {
-      return `
-        <div class="glass-knowledge-empty">
-          <div class="glass-knowledge-empty-icon">${icons.library}</div>
-          <div class="glass-knowledge-empty-text">
-            ${this.knowledgeSearch ? '没有找到匹配的记录' : '知识库为空'}
-          </div>
-          <div class="glass-knowledge-empty-hint">
-            ${this.knowledgeSearch ? '试试其他关键词' : '批注和 AI 结果会自动保存到这里'}
-          </div>
-        </div>
-      `;
-    }
-
-    // Group by date
-    const groups = this.groupKnowledgeByDate(items);
-
-    return Object.entries(groups).map(([date, groupItems]) => `
-      <div class="glass-knowledge-group">
-        <div class="glass-knowledge-date"><span>${date}</span></div>
-        <div class="glass-knowledge-entries">
-          ${groupItems.map(item => this.getKnowledgeItemHTML(item)).join('')}
-        </div>
-      </div>
-    `).join('');
-  }
-
-  private groupKnowledgeByDate(items: KnowledgeItem[]): Record<string, KnowledgeItem[]> {
-    const groups: Record<string, KnowledgeItem[]> = {};
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    for (const item of items) {
-      const date = new Date(item.createdAt).toDateString();
-      let label: string;
-
-      if (date === today) {
-        label = '今天';
-      } else if (date === yesterday) {
-        label = '昨天';
-      } else {
-        label = new Date(item.createdAt).toLocaleDateString('zh-CN', {
-          month: 'long',
-          day: 'numeric',
-          weekday: 'short',
-        });
-      }
-
-      if (!groups[label]) {
-        groups[label] = [];
-      }
-      groups[label].push(item);
-    }
-
-    return groups;
-  }
-
-  private getKnowledgeItemHTML(item: KnowledgeItem): string {
-    const time = new Date(item.createdAt).toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    let domain = '';
-    try { domain = new URL(item.url).hostname; } catch {}
-
-    const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
-    const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
-    const colorStyle = item.color ? `border-left: 3px solid ${ANNOTATION_COLORS[item.color as keyof typeof ANNOTATION_COLORS]?.border || '#fbbf24'}` : '';
-
-    const truncatedContent = item.content.length > 120
-      ? item.content.substring(0, 120) + '...'
-      : item.content;
-
-    return `
-      <div class="glass-knowledge-entry" data-id="${item.id}" data-type="${item.type}" data-url="${escapeHtml(item.url)}" style="${colorStyle}">
-        <div class="glass-knowledge-entry-header">
-          <span class="glass-knowledge-entry-type">
-            <span class="glass-knowledge-entry-type-icon">${typeIcon}</span>
-            ${typeLabel}
-          </span>
-          <span class="glass-knowledge-entry-time">${time}</span>
-        </div>
-        <div class="glass-knowledge-entry-content">${escapeHtml(truncatedContent)}</div>
-        ${item.note ? `<div class="glass-knowledge-entry-note">${escapeHtml(item.note)}</div>` : ''}
-        ${item.aiResult ? `
-          <div class="glass-knowledge-entry-ai">
-            <span class="glass-knowledge-entry-ai-badge">AI ${this.getAIResultTypeLabel(item.aiResult.type)}</span>
-            <span class="glass-knowledge-entry-ai-preview">${escapeHtml(item.aiResult.content.substring(0, 60))}...</span>
-          </div>
-        ` : ''}
-        <div class="glass-knowledge-entry-meta">
-          <span class="glass-knowledge-entry-page" title="${escapeHtml(item.pageTitle)}">${escapeHtml(item.pageTitle || domain)}</span>
-        </div>
-        <button class="glass-knowledge-entry-delete" data-id="${item.id}" title="删除">&times;</button>
-      </div>
-    `;
-  }
-
-  private getActionTypeLabel(actionType?: string): string {
-    const labels: Record<string, string> = {
-      translate: '翻译',
-      summarize: '总结',
-      explain: '解释',
-      rewrite: '改写',
-      summarizePage: '页面总结',
-      codeExplain: '代码解释',
-    };
-    return labels[actionType || ''] || 'AI 结果';
+    return getKnowledgeContentHTMLFromModule(
+      this.knowledgeItems,
+      this.knowledgeFilter,
+      this.knowledgeSearch,
+      icons
+    );
   }
 
   private bindKnowledgeEvents(): void {
@@ -4869,7 +4122,7 @@ export class CommandPalette {
   private updateKnowledgeFooter(): void {
     const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
     if (footerInfo) {
-      footerInfo.textContent = `${this.getFilteredKnowledgeItems().length} 条记录`;
+      footerInfo.textContent = `${this.getLocalFilteredKnowledgeItems().length} 条记录`;
     }
   }
 
@@ -4983,19 +4236,19 @@ export class CommandPalette {
   }
 
   private exportKnowledge(): void {
-    const items = this.getFilteredKnowledgeItems();
+    const items = this.getLocalFilteredKnowledgeItems();
 
     let markdown = `# 知识库导出\n\n`;
     markdown += `导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
     markdown += `总计: ${items.length} 条记录\n\n---\n\n`;
 
-    const groups = this.groupKnowledgeByDate(items);
+    const groups = groupKnowledgeByDate(items);
 
     for (const [date, groupItems] of Object.entries(groups)) {
       markdown += `## ${date}\n\n`;
 
       for (const item of groupItems) {
-        const typeLabel = item.type === 'annotation' ? '批注' : this.getActionTypeLabel(item.actionType);
+        const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
         markdown += `### ${typeLabel}\n\n`;
 
         if (item.pageTitle) {
@@ -5013,7 +4266,7 @@ export class CommandPalette {
         }
 
         if (item.aiResult) {
-          markdown += `**AI ${this.getAIResultTypeLabel(item.aiResult.type)}**:\n${item.aiResult.content}\n\n`;
+          markdown += `**AI ${getAIResultTypeLabel(item.aiResult.type)}**:\n${item.aiResult.content}\n\n`;
         }
 
         markdown += `---\n\n`;

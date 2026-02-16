@@ -17,7 +17,7 @@ import {
 } from './ai-handler';
 import { googleLogin, googleLogout, getAuthStatus, setSyncEnabled } from './auth-handler';
 import { freeTranslate, shouldUseFreeTranslate } from './free-translate-handler';
-import { syncToCloud, syncFromCloud, setupAutoSync } from './sync-handler';
+import { syncToCloud, syncFromCloud, setupAutoSync, listBackups, restoreBackup, deleteBackup } from './sync-handler';
 import { exportToGoogleDocs } from './drive-export-handler';
 
 // Handle messages from content script
@@ -95,6 +95,15 @@ async function handleMessage(message: Message, _sender: chrome.runtime.MessageSe
 
     case 'SYNC_FROM_CLOUD':
       return syncFromCloud();
+
+    case 'LIST_BACKUPS':
+      return listBackups();
+
+    case 'RESTORE_BACKUP':
+      return restoreBackup((message.payload as { fileId: string }).fileId);
+
+    case 'DELETE_BACKUP':
+      return deleteBackup((message.payload as { fileId: string }).fileId);
 
     case 'EXPORT_TO_DRIVE':
       return handleExportToDrive(message.payload as { title: string; content: string; sourceUrl?: string });

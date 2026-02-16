@@ -153,6 +153,8 @@ export class CommandPalette {
   private minimizedTasks: MinimizedTask[] = [];
   private minimizedTaskIdCounter = 0;
   private currentStreamKey: string | null = null; // Key to identify current active stream
+  // Track all active stream keys for concurrent tasks
+  private activeStreamKeys: Set<string> = new Set();
 
   // Recent saved tasks from IndexedDB
   private recentSavedTasks: SavedTask[] = [];
@@ -214,7 +216,7 @@ export class CommandPalette {
       // But don't minimize tasks restored from saved records (they're already saved)
       const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
       if (this.aiResultData && !isSavedTask) {
-        this.minimize();
+        this.saveCurrentAsMinimized();
       }
 
       const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
@@ -321,8 +323,12 @@ export class CommandPalette {
       }
     }
 
+    // Save current active task as minimized before creating new one
+    this.saveCurrentAsMinimized();
+
     // Generate unique stream key for this AI request
     this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this.activeStreamKeys.add(this.currentStreamKey);
 
     this.aiResultData = {
       title,
@@ -352,6 +358,11 @@ export class CommandPalette {
     }
 
     return false; // New request started
+  }
+
+  // Get the current stream key for callbacks to capture
+  public getCurrentStreamKey(): string | null {
+    return this.currentStreamKey;
   }
 
   // Set active command for unified interface
@@ -413,9 +424,12 @@ export class CommandPalette {
     }
   }
 
-  public streamUpdate(_chunk: string, fullText: string, thinking?: string): void {
+  public streamUpdate(_chunk: string, fullText: string, thinking?: string, targetStreamKey?: string): void {
+    // Use targetStreamKey if provided (for routing to specific task), otherwise use currentStreamKey
+    const streamKey = targetStreamKey || this.currentStreamKey;
+
     // Update active AI result if streamKey matches
-    if (this.aiResultData && this.aiResultData.streamKey === this.currentStreamKey) {
+    if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
       this.aiResultData.content = fullText;
       this.aiResultData.isLoading = true;
       if (thinking) {
@@ -427,26 +441,41 @@ export class CommandPalette {
       } else {
         this.updateAIResultContent();
       }
+    } else if (this.aiResultData) {
+      // Log mismatch for debugging
+      console.log('[streamUpdate] streamKey mismatch - target:', streamKey, 'aiResultData:', this.aiResultData.streamKey);
     }
 
     // Also update minimized task with matching streamKey
     // Note: Don't re-render the list during streaming - just update the data
     // The loading indicator is already showing, no need to re-render
-    if (this.currentStreamKey) {
-      const task = this.minimizedTasks.find(t => t.streamKey === this.currentStreamKey);
+    if (streamKey) {
+      const task = this.minimizedTasks.find(t => t.streamKey === streamKey);
       if (task) {
         task.content = fullText;
         task.isLoading = true;
         if (thinking) {
           task.thinking = thinking;
         }
+        // Debug: Log that we're updating minimized task
+        console.log('[streamUpdate] Updated minimizedTask content, length:', fullText.length);
+      } else if (this.minimizedTasks.length > 0) {
+        // Debug: Log why we couldn't find the task
+        console.log('[streamUpdate] Could not find minimizedTask for streamKey:', streamKey, 'available:', this.minimizedTasks.map(t => t.streamKey));
       }
     }
   }
 
-  public updateAIResult(content: string, thinking?: string): void {
+  public updateAIResult(content: string, thinking?: string, targetStreamKey?: string): void {
+    // Use targetStreamKey if provided, otherwise use currentStreamKey
+    const streamKey = targetStreamKey || this.currentStreamKey;
+
+    console.log('[updateAIResult] streamKey:', streamKey, 'targetStreamKey:', targetStreamKey, 'currentStreamKey:', this.currentStreamKey);
+    console.log('[updateAIResult] aiResultData.streamKey:', this.aiResultData?.streamKey);
+    console.log('[updateAIResult] minimizedTasks:', this.minimizedTasks.map(t => ({ id: t.id, streamKey: t.streamKey, isLoading: t.isLoading })));
+
     // Update active AI result if streamKey matches
-    if (this.aiResultData && this.aiResultData.streamKey === this.currentStreamKey) {
+    if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
       this.aiResultData.content = content;
       this.aiResultData.isLoading = false;
       if (thinking) {
@@ -461,8 +490,9 @@ export class CommandPalette {
     }
 
     // Also update minimized task with matching streamKey
-    if (this.currentStreamKey) {
-      const task = this.minimizedTasks.find(t => t.streamKey === this.currentStreamKey);
+    if (streamKey) {
+      const task = this.minimizedTasks.find(t => t.streamKey === streamKey);
+      console.log('[updateAIResult] Found minimized task:', task ? { id: task.id, wasLoading: task.isLoading } : 'none');
       if (task) {
         task.content = content;
         if (thinking) {
@@ -472,16 +502,24 @@ export class CommandPalette {
         task.isLoading = false;
         // Only re-render if loading state changed (to update the loading indicator)
         if (wasLoading) {
+          console.log('[updateAIResult] Calling renderMinimizedTasksIfVisible, currentView:', this.currentView, 'shadowRoot:', !!this.shadowRoot);
           this.renderMinimizedTasksIfVisible();
         }
       }
-      // Clear the stream key since this stream is complete
-      this.currentStreamKey = null;
+      // Remove from active stream keys since this stream is complete
+      this.activeStreamKeys.delete(streamKey);
+      // Clear currentStreamKey only if it matches
+      if (this.currentStreamKey === streamKey) {
+        this.currentStreamKey = null;
+      }
     }
   }
 
-  public setAIResultLoading(isLoading: boolean): void {
-    if (this.aiResultData && this.aiResultData.streamKey === this.currentStreamKey) {
+  public setAIResultLoading(isLoading: boolean, targetStreamKey?: string): void {
+    // Use targetStreamKey if provided, otherwise use currentStreamKey
+    const streamKey = targetStreamKey || this.currentStreamKey;
+
+    if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
       this.aiResultData.isLoading = isLoading;
       // Use unified content update if in commands view with active command
       if (this.currentView === 'commands' && this.activeCommand) {
@@ -492,8 +530,8 @@ export class CommandPalette {
     }
 
     // Also update minimized task with matching streamKey
-    if (this.currentStreamKey) {
-      const task = this.minimizedTasks.find(t => t.streamKey === this.currentStreamKey);
+    if (streamKey) {
+      const task = this.minimizedTasks.find(t => t.streamKey === streamKey);
       if (task) {
         const wasLoading = task.isLoading;
         task.isLoading = isLoading;
@@ -503,8 +541,12 @@ export class CommandPalette {
         }
       }
       if (!isLoading) {
-        // Clear the stream key since this stream is complete
-        this.currentStreamKey = null;
+        // Remove from active stream keys since this stream is complete
+        this.activeStreamKeys.delete(streamKey);
+        // Clear currentStreamKey only if it matches
+        if (this.currentStreamKey === streamKey) {
+          this.currentStreamKey = null;
+        }
       }
     }
   }
@@ -990,16 +1032,14 @@ export class CommandPalette {
   }
 
   private clearActiveCommand(): void {
-    // If there's an active AI action still loading, minimize it instead of aborting
+    // If there's an active AI action still loading, minimize it to background
     if (this.aiResultData && this.aiResultData.isLoading && this.activeCommand) {
       this.minimizeToBackground();
       return;
     }
 
-    // Otherwise, stop any ongoing requests and clear
-    if (this.aiResultCallbacks?.onStop) {
-      this.aiResultCallbacks.onStop();
-    }
+    // For completed tasks, just clear the active state
+    // Don't call abortAllRequests - there may be background tasks still streaming
     this.currentStreamKey = null;
     this.activeCommand = null;
     this.activeCommandInput = '';
@@ -1011,41 +1051,11 @@ export class CommandPalette {
 
   // Minimize current task to background without aborting (streaming continues)
   private minimizeToBackground(): void {
-    if (!this.aiResultData) return;
-
-    // For page-level actions, only allow one minimized task per type
-    if (this.aiResultData.actionType) {
-      const existingIndex = this.minimizedTasks.findIndex(t => t.actionType === this.aiResultData!.actionType);
-      if (existingIndex !== -1) {
-        this.minimizedTasks.splice(existingIndex, 1);
-      }
-    }
-
-    // Store as minimized task with streamKey for ongoing updates
-    const task: MinimizedTask = {
-      id: `task-${++this.minimizedTaskIdCounter}`,
-      title: this.aiResultData.title,
-      content: this.aiResultData.content,
-      originalText: this.aiResultData.originalText,
-      resultType: this.aiResultData.resultType,
-      translateTargetLanguage: this.aiResultData.translateTargetLanguage,
-      iconHtml: this.aiResultData.iconHtml,
-      isLoading: this.aiResultData.isLoading,
-      minimizedAt: Date.now(),
-      streamKey: this.aiResultData.streamKey,
-      callbacks: this.aiResultCallbacks || undefined,
-      actionType: this.aiResultData.actionType,
-      sourceUrl: this.aiResultData.sourceUrl,
-      sourceTitle: this.aiResultData.sourceTitle,
-      createdAt: this.aiResultData.createdAt || Date.now(),
-    };
-    this.minimizedTasks.push(task);
+    this.saveCurrentAsMinimized();
 
     // Clear active state but keep currentStreamKey for updates
     this.activeCommand = null;
     this.activeCommandInput = '';
-    this.aiResultData = null;
-    this.aiResultCallbacks = null;
     this.searchQuery = '';
     this.renderCurrentView(true, true);
   }
@@ -1352,14 +1362,10 @@ export class CommandPalette {
     const backBtn = this.shadowRoot.querySelector('.glass-back-btn');
     backBtn?.addEventListener('click', () => {
       // Auto-minimize active AI task before returning
-      if (this.aiResultData) {
-        this.minimize();
-      }
+      this.saveCurrentAsMinimized();
       // Always return to commands view for AI results
       this.currentView = 'commands';
       this.viewStack = [];
-      this.aiResultData = null;
-      this.aiResultCallbacks = null;
       this.renderCurrentView(true, true);
     });
 
@@ -1433,15 +1439,11 @@ export class CommandPalette {
       // Remove the listener when leaving ai-result view
       document.removeEventListener('keydown', this.handleAIResultKeydown);
       // Auto-minimize active AI task before returning
-      if (this.aiResultData) {
-        this.minimize();
-      }
+      this.saveCurrentAsMinimized();
       // Return to commands view instead of closing
       this.activeCommand = null;
       this.currentView = 'commands';
       this.viewStack = [];
-      this.aiResultData = null;
-      this.aiResultCallbacks = null;
       this.renderCurrentView(true, true);
     }
   };
@@ -1512,7 +1514,12 @@ export class CommandPalette {
   };
 
   // Minimize/Restore methods
-  private minimize(): void {
+
+  /**
+   * Save current active AI result as a minimized task without hiding the panel.
+   * Used when switching between tasks to preserve the current result.
+   */
+  private saveCurrentAsMinimized(): void {
     if (!this.aiResultData) return;
 
     // For page-level actions (summarizePage), only allow one minimized task
@@ -1529,6 +1536,7 @@ export class CommandPalette {
       id: `task-${++this.minimizedTaskIdCounter}`,
       title: this.aiResultData.title,
       content: this.aiResultData.content,
+      thinking: this.aiResultData.thinking,
       originalText: this.aiResultData.originalText,
       resultType: this.aiResultData.resultType,
       translateTargetLanguage: this.aiResultData.translateTargetLanguage,
@@ -1543,28 +1551,37 @@ export class CommandPalette {
       sourceTitle: this.aiResultData.sourceTitle,
       createdAt: this.aiResultData.createdAt || Date.now(),
     };
+    console.log('[minimize] Saving task with streamKey:', task.streamKey, 'action:', task.actionType, 'content length:', task.content.length);
     this.minimizedTasks.push(task);
 
-    // Reset AI result state and close palette
+    // Reset AI result state
     // Note: currentStreamKey is NOT cleared - it continues to be used for updates
     this.aiResultData = null;
     this.aiResultCallbacks = null;
+  }
+
+  private minimize(): void {
+    this.saveCurrentAsMinimized();
     this.hide();
   }
 
   private restoreMinimizedTask(taskId: string): void {
+    // Find and remove the target task from minimized list first
+    // (before saveCurrentAsMinimized to avoid dedup conflicts)
     const taskIndex = this.minimizedTasks.findIndex(t => t.id === taskId);
     if (taskIndex === -1) return;
+    const task = this.minimizedTasks.splice(taskIndex, 1)[0];
 
-    const task = this.minimizedTasks[taskIndex];
+    console.log('[restoreMinimizedTask] Restoring task:', task.id, 'streamKey:', task.streamKey, 'isLoading:', task.isLoading, 'content length:', task.content.length);
 
-    // Remove from minimized tasks
-    this.minimizedTasks.splice(taskIndex, 1);
+    // Save current active task as minimized before overwriting
+    this.saveCurrentAsMinimized();
 
     // Restore as active AI result
     this.aiResultData = {
       title: task.title,
       content: task.content,
+      thinking: task.thinking,
       originalText: task.originalText,
       isLoading: task.isLoading,
       resultType: task.resultType,
@@ -1740,9 +1757,14 @@ export class CommandPalette {
     // Sync toggle (immediate action, not affected by save/cancel)
     const syncToggle = this.shadowRoot.querySelector('#sync-enabled-toggle') as HTMLInputElement;
     const syncActions = this.shadowRoot.querySelector('#sync-actions') as HTMLElement;
+    const backupSection = this.shadowRoot.querySelector('#backup-history-section') as HTMLElement;
     syncToggle?.addEventListener('change', () => {
       if (syncActions) syncActions.style.display = syncToggle.checked ? 'flex' : 'none';
+      if (backupSection) backupSection.style.display = syncToggle.checked ? 'block' : 'none';
       this.handleSyncToggle(syncToggle.checked);
+      if (syncToggle.checked) {
+        this.loadBackupList();
+      }
     });
 
     // Sync buttons
@@ -1751,6 +1773,15 @@ export class CommandPalette {
 
     const syncFromCloudBtn = this.shadowRoot.querySelector('#sync-from-cloud-btn');
     syncFromCloudBtn?.addEventListener('click', () => this.handleSyncFromCloud(syncFromCloudBtn as HTMLButtonElement));
+
+    // Refresh backups button
+    const refreshBackupsBtn = this.shadowRoot.querySelector('#refresh-backups-btn');
+    refreshBackupsBtn?.addEventListener('click', () => this.loadBackupList());
+
+    // Auto-load backup list if sync is enabled
+    if (this.authState?.syncEnabled) {
+      this.loadBackupList();
+    }
 
     // Translation provider select
     const translationProviderSelect = this.shadowRoot.querySelector('#translation-provider-select') as HTMLSelectElement;
@@ -2190,9 +2221,21 @@ export class CommandPalette {
         this.authState.syncEnabled = enabled;
       }
       if (enabled) {
-        // Trigger initial sync when enabled
-        await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
-        this.showToast('同步已开启');
+        // First try to download from cloud (preserve existing cloud data)
+        const syncResult = await chrome.runtime.sendMessage({ type: 'SYNC_FROM_CLOUD' });
+        if (syncResult.success && syncResult.data) {
+          // Cloud had data, applied it locally
+          const { getStorageData } = await import('../../utils/storage');
+          const data = await getStorageData();
+          this.config = data.config;
+          this.tempConfig = JSON.parse(JSON.stringify(this.config));
+          this.renderCurrentView(true, true);
+          this.showToast('同步已开启，已恢复云端配置');
+        } else {
+          // No cloud data, upload current config
+          await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
+          this.showToast('同步已开启');
+        }
       } else {
         this.showToast('同步已关闭');
       }
@@ -2245,9 +2288,122 @@ export class CommandPalette {
       }
     } catch (error) {
       console.error('Sync from cloud error:', error);
-      this.showToast('恢复失败');
+      this.showToast(`恢复失败: ${error}`);
     } finally {
       btn.innerHTML = originalHTML;
+      btn.disabled = false;
+    }
+  }
+
+  // Format backup timestamp to MM-DD HH:mm
+  private formatBackupTime(timestamp: number): string {
+    const d = new Date(timestamp);
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hour = String(d.getHours()).padStart(2, '0');
+    const minute = String(d.getMinutes()).padStart(2, '0');
+    return `${month}-${day} ${hour}:${minute}`;
+  }
+
+  // Load and render backup list
+  private async loadBackupList(): Promise<void> {
+    if (!this.shadowRoot) return;
+    const listEl = this.shadowRoot.querySelector('#backup-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<span class="glass-form-hint">加载中...</span>';
+
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'LIST_BACKUPS' });
+      if (!response.success) {
+        listEl.innerHTML = `<span class="glass-form-hint">${response.error || '加载失败'}</span>`;
+        return;
+      }
+
+      const backups = response.backups || [];
+      if (backups.length === 0) {
+        listEl.innerHTML = '<span class="glass-form-hint">暂无备份</span>';
+        return;
+      }
+
+      listEl.innerHTML = backups.map((b: { id: string; name: string; timestamp: number }) => `
+        <div class="glass-backup-item" data-id="${b.id}">
+          <span>${this.formatBackupTime(b.timestamp)}</span>
+          <div class="glass-backup-actions">
+            <button class="glass-btn glass-btn-secondary glass-btn-restore" data-id="${b.id}" style="padding: 2px 8px; font-size: 11px;">恢复</button>
+            <button class="glass-btn glass-btn-secondary glass-btn-delete-backup" data-id="${b.id}" style="padding: 2px 8px; font-size: 11px; color: #ef4444;">删除</button>
+          </div>
+        </div>
+      `).join('');
+
+      // Bind restore buttons
+      listEl.querySelectorAll('.glass-btn-restore').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const fileId = (btn as HTMLElement).dataset.id!;
+          this.handleRestoreBackup(fileId, btn as HTMLButtonElement);
+        });
+      });
+
+      // Bind delete buttons
+      listEl.querySelectorAll('.glass-btn-delete-backup').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const fileId = (btn as HTMLElement).dataset.id!;
+          this.handleDeleteBackup(fileId, btn as HTMLButtonElement);
+        });
+      });
+    } catch (error) {
+      console.error('Load backup list error:', error);
+      listEl.innerHTML = '<span class="glass-form-hint">加载失败</span>';
+    }
+  }
+
+  // Handle restore backup
+  private async handleRestoreBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
+    const originalText = btn.textContent;
+    btn.textContent = '恢复中...';
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'RESTORE_BACKUP', payload: { fileId } });
+      if (response.success) {
+        this.showToast('已恢复备份');
+        // Reload config to reflect changes
+        const { getStorageData } = await import('../../utils/storage');
+        const data = await getStorageData();
+        this.config = data.config;
+        this.tempConfig = JSON.parse(JSON.stringify(this.config));
+        this.renderCurrentView(true, true);
+      } else {
+        this.showToast(response.error || '恢复失败');
+      }
+    } catch (error) {
+      console.error('Restore backup error:', error);
+      this.showToast('恢复失败');
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  }
+
+  // Handle delete backup
+  private async handleDeleteBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
+    const originalText = btn.textContent;
+    btn.textContent = '删除中...';
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'DELETE_BACKUP', payload: { fileId } });
+      if (response.success) {
+        this.showToast('已删除备份');
+        this.loadBackupList();
+      } else {
+        this.showToast(response.error || '删除失败');
+      }
+    } catch (error) {
+      console.error('Delete backup error:', error);
+      this.showToast('删除失败');
+    } finally {
+      btn.textContent = originalText;
       btn.disabled = false;
     }
   }

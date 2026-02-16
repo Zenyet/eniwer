@@ -26,15 +26,24 @@ export async function getStorageData(): Promise<StorageData> {
   if (result[STORAGE_KEY]) {
     const data = result[STORAGE_KEY] as StorageData;
 
-    // Auto-merge new default menu items
-    const mergedGlobalMenu = mergeMenuItems(data.globalMenuItems, DEFAULT_GLOBAL_MENU);
-    const mergedSelectionMenu = mergeMenuItems(data.selectionMenuItems, DEFAULT_SELECTION_MENU);
+    // Ensure arrays exist with defaults
+    const globalItems = data.globalMenuItems || DEFAULT_GLOBAL_MENU;
+    const selectionItems = data.selectionMenuItems || DEFAULT_SELECTION_MENU;
+    data.config = { ...DEFAULT_CONFIG, ...data.config };
 
-    // Save if there were new items added
-    if (mergedGlobalMenu.length !== data.globalMenuItems.length ||
-        mergedSelectionMenu.length !== data.selectionMenuItems.length) {
-      data.globalMenuItems = mergedGlobalMenu;
-      data.selectionMenuItems = mergedSelectionMenu;
+    // Auto-merge new default menu items
+    const mergedGlobalMenu = mergeMenuItems(globalItems, DEFAULT_GLOBAL_MENU);
+    const mergedSelectionMenu = mergeMenuItems(selectionItems, DEFAULT_SELECTION_MENU);
+
+    // Always update arrays (handles missing fields + new items)
+    data.globalMenuItems = mergedGlobalMenu;
+    data.selectionMenuItems = mergedSelectionMenu;
+
+    // Save if arrays were missing or new items added
+    if (mergedGlobalMenu.length !== globalItems.length ||
+        mergedSelectionMenu.length !== selectionItems.length ||
+        !result[STORAGE_KEY].globalMenuItems ||
+        !result[STORAGE_KEY].selectionMenuItems) {
       await chrome.storage.local.set({ [STORAGE_KEY]: data });
     }
 

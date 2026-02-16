@@ -362,9 +362,14 @@ export async function refreshTokenIfNeeded(): Promise<string | null> {
 
   // Check if token will expire soon (within 5 minutes)
   if (tokenData.expiresAt < Date.now() + 5 * 60 * 1000) {
-    // Token expired or expiring soon - need to re-authenticate
-    // For implicit flow, we can't refresh silently, user needs to re-login
-    console.log('Token expired, need to re-authenticate');
+    // Token expired or expiring soon - try silent re-authentication
+    console.log('[Auth] Token expired, attempting silent reauth...');
+    const reauthResult = await silentReauth();
+    if (reauthResult.success) {
+      const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+      return newResult[AUTH_TOKEN_KEY]?.token || null;
+    }
+    console.log('[Auth] Silent reauth failed, need manual re-login');
     return null;
   }
 
@@ -379,7 +384,13 @@ export async function refreshTokenIfNeeded(): Promise<string | null> {
     });
 
     if (!response.ok) {
-      // Token is invalid
+      // Token is invalid - try silent reauth before giving up
+      console.log('[Auth] Token invalid, attempting silent reauth...');
+      const reauthResult = await silentReauth();
+      if (reauthResult.success) {
+        const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+        return newResult[AUTH_TOKEN_KEY]?.token || null;
+      }
       await chrome.storage.local.remove([AUTH_STATE_KEY, AUTH_TOKEN_KEY]);
       return null;
     }

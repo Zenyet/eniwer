@@ -1642,6 +1642,60 @@ export function getStyles(): string {
         color: #ef4444;
       }
 
+      .glass-sync-settings {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .glass-sync-actions {
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .glass-sync-actions .glass-btn {
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+
+      .glass-sync-actions .glass-btn svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .glass-backup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 4px;
+      }
+
+      .glass-backup-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 150px;
+        overflow-y: auto;
+        margin-top: 4px;
+      }
+
+      .glass-backup-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: var(--glass-bg-hover);
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+
+      .glass-backup-actions {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+
       .glass-btn-secondary {
         background: transparent;
         border: 1px solid var(--glass-border);

@@ -162,7 +162,10 @@ export type MessageType =
   | 'SYNC_FROM_CLOUD'
   | 'EXPORT_TO_DRIVE'
   | 'FREE_TRANSLATE'
-  | 'SET_SYNC_ENABLED';
+  | 'SET_SYNC_ENABLED'
+  | 'LIST_BACKUPS'
+  | 'RESTORE_BACKUP'
+  | 'DELETE_BACKUP';
 
 export interface Message {
   type: MessageType;
@@ -292,5 +295,12 @@ export interface SyncData {
   timestamp: number;
   config: Partial<MenuConfig>;
   browseTrail?: BrowseSession[];
+}
+
+export interface BackupFileInfo {
+  id: string;
+  name: string;
+  timestamp: number;
+  modifiedTime: string;
 }
 

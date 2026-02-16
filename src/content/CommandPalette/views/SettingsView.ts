@@ -431,6 +431,21 @@ export function getAccountSettingsHTML(authState: AuthState | null): string {
             下载
           </button>
         </div>
+        <div id="backup-history-section" style="display: ${auth.syncEnabled ? 'block' : 'none'}">
+          <div class="glass-backup-header">
+            <span class="glass-form-label">备份历史</span>
+            <button class="glass-btn glass-btn-secondary" id="refresh-backups-btn" title="刷新" style="padding: 2px 6px; min-width: auto;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="backup-list" class="glass-backup-list">
+            <span class="glass-form-hint">加载中...</span>
+          </div>
+        </div>
       </div>
     `;
   }

@@ -1,6 +1,6 @@
 {
   "name": "thecircle",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A panel AI toolkit Chrome extension",
   "type": "module",
   "scripts": {

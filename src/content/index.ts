@@ -327,31 +327,7 @@ class TheCircle {
     const originalText = this.currentSelectedText;
     let translateRunId = 0;
 
-    const runTranslate = async (targetLang: string) => {
-      const runId = ++translateRunId;
-      this.menuActions.setSelectedText(originalText);
-
-      const onChunk = this.config.useStreaming
-        ? (chunk: string, fullText: string, thinking?: string) => {
-            if (runId !== translateRunId) return;
-            this.commandPalette.streamUpdate(chunk, fullText, thinking);
-          }
-        : undefined;
-
-      const result = await this.menuActions.execute(translateItem, onChunk, {
-        translateTargetLanguage: targetLang,
-      });
-
-      if (runId !== translateRunId) return;
-
-      if (result.type === 'error') {
-        this.commandPalette.updateAIResult(result.result || '未知错误');
-      } else if (result.type === 'ai') {
-        this.commandPalette.updateAIResult(result.result || '', result.thinking);
-      }
-    };
-
-    // Set active command and show AI result in command palette
+    // Set active command and show AI result in command palette FIRST to get stream key
     this.commandPalette.setActiveCommand(translateItem);
     this.commandPalette.showAIResult(translateItem.label, {
       onStop: () => abortAllRequests(),
@@ -368,6 +344,36 @@ class TheCircle {
       iconHtml: translateItem.icon,
       actionType: 'translate',
     });
+
+    // Capture stream key AFTER showAIResult so it routes updates to this specific task
+    const streamKey = this.commandPalette.getCurrentStreamKey();
+    console.log('[handleSelectionTranslate] Captured streamKey:', streamKey);
+
+    const runTranslate = async (targetLang: string) => {
+      const runId = ++translateRunId;
+      this.menuActions.setSelectedText(originalText);
+
+      const onChunk = this.config.useStreaming
+        ? (chunk: string, fullText: string, thinking?: string) => {
+            if (runId !== translateRunId) return;
+            console.log('[handleSelectionTranslate] onChunk called with streamKey:', streamKey);
+            this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
+          }
+        : undefined;
+
+      const result = await this.menuActions.execute(translateItem, onChunk, {
+        translateTargetLanguage: targetLang,
+      });
+
+      if (runId !== translateRunId) return;
+
+      console.log('[handleSelectionTranslate] Request completed, calling updateAIResult with streamKey:', streamKey);
+      if (result.type === 'error') {
+        this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
+      } else if (result.type === 'ai') {
+        this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
+      }
+    };
 
     await runTranslate(this.config.preferredLanguage || 'zh-CN');
   }
@@ -528,31 +534,7 @@ class TheCircle {
       if (item.action === 'translate') {
         let translateRunId = 0;
 
-        const runTranslate = async (targetLang: string) => {
-          const runId = ++translateRunId;
-          this.menuActions.setSelectedText(originalText);
-
-          const onChunk = this.config.useStreaming
-            ? (chunk: string, fullText: string, thinking?: string) => {
-                if (runId !== translateRunId) return;
-                this.commandPalette.streamUpdate(chunk, fullText, thinking);
-              }
-            : undefined;
-
-          const result = await this.menuActions.execute(item, onChunk, {
-            translateTargetLanguage: targetLang,
-          });
-
-          if (runId !== translateRunId) return;
-
-          if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || '未知错误');
-          } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '', result.thinking);
-          }
-        };
-
-        // Set active command and show AI result in command palette
+        // Set active command and show AI result in command palette FIRST to get stream key
         this.commandPalette.setActiveCommand(item);
         this.commandPalette.showAIResult(item.label, {
           onStop: () => abortAllRequests(),
@@ -569,6 +551,33 @@ class TheCircle {
           iconHtml: item.icon,
           actionType: 'translate',
         });
+
+        // Capture stream key AFTER showAIResult so it routes updates to this specific task
+        const streamKey = this.commandPalette.getCurrentStreamKey();
+
+        const runTranslate = async (targetLang: string) => {
+          const runId = ++translateRunId;
+          this.menuActions.setSelectedText(originalText);
+
+          const onChunk = this.config.useStreaming
+            ? (chunk: string, fullText: string, thinking?: string) => {
+                if (runId !== translateRunId) return;
+                this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
+              }
+            : undefined;
+
+          const result = await this.menuActions.execute(item, onChunk, {
+            translateTargetLanguage: targetLang,
+          });
+
+          if (runId !== translateRunId) return;
+
+          if (result.type === 'error') {
+            this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
+          } else if (result.type === 'ai') {
+            this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
+          }
+        };
 
         await runTranslate(this.config.preferredLanguage || 'zh-CN');
       } else {
@@ -593,18 +602,21 @@ class TheCircle {
             sourceTitle: document.title,
           });
 
+          // Capture new stream key for refresh operation
+          const refreshStreamKey = this.commandPalette.getCurrentStreamKey();
+
           const onChunk = this.config.useStreaming
             ? (chunk: string, fullText: string, thinking?: string) => {
-                this.commandPalette.streamUpdate(chunk, fullText, thinking);
+                this.commandPalette.streamUpdate(chunk, fullText, thinking, refreshStreamKey || undefined);
               }
             : undefined;
 
           const result = await this.menuActions.execute(item, onChunk);
 
           if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || '未知错误');
+            this.commandPalette.updateAIResult(result.result || '未知错误', undefined, refreshStreamKey || undefined);
           } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '', result.thinking);
+            this.commandPalette.updateAIResult(result.result || '', result.thinking, refreshStreamKey || undefined);
           }
         } : undefined;
 
@@ -625,21 +637,27 @@ class TheCircle {
           sourceTitle: document.title,
         });
 
+        // Capture stream key AFTER showAIResult so it routes updates to this specific task
+        const streamKey = this.commandPalette.getCurrentStreamKey();
+        console.log('[handleMenuAction] Captured streamKey:', streamKey, 'for action:', actionType);
+
         // If restored existing task, don't start new request
         if (restored) return;
 
         const onChunk = this.config.useStreaming
           ? (chunk: string, fullText: string, thinking?: string) => {
-              this.commandPalette.streamUpdate(chunk, fullText, thinking);
+              console.log('[handleMenuAction] onChunk called for action:', actionType, 'with streamKey:', streamKey);
+              this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
             }
           : undefined;
 
         const result = await this.menuActions.execute(item, onChunk);
 
+        console.log('[handleMenuAction] Request completed for action:', actionType, 'calling updateAIResult with streamKey:', streamKey);
         if (result.type === 'error') {
-          this.commandPalette.updateAIResult(result.result || '未知错误');
+          this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
         } else if (result.type === 'ai') {
-          this.commandPalette.updateAIResult(result.result || '', result.thinking);
+          this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
         }
       }
     } else {

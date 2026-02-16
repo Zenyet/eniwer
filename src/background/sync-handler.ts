@@ -1,13 +1,20 @@
 // Cloud sync handler using Google Drive AppData folder
-import { SyncData, MenuConfig, BrowseSession } from '../types';
+import { SyncData, BackupFileInfo, MenuConfig, BrowseSession, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
 import { getAuthToken, refreshTokenIfNeeded } from './auth-handler';
+import { getStorageData } from '../utils/storage';
 
 const SYNC_FILE_NAME = 'thepanel-sync.json';
 const SYNC_VERSION = 1;
+const BACKUP_FILE_PREFIX = 'thepanel-backup-';
+const MAX_BACKUPS = 5;
+const BACKUP_THROTTLE_MS = 3600000; // 1 hour
 
 // Debounce timer for auto-sync
 let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 const SYNC_DEBOUNCE_MS = 5000;
+
+// Throttle for auto-sync backup
+let lastAutoBackupTime = 0;
 
 interface DriveFile {
   id: string;
@@ -65,10 +72,15 @@ async function readSyncFile(token: string, fileId: string): Promise<SyncData | n
 }
 
 // Create or update sync file in Drive
-async function writeSyncFile(token: string, data: SyncData, fileId?: string): Promise<boolean> {
+async function writeSyncFile(token: string, data: SyncData, fileId?: string): Promise<{ ok: boolean; error?: string }> {
+  return writeFileToAppData(token, SYNC_FILE_NAME, data, fileId);
+}
+
+// Generic write file to appDataFolder
+async function writeFileToAppData(token: string, fileName: string, data: unknown, fileId?: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const metadata = {
-      name: SYNC_FILE_NAME,
+      name: fileName,
       mimeType: 'application/json',
       ...(fileId ? {} : { parents: ['appDataFolder'] }),
     };
@@ -92,27 +104,26 @@ async function writeSyncFile(token: string, data: SyncData, fileId?: string): Pr
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Failed to write sync file:', response.status, errorText);
-      return false;
+      return { ok: false, error: `HTTP ${response.status}` };
     }
 
-    return true;
+    return { ok: true };
   } catch (error) {
     console.error('Error writing sync file:', error);
-    return false;
+    return { ok: false, error: String(error) };
   }
 }
 
 // Get current local data to sync
 async function getLocalSyncData(): Promise<SyncData> {
-  const result = await chrome.storage.local.get(['thecircle_data', 'thecircle_browse_trail']);
-
-  const config = result.thecircle_data?.config || {};
-  const browseTrail = result.thecircle_browse_trail || [];
+  const storageData = await getStorageData();
+  const browseTrailResult = await chrome.storage.local.get(['thecircle_browse_trail']);
+  const browseTrail = browseTrailResult.thecircle_browse_trail || [];
 
   return {
     version: SYNC_VERSION,
     timestamp: Date.now(),
-    config,
+    config: storageData.config,
     browseTrail,
   };
 }
@@ -125,16 +136,18 @@ async function applyRemoteSyncData(data: SyncData): Promise<void> {
   const localData = await chrome.storage.local.get(['thecircle_data']);
   const currentConfig = localData.thecircle_data?.config || {};
 
-  // Merge config (remote overrides local for non-sensitive fields)
+  // Merge config (remote overrides local)
   if (data.config) {
     const mergedConfig = {
+      ...DEFAULT_CONFIG,
       ...currentConfig,
       ...data.config,
-      // Keep local API key (sensitive)
-      apiKey: currentConfig.apiKey,
     };
+    const currentData = localData.thecircle_data || {};
     updates.thecircle_data = {
-      ...localData.thecircle_data,
+      globalMenuItems: DEFAULT_GLOBAL_MENU,
+      selectionMenuItems: DEFAULT_SELECTION_MENU,
+      ...currentData,
       config: mergedConfig,
     };
   }
@@ -170,8 +183,103 @@ function mergeBrowseTrail(local: BrowseSession[], remote: BrowseSession[]): Brow
   return Array.from(sessionMap.values()).sort((a, b) => b.startedAt - a.startedAt);
 }
 
+// Find all backup files in AppData folder, sorted by modifiedTime desc
+async function findBackupFiles(token: string): Promise<DriveFile[]> {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name contains '${BACKUP_FILE_PREFIX}'&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Failed to find backup files:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.files || [];
+  } catch (error) {
+    console.error('Error finding backup files:', error);
+    return [];
+  }
+}
+
+// Delete a file from Drive
+async function deleteFile(token: string, fileId: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.ok || response.status === 204;
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    return false;
+  }
+}
+
+// Parse timestamp from backup file name
+function parseTimestampFromName(name: string): number {
+  const match = name.match(/thepanel-backup-(\d+)\.json/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+// Create a backup of the current sync file
+async function createBackup(token: string, isAutoSync: boolean): Promise<void> {
+  // Throttle auto-sync backups (1 hour)
+  if (isAutoSync) {
+    const now = Date.now();
+    if (now - lastAutoBackupTime < BACKUP_THROTTLE_MS) {
+      return;
+    }
+  }
+
+  // Find current sync file
+  const syncFile = await findSyncFile(token);
+  if (!syncFile) {
+    // No sync file yet, nothing to backup
+    return;
+  }
+
+  // Read current sync data
+  const syncData = await readSyncFile(token, syncFile.id);
+  if (!syncData) {
+    return;
+  }
+
+  // Write backup file
+  const timestamp = Date.now();
+  const backupFileName = `${BACKUP_FILE_PREFIX}${timestamp}.json`;
+  const writeResult = await writeFileToAppData(token, backupFileName, syncData);
+
+  if (writeResult.ok) {
+    if (isAutoSync) {
+      lastAutoBackupTime = timestamp;
+    }
+    console.log('Backup created:', backupFileName);
+
+    // Clean up old backups (keep MAX_BACKUPS)
+    const backups = await findBackupFiles(token);
+    if (backups.length > MAX_BACKUPS) {
+      const toDelete = backups.slice(MAX_BACKUPS);
+      for (const file of toDelete) {
+        await deleteFile(token, file.id);
+      }
+    }
+  }
+}
+
 // Sync local data to cloud
-export async function syncToCloud(): Promise<{ success: boolean; error?: string }> {
+export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{ success: boolean; error?: string }> {
   const token = await refreshTokenIfNeeded();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
@@ -184,14 +292,17 @@ export async function syncToCloud(): Promise<{ success: boolean; error?: string 
     // Find existing sync file
     const existingFile = await findSyncFile(token);
 
-    // Write to Drive
-    const success = await writeSyncFile(token, localData, existingFile?.id);
+    // Create backup before overwriting
+    await createBackup(token, options?.isAutoSync ?? false);
 
-    if (success) {
+    // Write to Drive
+    const writeResult = await writeSyncFile(token, localData, existingFile?.id);
+
+    if (writeResult.ok) {
       console.log('Synced to cloud successfully');
       return { success: true };
     } else {
-      return { success: false, error: '写入云端失败' };
+      return { success: false, error: `写入云端失败: ${writeResult.error}` };
     }
   } catch (error) {
     console.error('Sync to cloud error:', error);
@@ -225,18 +336,9 @@ export async function syncFromCloud(): Promise<{ success: boolean; data?: SyncDa
       return { success: false, error: '云端数据版本较新，请更新扩展' };
     }
 
-    // Get local data for comparison
-    const localData = await getLocalSyncData();
-
-    // Use "last write wins" strategy
-    if (remoteData.timestamp > localData.timestamp) {
-      // Remote is newer, apply it
-      await applyRemoteSyncData(remoteData);
-      console.log('Applied remote sync data');
-    } else {
-      // Local is newer or same, push to cloud
-      await syncToCloud();
-    }
+    // Always apply remote data when user explicitly downloads
+    await applyRemoteSyncData(remoteData);
+    console.log('Applied remote sync data');
 
     return { success: true, data: remoteData };
   } catch (error) {
@@ -255,7 +357,7 @@ export function scheduleSyncToCloud(): void {
     // Check if sync is enabled
     const result = await chrome.storage.local.get(['thecircle_sync_enabled']);
     if (result.thecircle_sync_enabled) {
-      await syncToCloud();
+      await syncToCloud({ isAutoSync: true });
     }
   }, SYNC_DEBOUNCE_MS);
 }
@@ -273,4 +375,67 @@ export function setupAutoSync(): void {
       scheduleSyncToCloud();
     }
   });
+}
+
+// List all backup files
+export async function listBackups(): Promise<{ success: boolean; backups?: BackupFileInfo[]; error?: string }> {
+  const token = await refreshTokenIfNeeded();
+  if (!token) {
+    return { success: false, error: '未登录或授权已过期' };
+  }
+
+  try {
+    const files = await findBackupFiles(token);
+    const backups: BackupFileInfo[] = files.map(f => ({
+      id: f.id,
+      name: f.name,
+      timestamp: parseTimestampFromName(f.name),
+      modifiedTime: f.modifiedTime,
+    }));
+    return { success: true, backups };
+  } catch (error) {
+    console.error('List backups error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Restore a backup by file ID
+export async function restoreBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
+  const token = await refreshTokenIfNeeded();
+  if (!token) {
+    return { success: false, error: '未登录或授权已过期' };
+  }
+
+  try {
+    const data = await readSyncFile(token, fileId);
+    if (!data) {
+      return { success: false, error: '读取备份失败' };
+    }
+
+    await applyRemoteSyncData(data);
+    console.log('Restored backup:', fileId);
+    return { success: true };
+  } catch (error) {
+    console.error('Restore backup error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// Delete a backup by file ID
+export async function deleteBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
+  const token = await refreshTokenIfNeeded();
+  if (!token) {
+    return { success: false, error: '未登录或授权已过期' };
+  }
+
+  try {
+    const ok = await deleteFile(token, fileId);
+    if (ok) {
+      return { success: true };
+    }
+    return { success: false, error: '删除备份失败' };
+  } catch (error) {
+    console.error('Delete backup error:', error);
+    return { success: false, error: String(error) };
+  }
 }

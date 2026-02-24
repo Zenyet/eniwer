@@ -64,6 +64,13 @@ export class AnnotationSystem {
     const annotation = await this.manager.createAnnotation(selection, color);
     if (annotation) {
       this.callbacks.onToast?.('已添加标注');
+      // Show note popup after highlight is created
+      const element = this.manager.getAnnotationElement(annotation.id);
+      if (element) {
+        setTimeout(() => {
+          this.showNotePopup(annotation, element);
+        }, 50);
+      }
     }
     return annotation;
   }

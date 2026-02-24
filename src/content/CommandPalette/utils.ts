@@ -144,6 +144,8 @@ export function getActionIcon(actionType: string): string {
     explain: icons.explain,
     rewrite: icons.rewrite,
     codeExplain: icons.codeExplain,
+    contextChat: icons.messageCircle,
+    screenshot: icons.screenshot,
   };
   return iconMap[actionType] || icons.messageCircle;
 }
@@ -157,7 +159,11 @@ export function getTaskMetaInfo(task: MinimizedTask): string {
   const timeAgo = formatTimeAgo(task.createdAt);
   parts.push(timeAgo);
 
-  if (task.actionType === 'summarizePage') {
+  if (task.taskType === 'contextChat') {
+    parts.push(task.isQuickAsk ? '快速提问' : '上下文追问');
+  } else if (task.taskType === 'screenshot') {
+    parts.push('截图分析');
+  } else if (task.actionType === 'summarizePage') {
     if (task.sourceTitle) {
       parts.push(task.sourceTitle);
     } else if (task.sourceUrl) {

@@ -220,6 +220,16 @@ export class CommandPalette {
         this.saveCurrentAsMinimized();
       }
 
+      // Auto-minimize active chat streaming task before hiding
+      if (this.isChatStreaming && this.chatSession) {
+        this.saveChatAsMinimized();
+      }
+
+      // Auto-minimize active screenshot loading task before hiding
+      if (this.screenshotData?.isLoading) {
+        this.saveScreenshotAsMinimized();
+      }
+
       const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
       if (panel) {
         // Save panel position before hiding (for restoring on next show)
@@ -248,6 +258,10 @@ export class CommandPalette {
         this.currentView = 'commands';
         this.aiResultData = null;
         this.aiResultCallbacks = null;
+        this.screenshotData = null;
+        this.screenshotCallbacks = null;
+        // Note: chatSession/isChatStreaming are NOT reset here because
+        // sendChatMessage may still be running in the background with a local reference
       }, 250);
     }
   }
@@ -406,6 +420,15 @@ export class CommandPalette {
       this.screenshotData.result = result;
       this.screenshotData.isLoading = isLoading;
       this.renderScreenshotContent();
+    } else {
+      // If screenshot was minimized, update the minimized task
+      const minimizedTask = this.minimizedTasks.find(t => t.taskType === 'screenshot' && t.isLoading);
+      if (minimizedTask) {
+        minimizedTask.screenshotResult = result;
+        minimizedTask.content = result;
+        minimizedTask.isLoading = isLoading;
+        this.renderMinimizedTasksIfVisible();
+      }
     }
   }
 
@@ -443,8 +466,6 @@ export class CommandPalette {
         this.updateAIResultContent();
       }
     } else if (this.aiResultData) {
-      // Log mismatch for debugging
-      console.log('[streamUpdate] streamKey mismatch - target:', streamKey, 'aiResultData:', this.aiResultData.streamKey);
     }
 
     // Also update minimized task with matching streamKey
@@ -459,10 +480,8 @@ export class CommandPalette {
           task.thinking = thinking;
         }
         // Debug: Log that we're updating minimized task
-        console.log('[streamUpdate] Updated minimizedTask content, length:', fullText.length);
       } else if (this.minimizedTasks.length > 0) {
         // Debug: Log why we couldn't find the task
-        console.log('[streamUpdate] Could not find minimizedTask for streamKey:', streamKey, 'available:', this.minimizedTasks.map(t => t.streamKey));
       }
     }
   }
@@ -470,10 +489,6 @@ export class CommandPalette {
   public updateAIResult(content: string, thinking?: string, targetStreamKey?: string): void {
     // Use targetStreamKey if provided, otherwise use currentStreamKey
     const streamKey = targetStreamKey || this.currentStreamKey;
-
-    console.log('[updateAIResult] streamKey:', streamKey, 'targetStreamKey:', targetStreamKey, 'currentStreamKey:', this.currentStreamKey);
-    console.log('[updateAIResult] aiResultData.streamKey:', this.aiResultData?.streamKey);
-    console.log('[updateAIResult] minimizedTasks:', this.minimizedTasks.map(t => ({ id: t.id, streamKey: t.streamKey, isLoading: t.isLoading })));
 
     // Update active AI result if streamKey matches
     if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
@@ -493,7 +508,6 @@ export class CommandPalette {
     // Also update minimized task with matching streamKey
     if (streamKey) {
       const task = this.minimizedTasks.find(t => t.streamKey === streamKey);
-      console.log('[updateAIResult] Found minimized task:', task ? { id: task.id, wasLoading: task.isLoading } : 'none');
       if (task) {
         task.content = content;
         if (thinking) {
@@ -503,7 +517,6 @@ export class CommandPalette {
         task.isLoading = false;
         // Only re-render if loading state changed (to update the loading indicator)
         if (wasLoading) {
-          console.log('[updateAIResult] Calling renderMinimizedTasksIfVisible, currentView:', this.currentView, 'shadowRoot:', !!this.shadowRoot);
           this.renderMinimizedTasksIfVisible();
         }
       }
@@ -1039,6 +1052,30 @@ export class CommandPalette {
       return;
     }
 
+    // If there's an active chat streaming, minimize it to background
+    if (this.currentView === 'contextChat' && this.isChatStreaming && this.chatSession) {
+      this.saveChatAsMinimized();
+      this.activeCommand = null;
+      this.activeCommandInput = '';
+      this.searchQuery = '';
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+      return;
+    }
+
+    // If there's an active screenshot loading, minimize it to background
+    if (this.currentView === 'screenshot' && this.screenshotData?.isLoading) {
+      this.saveScreenshotAsMinimized();
+      this.activeCommand = null;
+      this.activeCommandInput = '';
+      this.searchQuery = '';
+      this.currentView = 'commands';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+      return;
+    }
+
     // For completed tasks, just clear the active state
     // Don't call abortAllRequests - there may be background tasks still streaming
     this.currentStreamKey = null;
@@ -1552,13 +1589,64 @@ export class CommandPalette {
       sourceTitle: this.aiResultData.sourceTitle,
       createdAt: this.aiResultData.createdAt || Date.now(),
     };
-    console.log('[minimize] Saving task with streamKey:', task.streamKey, 'action:', task.actionType, 'content length:', task.content.length);
     this.minimizedTasks.push(task);
 
     // Reset AI result state
     // Note: currentStreamKey is NOT cleared - it continues to be used for updates
     this.aiResultData = null;
     this.aiResultCallbacks = null;
+  }
+
+  private saveChatAsMinimized(): void {
+    if (!this.chatSession) return;
+
+    // Build title from last user message
+    const lastUserMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'user');
+    const title = lastUserMsg
+      ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
+      : '对话';
+
+    const task: MinimizedTask = {
+      id: `task-${++this.minimizedTaskIdCounter}`,
+      title,
+      content: '',
+      resultType: 'general',
+      isLoading: this.isChatStreaming,
+      minimizedAt: Date.now(),
+      createdAt: Date.now(),
+      taskType: 'contextChat',
+      chatSession: this.chatSession,
+      isQuickAsk: this.isQuickAsk,
+      iconHtml: icons.messageCircle,
+    };
+    this.minimizedTasks.push(task);
+
+    // Reset chat state
+    this.chatSession = null;
+    this.isChatStreaming = false;
+  }
+
+  private saveScreenshotAsMinimized(): void {
+    if (!this.screenshotData) return;
+
+    const task: MinimizedTask = {
+      id: `task-${++this.minimizedTaskIdCounter}`,
+      title: '截图分析',
+      content: this.screenshotData.result || '',
+      resultType: 'general',
+      isLoading: true,
+      minimizedAt: Date.now(),
+      createdAt: Date.now(),
+      taskType: 'screenshot',
+      screenshotDataUrl: this.screenshotData.dataUrl,
+      screenshotResult: this.screenshotData.result,
+      iconHtml: icons.screenshot || icons.image,
+    };
+    this.minimizedTasks.push(task);
+
+    // Reset screenshot state
+    this.screenshotData = null;
+    this.screenshotCallbacks = null;
   }
 
   private minimize(): void {
@@ -1573,8 +1661,70 @@ export class CommandPalette {
     if (taskIndex === -1) return;
     const task = this.minimizedTasks.splice(taskIndex, 1)[0];
 
-    console.log('[restoreMinimizedTask] Restoring task:', task.id, 'streamKey:', task.streamKey, 'isLoading:', task.isLoading, 'content length:', task.content.length);
+    // Branch by task type
+    if (task.taskType === 'contextChat') {
+      // Save current active state as minimized before overwriting
+      this.saveCurrentAsMinimized();
+      if (this.isChatStreaming && this.chatSession) {
+        this.saveChatAsMinimized();
+      }
+      if (this.screenshotData?.isLoading) {
+        this.saveScreenshotAsMinimized();
+      }
 
+      // Restore chat session
+      this.chatSession = task.chatSession || null;
+      this.isQuickAsk = task.isQuickAsk || false;
+      this.isChatStreaming = task.isLoading;
+
+      this.activeCommand = {
+        id: task.isQuickAsk ? 'quickAsk' : 'contextChat',
+        action: 'contextChat',
+        label: task.isQuickAsk ? '快速提问' : '上下文追问',
+        icon: icons.messageCircle,
+        enabled: true,
+        order: 0,
+      };
+
+      this.currentView = 'contextChat';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+      return;
+    }
+
+    if (task.taskType === 'screenshot') {
+      // Save current active state as minimized before overwriting
+      this.saveCurrentAsMinimized();
+      if (this.isChatStreaming && this.chatSession) {
+        this.saveChatAsMinimized();
+      }
+      if (this.screenshotData?.isLoading) {
+        this.saveScreenshotAsMinimized();
+      }
+
+      // Restore screenshot data
+      this.screenshotData = {
+        dataUrl: task.screenshotDataUrl || '',
+        isLoading: task.isLoading,
+        result: task.screenshotResult,
+      };
+
+      this.activeCommand = {
+        id: 'screenshot',
+        action: 'screenshot',
+        label: '截图',
+        icon: '',
+        enabled: true,
+        order: 0,
+      };
+
+      this.currentView = 'screenshot';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+      return;
+    }
+
+    // Default: ai-result task type
     // Save current active task as minimized before overwriting
     this.saveCurrentAsMinimized();
 
@@ -1759,14 +1909,35 @@ export class CommandPalette {
     const syncToggle = this.shadowRoot.querySelector('#sync-enabled-toggle') as HTMLInputElement;
     const syncActions = this.shadowRoot.querySelector('#sync-actions') as HTMLElement;
     const backupSection = this.shadowRoot.querySelector('#backup-history-section') as HTMLElement;
+    const syncOptionsSection = this.shadowRoot.querySelector('#sync-options') as HTMLElement;
     syncToggle?.addEventListener('change', () => {
       if (syncActions) syncActions.style.display = syncToggle.checked ? 'flex' : 'none';
       if (backupSection) backupSection.style.display = syncToggle.checked ? 'block' : 'none';
+      if (syncOptionsSection) syncOptionsSection.style.display = syncToggle.checked ? 'block' : 'none';
       this.handleSyncToggle(syncToggle.checked);
       if (syncToggle.checked) {
         this.loadBackupList();
       }
     });
+
+    // Sync options checkboxes
+    const syncOptKeys: Array<{ id: string; key: keyof import('../../types').SyncOptions }> = [
+      { id: 'sync-opt-translation', key: 'translation' },
+      { id: 'sync-opt-summary', key: 'summary' },
+      { id: 'sync-opt-knowledge', key: 'knowledge' },
+      { id: 'sync-opt-annotation', key: 'annotation' },
+      { id: 'sync-opt-browseTrail', key: 'browseTrail' },
+    ];
+    for (const { id, key } of syncOptKeys) {
+      const checkbox = this.shadowRoot.querySelector(`#${id}`) as HTMLInputElement;
+      checkbox?.addEventListener('change', () => {
+        if (!tempConfig.syncOptions) {
+          tempConfig.syncOptions = { translation: true, summary: true, knowledge: true, annotation: true, browseTrail: true };
+        }
+        tempConfig.syncOptions[key] = checkbox.checked;
+        this.settingsChanged = true;
+      });
+    }
 
     // Sync buttons
     const syncToCloudBtn = this.shadowRoot.querySelector('#sync-to-cloud-btn');
@@ -2200,7 +2371,8 @@ export class CommandPalette {
 
   // Account Settings HTML
   private getAccountSettingsHTML(): string {
-    return getAccountSettingsHTMLFromModule(this.authState);
+    const config = this.tempConfig || this.config;
+    return getAccountSettingsHTMLFromModule(this.authState, config);
   }
 
   // Load auth state from background
@@ -2686,6 +2858,10 @@ export class CommandPalette {
     // Command tag close button
     const closeBtn = this.shadowRoot.querySelector('.glass-command-tag-close');
     closeBtn?.addEventListener('click', () => {
+      // If loading, minimize to background instead of discarding
+      if (this.screenshotData?.isLoading) {
+        this.saveScreenshotAsMinimized();
+      }
       this.screenshotData = null;
       this.screenshotCallbacks?.onClose?.();
       this.screenshotCallbacks = null;
@@ -2748,6 +2924,10 @@ export class CommandPalette {
     if (e.key === 'Escape' && this.currentView === 'screenshot') {
       e.preventDefault();
       document.removeEventListener('keydown', this.handleScreenshotKeydown);
+      // If loading, minimize to background instead of discarding
+      if (this.screenshotData?.isLoading) {
+        this.saveScreenshotAsMinimized();
+      }
       this.screenshotData = null;
       this.screenshotCallbacks?.onClose?.();
       this.screenshotCallbacks = null;
@@ -3764,6 +3944,10 @@ export class CommandPalette {
     const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
     tagClose?.addEventListener('click', (e) => {
       e.stopPropagation();
+      // If streaming, minimize to background instead of discarding
+      if (this.isChatStreaming && this.chatSession) {
+        this.saveChatAsMinimized();
+      }
       this.activeCommand = null;
       this.chatSession = null;
       this.currentView = 'commands';
@@ -3781,6 +3965,10 @@ export class CommandPalette {
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        // If streaming, minimize to background instead of discarding
+        if (this.isChatStreaming && this.chatSession) {
+          this.saveChatAsMinimized();
+        }
         this.activeCommand = null;
         this.chatSession = null;
         this.currentView = 'commands';
@@ -3828,9 +4016,13 @@ export class CommandPalette {
 
     const { cleanContent, references } = parseReferences(rawContent);
 
+    // Keep a local reference to chatSession so streaming continues even if minimized
+    // (saveChatAsMinimized sets this.chatSession = null, but the object is shared by reference)
+    const session = this.chatSession;
+
     // Add user message
     const userMsg = createChatMessage('user', cleanContent, references.length > 0 ? references : undefined);
-    this.chatSession.messages.push(userMsg);
+    session.messages.push(userMsg);
 
     // Clear input
     input.value = '';
@@ -3856,7 +4048,7 @@ export class CommandPalette {
 
     // Add empty assistant message placeholder
     const assistantMsg = createChatMessage('assistant', '');
-    this.chatSession.messages.push(assistantMsg);
+    session.messages.push(assistantMsg);
 
     // Render the placeholder
     if (content) {
@@ -3879,58 +4071,72 @@ export class CommandPalette {
     // Build prompt - use simple prompt for quick ask, context prompt for context chat
     const systemPrompt = this.isQuickAsk
       ? '你是一个有帮助的AI助手。请简洁、准确地回答用户的问题。'
-      : getContextChatSystemPrompt(this.chatSession);
+      : getContextChatSystemPrompt(session);
     const conversationHistory = buildConversationPrompt(
-      this.chatSession.messages.slice(0, -1) // Exclude the empty assistant message
+      session.messages.slice(0, -1) // Exclude the empty assistant message
     );
 
     try {
       const onChunk: OnChunkCallback = (_chunk, fullText, thinking) => {
-        if (!this.chatSession) return;
-        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = fullText;
           if (thinking) {
             lastMsg.thinking = thinking;
           }
         }
-        // Update streaming message
-        const streamingEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text');
-        if (streamingEl) {
-          streamingEl.innerHTML = formatAIContent(fullText);
+
+        // Update UI — try .glass-chat-streaming first (original render),
+        // then fall back to last assistant message (after restore from minimized)
+        let streamingTextEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text') as Element | null;
+        let streamingContainer = this.shadowRoot?.querySelector('.glass-chat-streaming') as Element | null;
+
+        if (!streamingTextEl && this.chatSession === session && this.shadowRoot) {
+          // Chat was restored from minimized — find the last assistant message
+          const allAssistantTexts = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant .glass-chat-msg-text');
+          streamingTextEl = allAssistantTexts[allAssistantTexts.length - 1] || null;
+          const allAssistantMsgs = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant');
+          streamingContainer = allAssistantMsgs[allAssistantMsgs.length - 1] || null;
         }
-        // Update thinking section in streaming message
-        if (thinking) {
-          const streamingMsg = this.shadowRoot?.querySelector('.glass-chat-streaming');
-          if (streamingMsg) {
-            let thinkingSection = streamingMsg.querySelector('.glass-thinking-section');
-            if (!thinkingSection) {
-              // Insert thinking section before the text
-              const textEl = streamingMsg.querySelector('.glass-chat-msg-text');
-              if (textEl) {
-                textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(thinking));
-                thinkingSection = streamingMsg.querySelector('.glass-thinking-section');
-                // Bind toggle event
-                const header = thinkingSection?.querySelector('.glass-thinking-header');
-                header?.addEventListener('click', () => {
-                  thinkingSection?.classList.toggle('collapsed');
-                });
-              }
-            } else {
-              // Update existing thinking content
-              const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
-              if (thinkingContent) {
-                thinkingContent.innerHTML = formatAIContent(thinking);
-              }
+
+        if (streamingTextEl) {
+          streamingTextEl.innerHTML = formatAIContent(fullText);
+        }
+
+        // Update thinking section
+        if (thinking && streamingContainer) {
+          let thinkingSection = streamingContainer.querySelector('.glass-thinking-section');
+          if (!thinkingSection) {
+            // Insert thinking section before the text
+            const textEl = streamingContainer.querySelector('.glass-chat-msg-text');
+            if (textEl) {
+              textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(thinking));
+              thinkingSection = streamingContainer.querySelector('.glass-thinking-section');
+              // Bind toggle event
+              const header = thinkingSection?.querySelector('.glass-thinking-header');
+              header?.addEventListener('click', () => {
+                thinkingSection?.classList.toggle('collapsed');
+              });
+            }
+          } else {
+            // Update existing thinking content
+            const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
+            if (thinkingContent) {
+              thinkingContent.innerHTML = formatAIContent(thinking);
             }
           }
+        }
+
+        // Auto-scroll if chat is visible
+        if (this.chatSession === session) {
+          this.scrollChatToBottom();
         }
       };
 
       const response = await callAI(conversationHistory, systemPrompt, this.config, onChunk);
 
       if (response.success && response.result) {
-        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = response.result;
           if (response.thinking) {
@@ -3938,7 +4144,7 @@ export class CommandPalette {
           }
         }
       } else {
-        const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+        const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = response.error || 'AI 请求失败';
         }
@@ -3946,22 +4152,38 @@ export class CommandPalette {
 
       // Only save chat session for context chat, not quick ask
       if (!this.isQuickAsk) {
-        await saveChatSession(this.chatSession);
+        await saveChatSession(session);
       }
     } catch (error) {
-      const lastMsg = this.chatSession.messages[this.chatSession.messages.length - 1];
+      const lastMsg = session.messages[session.messages.length - 1];
       if (lastMsg.role === 'assistant') {
         lastMsg.content = `错误: ${error}`;
       }
     } finally {
       this.isChatStreaming = false;
+
+      // If this chat was minimized during streaming, update the minimized task
+      const minimizedTask = this.minimizedTasks.find(
+        t => t.taskType === 'contextChat' && t.chatSession === session
+      );
+      if (minimizedTask) {
+        minimizedTask.isLoading = false;
+        // Update title with last assistant response preview
+        const lastAssistantMsg = session.messages[session.messages.length - 1];
+        if (lastAssistantMsg?.role === 'assistant' && lastAssistantMsg.content) {
+          minimizedTask.content = lastAssistantMsg.content;
+        }
+        this.renderMinimizedTasksIfVisible();
+      }
     }
 
-    // Re-render full chat content
-    if (content) {
-      content.innerHTML = this.getContextChatContentHTML();
+    // Re-render full chat content (only if panel is still showing this chat)
+    // Use fresh DOM queries since the panel may have been hidden/restored
+    const currentContent = this.shadowRoot?.querySelector('.glass-chat-content');
+    if (this.chatSession === session && currentContent) {
+      currentContent.innerHTML = this.getContextChatContentHTML();
       // Bind thinking toggle events for all thinking sections
-      content.querySelectorAll('.glass-thinking-section').forEach(section => {
+      currentContent.querySelectorAll('.glass-thinking-section').forEach(section => {
         const header = section.querySelector('.glass-thinking-header');
         if (header && !header.hasAttribute('data-bound')) {
           header.setAttribute('data-bound', 'true');
@@ -3972,10 +4194,15 @@ export class CommandPalette {
       });
     }
 
-    // Re-enable input
-    input.disabled = false;
-    input.placeholder = '输入问题后按回车...';
-    input.focus();
+    // Re-enable input (only if panel is still showing this chat)
+    if (this.chatSession === session && this.shadowRoot) {
+      const currentInput = this.shadowRoot.querySelector('.glass-chat-input') as HTMLInputElement;
+      if (currentInput) {
+        currentInput.disabled = false;
+        currentInput.placeholder = '输入问题后按回车...';
+        currentInput.focus();
+      }
+    }
   }
 
   private scrollChatToBottom(): void {

@@ -1622,6 +1622,72 @@ export function getStyles(): string {
         height: 12px;
       }
 
+      /* Sync options chips */
+      .glass-sync-options {
+        padding: 2px 0 4px;
+      }
+
+      .glass-sync-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .glass-sync-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 14px;
+        background: var(--glass-bg-hover);
+        border: 1px solid var(--glass-border);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+        user-select: none;
+      }
+
+      .glass-sync-chip:hover {
+        background: var(--glass-bg-selected);
+        border-color: var(--glass-border-strong);
+      }
+
+      .glass-sync-chip input {
+        display: none;
+      }
+
+      .glass-sync-chip-label {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        transition: color var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-sync-chip-label::before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 4px;
+        background: var(--text-tertiary);
+        vertical-align: middle;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-sync-chip input:checked ~ .glass-sync-chip-label {
+        color: var(--text-primary);
+      }
+
+      .glass-sync-chip input:checked ~ .glass-sync-chip-label::before {
+        background: rgba(59, 130, 246, 0.9);
+        box-shadow: 0 0 4px rgba(59, 130, 246, 0.4);
+      }
+
+      .glass-sync-chip:has(input:checked) {
+        border-color: rgba(59, 130, 246, 0.3);
+        background: rgba(59, 130, 246, 0.08);
+      }
+
       .glass-backup-header {
         display: flex;
         justify-content: space-between;

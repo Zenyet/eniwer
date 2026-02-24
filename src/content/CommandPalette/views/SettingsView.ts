@@ -1,5 +1,5 @@
 // Settings View - handles settings configuration
-import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU } from '../../../types';
+import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions } from '../../../types';
 import { PRESET_COLORS, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { saveConfig, saveGlobalMenuItems } from '../../../utils/storage';
@@ -439,8 +439,9 @@ export function getSettingsViewHTML(
   `;
 }
 
-export function getAccountSettingsHTML(authState: AuthState | null): string {
+export function getAccountSettingsHTML(authState: AuthState | null, config: MenuConfig): string {
   const auth = authState;
+  const syncOpts = config.syncOptions || DEFAULT_SYNC_OPTIONS;
   if (auth?.isLoggedIn && auth.user) {
     return `
       <div class="glass-account-info">
@@ -469,6 +470,31 @@ export function getAccountSettingsHTML(authState: AuthState | null): string {
             <input type="checkbox" id="sync-enabled-toggle" ${auth.syncEnabled ? 'checked' : ''}>
             <span class="glass-toggle-slider"></span>
           </label>
+        </div>
+        <div id="sync-options" class="glass-sync-options" style="display: ${auth.syncEnabled ? 'block' : 'none'}">
+          <span class="glass-form-hint" style="margin-bottom: 6px; display: block;">选择同步内容</span>
+          <div class="glass-sync-chips">
+            <label class="glass-sync-chip">
+              <input type="checkbox" id="sync-opt-translation" ${syncOpts.translation ? 'checked' : ''}>
+              <span class="glass-sync-chip-label">翻译</span>
+            </label>
+            <label class="glass-sync-chip">
+              <input type="checkbox" id="sync-opt-summary" ${syncOpts.summary ? 'checked' : ''}>
+              <span class="glass-sync-chip-label">总结</span>
+            </label>
+            <label class="glass-sync-chip">
+              <input type="checkbox" id="sync-opt-knowledge" ${syncOpts.knowledge ? 'checked' : ''}>
+              <span class="glass-sync-chip-label">知识库</span>
+            </label>
+            <label class="glass-sync-chip">
+              <input type="checkbox" id="sync-opt-annotation" ${syncOpts.annotation ? 'checked' : ''}>
+              <span class="glass-sync-chip-label">批注</span>
+            </label>
+            <label class="glass-sync-chip">
+              <input type="checkbox" id="sync-opt-browseTrail" ${syncOpts.browseTrail ? 'checked' : ''}>
+              <span class="glass-sync-chip-label">浏览轨迹</span>
+            </label>
+          </div>
         </div>
         <div id="sync-actions" class="glass-sync-actions" style="display: ${auth.syncEnabled ? 'flex' : 'none'}">
           <button class="glass-btn glass-btn-secondary" id="sync-to-cloud-btn">

@@ -64,6 +64,8 @@ export interface ScreenshotCallbacks {
   onClose?: () => void;
 }
 
+export type MinimizedTaskType = 'ai-result' | 'contextChat' | 'screenshot';
+
 export interface MinimizedTask {
   id: string;
   title: string;
@@ -81,4 +83,10 @@ export interface MinimizedTask {
   sourceUrl?: string;
   sourceTitle?: string;
   createdAt: number;
+  // Extended fields for contextChat / screenshot task types
+  taskType?: MinimizedTaskType;
+  chatSession?: import('../../types').ChatSession;
+  isQuickAsk?: boolean;
+  screenshotDataUrl?: string;
+  screenshotResult?: string;
 }

@@ -47,6 +47,22 @@ export interface KnowledgeConfig {
   groupByDate: boolean;
 }
 
+export interface SyncOptions {
+  translation: boolean;
+  summary: boolean;
+  knowledge: boolean;
+  annotation: boolean;
+  browseTrail: boolean;
+}
+
+export const DEFAULT_SYNC_OPTIONS: SyncOptions = {
+  translation: true,
+  summary: true,
+  knowledge: true,
+  annotation: true,
+  browseTrail: true,
+};
+
 export interface MenuConfig {
   shortcut: string;
   theme: 'dark' | 'light' | 'system';
@@ -67,6 +83,7 @@ export interface MenuConfig {
   imageSearch?: ImageSearchConfig;
   annotation?: AnnotationConfig;
   knowledge?: KnowledgeConfig;
+  syncOptions?: SyncOptions;
 }
 
 export interface StorageData {
@@ -116,6 +133,7 @@ export const DEFAULT_CONFIG: MenuConfig = {
   showSelectionPopover: true,
   annotation: DEFAULT_ANNOTATION_CONFIG,
   knowledge: DEFAULT_KNOWLEDGE_CONFIG,
+  syncOptions: DEFAULT_SYNC_OPTIONS,
 };
 
 export const DEFAULT_SELECTION_MENU: MenuItem[] = [

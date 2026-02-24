@@ -185,6 +185,40 @@
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
+  min-height: 18px;
+}
+
+/* Search engine / AI buttons */
+.thecircle-selection-popover-engine-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  opacity: 0.75;
+}
+
+.thecircle-selection-popover-engine-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
+  background: var(--button-hover);
+}
+
+.thecircle-selection-popover-engine-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Highlight/annotation button active state */
+.thecircle-selection-popover-btn-highlight.active {
+  background: var(--button-hover);
+  color: #facc15;
 }
 
 .thecircle-selection-popover-color-btn {

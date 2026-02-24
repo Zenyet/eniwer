@@ -637,6 +637,13 @@ export function getStyles(): string {
         padding: 2px 5px;
         border-radius: 4px;
         font-family: "SF Mono", ui-monospace, monospace;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .glass-hints kbd svg {
+        display: block;
       }
 
       .glass-brand {
@@ -657,49 +664,28 @@ export function getStyles(): string {
       }
 
       /* ========================================
-         Scrollbar - Minimal & Isolated
+         Scrollbar - Hidden to avoid layout asymmetry
+         Content is still scrollable via trackpad/mouse wheel
          ======================================== */
       .glass-body,
       .glass-ai-content,
-      .glass-ai-result-body {
-        /* Firefox */
-        scrollbar-width: thin;
-        scrollbar-color: var(--glass-border) transparent;
+      .glass-ai-result-body,
+      .glass-settings-body,
+      .glass-thinking-content,
+      .glass-backup-list,
+      .glass-screenshot-body,
+      .glass-screenshot-result-text {
+        scrollbar-width: none;
       }
-
       .glass-body::-webkit-scrollbar,
       .glass-ai-content::-webkit-scrollbar,
-      .glass-ai-result-body::-webkit-scrollbar {
-        width: 6px !important;
-        height: 6px !important;
-        background: transparent !important;
-      }
-
-      .glass-body::-webkit-scrollbar-track,
-      .glass-ai-content::-webkit-scrollbar-track,
-      .glass-ai-result-body::-webkit-scrollbar-track {
-        background: transparent !important;
-        border-radius: 3px;
-      }
-
-      .glass-body::-webkit-scrollbar-thumb,
-      .glass-ai-content::-webkit-scrollbar-thumb,
-      .glass-ai-result-body::-webkit-scrollbar-thumb {
-        background: var(--glass-border) !important;
-        border-radius: 3px;
-        border: none !important;
-      }
-
-      .glass-body::-webkit-scrollbar-thumb:hover,
-      .glass-ai-content::-webkit-scrollbar-thumb:hover,
-      .glass-ai-result-body::-webkit-scrollbar-thumb:hover {
-        background: var(--glass-border-strong) !important;
-      }
-
-      .glass-body::-webkit-scrollbar-corner,
-      .glass-ai-content::-webkit-scrollbar-corner,
-      .glass-ai-result-body::-webkit-scrollbar-corner {
-        background: transparent !important;
+      .glass-ai-result-body::-webkit-scrollbar,
+      .glass-settings-body::-webkit-scrollbar,
+      .glass-thinking-content::-webkit-scrollbar,
+      .glass-backup-list::-webkit-scrollbar,
+      .glass-screenshot-body::-webkit-scrollbar,
+      .glass-screenshot-result-text::-webkit-scrollbar {
+        display: none;
       }
 
       /* ========================================
@@ -1412,33 +1398,6 @@ export function getStyles(): string {
       .glass-settings-body {
         max-height: 400px;
         overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: var(--glass-border) transparent;
-      }
-
-      .glass-settings-body::-webkit-scrollbar {
-        width: 6px !important;
-        height: 6px !important;
-        background: transparent !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-track {
-        background: transparent !important;
-        border-radius: 3px;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-thumb {
-        background: var(--glass-border) !important;
-        border-radius: 3px;
-        border: none !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-thumb:hover {
-        background: var(--glass-border-strong) !important;
-      }
-
-      .glass-settings-body::-webkit-scrollbar-corner {
-        background: transparent !important;
       }
 
       .glass-settings-list {
@@ -1817,10 +1776,10 @@ export function getStyles(): string {
       .glass-toggle-slider::before {
         content: "";
         position: absolute;
-        height: 14px;
-        width: 14px;
+        height: 13px;
+        width: 13px;
         left: 2px;
-        bottom: 2px;
+        bottom: 3px;
         background: var(--text-primary);
         border-radius: 50%;
         transition: all var(--duration-fast) var(--ease-out);
@@ -3029,6 +2988,37 @@ export function getStyles(): string {
       .glass-color-option.active {
         border-color: var(--color-border);
         border-width: 2px;
+      }
+
+      .glass-color-option-custom {
+        background: conic-gradient(#ef4444 0deg 120deg, #22c55e 120deg 240deg, #3b82f6 240deg 360deg) !important;
+        border: none;
+        position: relative;
+        overflow: hidden;
+        box-shadow: inset 0 0 0 7px var(--glass-bg);
+      }
+
+      .glass-color-option-custom:hover {
+        box-shadow: inset 0 0 0 5px var(--glass-bg);
+        transform: translateY(-2px);
+      }
+
+      .glass-color-option-custom.active {
+        background: var(--color) !important;
+        border-color: var(--color-border);
+        border-width: 2px;
+        box-shadow: none;
+      }
+
+      .glass-color-option-custom input[type="color"] {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        border: none;
+        padding: 0;
       }
 
       /* ========================================

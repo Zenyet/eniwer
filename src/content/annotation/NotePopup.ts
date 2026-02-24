@@ -1,10 +1,10 @@
 // NotePopup - popup for viewing and editing annotation notes
 
-import { Annotation, AnnotationColor, AnnotationAIResult, ANNOTATION_COLORS } from '../../types/annotation';
+import { Annotation, AnnotationAIResult, PRESET_COLORS, getAnnotationColorConfig } from '../../types/annotation';
 import { appendToShadow, removeFromShadow } from '../ShadowHost';
 
 export interface NotePopupCallbacks {
-  onSave: (id: string, note: string, color: AnnotationColor) => void;
+  onSave: (id: string, note: string, color: string) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }
@@ -151,12 +151,12 @@ export class NotePopup {
     `;
   }
 
-  private renderColorButtons(currentColor: AnnotationColor): string {
-    const colors: AnnotationColor[] = ['yellow', 'green', 'blue', 'pink', 'purple'];
+  private renderColorButtons(currentColor: string): string {
+    const isCustomColor = !PRESET_COLORS.includes(currentColor);
 
-    return colors
+    const presetButtons = PRESET_COLORS
       .map(color => {
-        const config = ANNOTATION_COLORS[color];
+        const config = getAnnotationColorConfig(color);
         const isActive = color === currentColor;
         return `
           <button
@@ -168,19 +168,45 @@ export class NotePopup {
         `;
       })
       .join('');
+
+    const customColorValue = isCustomColor ? currentColor : '#ff6600';
+
+    return `${presetButtons}
+      <div
+        class="thecircle-note-popup-color-btn thecircle-note-popup-color-custom ${isCustomColor ? 'active' : ''}"
+        title="自定义颜色"
+        style="${isCustomColor ? `background: ${getAnnotationColorConfig(currentColor).bg}; border-color: ${getAnnotationColorConfig(currentColor).border};` : ''}"
+      >
+        <input type="color" class="thecircle-note-popup-color-input" value="${customColorValue}">
+      </div>
+    `;
   }
 
   private setupEventListeners(): void {
     if (!this.popup) return;
 
     // Color buttons
-    const colorBtns = this.popup.querySelectorAll('.thecircle-note-popup-color-btn');
+    const colorBtns = this.popup.querySelectorAll('.thecircle-note-popup-color-btn:not(.thecircle-note-popup-color-custom)');
     colorBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const color = (btn as HTMLElement).dataset.color as AnnotationColor;
+        const color = (btn as HTMLElement).dataset.color as string;
         this.selectColor(color);
       });
+    });
+
+    // Custom color input
+    const customColorInput = this.popup.querySelector('.thecircle-note-popup-color-input') as HTMLInputElement;
+    const customColorDiv = this.popup.querySelector('.thecircle-note-popup-color-custom') as HTMLElement;
+    customColorInput?.addEventListener('input', (e) => {
+      e.stopPropagation();
+      const hex = customColorInput.value;
+      this.selectColor(hex);
+      if (customColorDiv) {
+        const config = getAnnotationColorConfig(hex);
+        customColorDiv.style.background = config.bg;
+        customColorDiv.style.borderColor = config.border;
+      }
     });
 
     // Thinking toggle
@@ -249,14 +275,19 @@ export class NotePopup {
     }, 100);
   }
 
-  private selectColor(color: AnnotationColor): void {
+  private selectColor(color: string): void {
     if (!this.popup) return;
 
-    // Update active state
-    const colorBtns = this.popup.querySelectorAll('.thecircle-note-popup-color-btn');
+    // Update active state for preset buttons
+    const colorBtns = this.popup.querySelectorAll('.thecircle-note-popup-color-btn:not(.thecircle-note-popup-color-custom)');
     colorBtns.forEach(btn => {
       btn.classList.toggle('active', (btn as HTMLElement).dataset.color === color);
     });
+
+    // Update custom button active state
+    const customBtn = this.popup.querySelector('.thecircle-note-popup-color-custom');
+    const isCustom = !PRESET_COLORS.includes(color);
+    customBtn?.classList.toggle('active', isCustom);
 
     // Update current annotation color (will be saved when save is clicked)
     if (this.currentAnnotation) {

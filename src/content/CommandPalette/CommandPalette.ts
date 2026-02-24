@@ -16,6 +16,7 @@ import {
   getSettingsViewHTML as getSettingsViewHTMLFromModule,
   getAccountSettingsHTML as getAccountSettingsHTMLFromModule,
   getMenuSettingsHTML as getMenuSettingsHTMLFromModule,
+  PROVIDER_MODELS,
   // Annotations View
   getFilteredAnnotations,
   getAnnotationsContentHTML as getAnnotationsContentHTMLFromModule,
@@ -868,8 +869,8 @@ export class CommandPalette {
           </div>
         ` : `
           <div class="glass-hints">
-            <span><kbd>↑</kbd><kbd>↓</kbd> 导航</span>
-            <span><kbd>↵</kbd> 执行</span>
+            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></kbd><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></kbd> 导航</span>
+            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg></kbd> 执行</span>
           </div>
         `}
         <div class="glass-brand">
@@ -1876,14 +1877,31 @@ export class CommandPalette {
     const customUrlGroup = this.shadowRoot.querySelector('#custom-url-group') as HTMLElement;
     const customModelGroup = this.shadowRoot.querySelector('#custom-model-group') as HTMLElement;
     const apiKeyHint = this.shadowRoot.querySelector('#api-key-hint') as HTMLElement;
+    const modelSelectGroup = this.shadowRoot.querySelector('#model-select-group') as HTMLElement;
+    const modelSelect = this.shadowRoot.querySelector('#model-select') as HTMLSelectElement;
 
     providerSelect?.addEventListener('change', () => {
       const provider = providerSelect.value as MenuConfig['apiProvider'];
       const isCustom = provider === 'custom';
       if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'flex' : 'none';
       if (customModelGroup) customModelGroup.style.display = isCustom ? 'flex' : 'none';
+      if (modelSelectGroup) modelSelectGroup.style.display = isCustom ? 'none' : 'flex';
       if (apiKeyHint) apiKeyHint.textContent = getAPIKeyHint(provider);
       tempConfig.apiProvider = provider;
+      // Update model options and reset customModel
+      if (!isCustom && modelSelect) {
+        const models = PROVIDER_MODELS[provider] || [];
+        modelSelect.innerHTML = models.map(m =>
+          `<option value="${m.id}">${m.label}</option>`
+        ).join('');
+        tempConfig.customModel = undefined;
+      }
+      markChanged();
+    });
+
+    // Model select
+    modelSelect?.addEventListener('change', () => {
+      tempConfig.customModel = modelSelect.value || undefined;
       markChanged();
     });
 
@@ -2049,9 +2067,9 @@ export class CommandPalette {
 
     // Color picker
     const colorPicker = this.shadowRoot.querySelector('#annotation-color-picker');
-    colorPicker?.querySelectorAll('.glass-color-option').forEach(btn => {
+    colorPicker?.querySelectorAll('.glass-color-option:not(.glass-color-option-custom)').forEach(btn => {
       btn.addEventListener('click', () => {
-        const color = (btn as HTMLElement).dataset.color as AnnotationConfig['defaultColor'];
+        const color = (btn as HTMLElement).dataset.color as string;
         annotationConfig.defaultColor = color;
         tempConfig.annotation = annotationConfig;
         // Update active state
@@ -2059,6 +2077,23 @@ export class CommandPalette {
         btn.classList.add('active');
         markChanged();
       });
+    });
+
+    // Custom color input
+    const customColorInput = this.shadowRoot.querySelector('#annotation-custom-color') as HTMLInputElement;
+    const customColorDiv = colorPicker?.querySelector('.glass-color-option-custom') as HTMLElement;
+    customColorInput?.addEventListener('input', () => {
+      const hex = customColorInput.value;
+      annotationConfig.defaultColor = hex;
+      tempConfig.annotation = annotationConfig;
+      // Update active state
+      colorPicker?.querySelectorAll('.glass-color-option').forEach(b => b.classList.remove('active'));
+      if (customColorDiv) {
+        customColorDiv.classList.add('active');
+        customColorDiv.style.setProperty('--color', `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},0.4)`);
+        customColorDiv.style.setProperty('--color-border', `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},0.8)`);
+      }
+      markChanged();
     });
 
     // Auto save AI result toggle
@@ -3700,6 +3735,10 @@ export class CommandPalette {
         ).join('');
         contentHtml = `<div class="glass-chat-references">${refsHtml}</div>`;
       }
+      // Add thinking section for assistant messages
+      if (msg.role === 'assistant' && msg.thinking) {
+        contentHtml += getThinkingSectionHTML(msg.thinking);
+      }
       contentHtml += `<div class="glass-chat-msg-text">${formatAIContent(msg.content)}</div>`;
 
       return `
@@ -3767,6 +3806,18 @@ export class CommandPalette {
 
     // Scroll to bottom
     this.scrollChatToBottom();
+
+    // Bind thinking toggle events for existing messages
+    const chatContent = this.shadowRoot.querySelector('.glass-chat-content');
+    chatContent?.querySelectorAll('.glass-thinking-section').forEach(section => {
+      const header = section.querySelector('.glass-thinking-header');
+      if (header && !header.hasAttribute('data-bound')) {
+        header.setAttribute('data-bound', 'true');
+        header.addEventListener('click', () => {
+          section.classList.toggle('collapsed');
+        });
+      }
+    });
   }
 
   private async sendChatMessage(input: HTMLInputElement): Promise<void> {
@@ -3790,6 +3841,16 @@ export class CommandPalette {
     const content = this.shadowRoot?.querySelector('.glass-chat-content');
     if (content) {
       content.innerHTML = this.getContextChatContentHTML();
+      // Bind thinking toggle events
+      content.querySelectorAll('.glass-thinking-section').forEach(section => {
+        const header = section.querySelector('.glass-thinking-header');
+        if (header && !header.hasAttribute('data-bound')) {
+          header.setAttribute('data-bound', 'true');
+          header.addEventListener('click', () => {
+            section.classList.toggle('collapsed');
+          });
+        }
+      });
     }
     this.scrollChatToBottom();
 
@@ -3899,6 +3960,16 @@ export class CommandPalette {
     // Re-render full chat content
     if (content) {
       content.innerHTML = this.getContextChatContentHTML();
+      // Bind thinking toggle events for all thinking sections
+      content.querySelectorAll('.glass-thinking-section').forEach(section => {
+        const header = section.querySelector('.glass-thinking-header');
+        if (header && !header.hasAttribute('data-bound')) {
+          header.setAttribute('data-bound', 'true');
+          header.addEventListener('click', () => {
+            section.classList.toggle('collapsed');
+          });
+        }
+      });
     }
 
     // Re-enable input

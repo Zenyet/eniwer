@@ -105,7 +105,7 @@ export class AnnotationSystem {
   /**
    * Create a highlight with note popup
    */
-  async createHighlightWithNote(): Promise<void> {
+  async createHighlightWithNote(defaultColor?: string): Promise<void> {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       this.callbacks.onToast?.('请先选择文本');
@@ -113,7 +113,7 @@ export class AnnotationSystem {
     }
 
     // Create highlight with default color
-    const annotation = await this.manager.createAnnotation(selection, 'yellow');
+    const annotation = await this.manager.createAnnotation(selection, defaultColor || 'yellow');
     if (!annotation) return;
 
     // Show note popup

@@ -1,18 +1,15 @@
 import { icons } from "../icons";
-import { AnnotationColor, ANNOTATION_COLORS } from "../types/annotation";
+import { PRESET_COLORS, getAnnotationColorConfig } from "../types/annotation";
 import { appendToShadow, removeFromShadow } from "./ShadowHost";
 
 export interface SelectionPopoverCallbacks {
   onTranslate: () => void;
-  onHighlight?: (color: AnnotationColor) => void;
+  onHighlight?: (color: string) => void;
   onNote?: () => void;
   onMore?: () => void;
 }
 
 export type PopoverPosition = "above" | "below";
-
-// Color button order
-const COLOR_ORDER: AnnotationColor[] = ['yellow', 'green', 'blue', 'pink', 'purple'];
 
 // Icons for the popover
 const noteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/></svg>`;
@@ -166,8 +163,8 @@ export class SelectionPopover {
     this.popover.style.top = `${top}px`;
 
     // Build color buttons
-    const colorButtons = COLOR_ORDER.map(color => {
-      const config = ANNOTATION_COLORS[color];
+    const colorButtons = PRESET_COLORS.map(color => {
+      const config = getAnnotationColorConfig(color);
       return `
         <button
           class="thecircle-selection-popover-color-btn"
@@ -183,6 +180,9 @@ export class SelectionPopover {
       <div class="thecircle-selection-popover-container">
         <div class="thecircle-selection-popover-colors">
           ${colorButtons}
+          <div class="thecircle-selection-popover-color-btn thecircle-selection-popover-color-custom" title="自定义颜色">
+            <input type="color" class="thecircle-selection-popover-color-input" value="#ff6600">
+          </div>
         </div>
         <div class="thecircle-selection-popover-divider"></div>
         <button class="thecircle-selection-popover-btn" data-action="note" title="添加批注">
@@ -216,10 +216,18 @@ export class SelectionPopover {
     colorBtns.forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const color = (btn as HTMLElement).dataset.color as AnnotationColor;
+        const color = (btn as HTMLElement).dataset.color as string;
         this.callbacks?.onHighlight?.(color);
         this.hide();
       });
+    });
+
+    // Custom color input
+    const colorInput = this.popover.querySelector('.thecircle-selection-popover-color-input') as HTMLInputElement;
+    colorInput?.addEventListener("input", (e) => {
+      e.stopPropagation();
+      this.callbacks?.onHighlight?.(colorInput.value);
+      this.hide();
     });
 
     // Note button

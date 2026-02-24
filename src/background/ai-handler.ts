@@ -12,26 +12,26 @@ interface ProviderConfig {
 const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   groq: {
     apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.2-90b-vision-preview',
+    model: 'llama-3.3-70b-versatile',
     visionModel: 'llama-3.2-90b-vision-preview',
   },
   openai: {
     apiUrl: 'https://api.openai.com/v1/chat/completions',
-    model: 'gpt-4o-mini',
-    thinkingModel: 'o3-mini',
-    visionModel: 'gpt-4o-mini',
+    model: 'gpt-4.1-mini',
+    thinkingModel: 'o4-mini',
+    visionModel: 'gpt-4.1-mini',
   },
   anthropic: {
     apiUrl: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-3-5-sonnet-20241022',
-    thinkingModel: 'claude-3-5-sonnet-20241022',
-    visionModel: 'claude-3-5-sonnet-20241022',
+    model: 'claude-sonnet-4-5-20250929',
+    thinkingModel: 'claude-sonnet-4-5-20250929',
+    visionModel: 'claude-sonnet-4-5-20250929',
   },
   gemini: {
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
-    model: 'gemini-1.5-flash',
-    thinkingModel: 'gemini-2.0-flash-thinking-exp',
-    visionModel: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash',
+    thinkingModel: 'gemini-2.5-flash',
+    visionModel: 'gemini-2.5-flash',
   },
 };
 
@@ -108,10 +108,12 @@ async function callOpenAICompatibleAPI(
   } else {
     const providerConfig = PROVIDER_CONFIGS[provider];
     apiUrl = providerConfig.apiUrl;
-    // Use thinking model if enabled and available
-    model = useThinking && providerConfig.thinkingModel
+    // Use user-selected model if set, otherwise provider default
+    const baseModel = config.customModel || providerConfig.model;
+    // Use thinking model if enabled and available (only override if user hasn't selected a model)
+    model = useThinking && !config.customModel && providerConfig.thinkingModel
       ? providerConfig.thinkingModel
-      : providerConfig.model;
+      : baseModel;
   }
 
   // Check if using OpenAI o1/o3 thinking models
@@ -283,7 +285,7 @@ async function callAnthropicAPI(
 
   // Build request body
   const requestBody: Record<string, unknown> = {
-    model: providerConfig.model,
+    model: config.customModel || providerConfig.model,
     max_tokens: useThinking ? 16384 : 2048,
     system: systemPrompt,
     messages: [
@@ -611,7 +613,7 @@ async function callOpenAIVisionAPI(
   } else {
     const providerConfig = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
     apiUrl = providerConfig.apiUrl;
-    model = providerConfig.visionModel || providerConfig.model;
+    model = config.customModel || providerConfig.visionModel || providerConfig.model;
   }
 
   const response = await fetch(apiUrl, {
@@ -687,7 +689,7 @@ async function callAnthropicVisionAPI(
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: providerConfig.visionModel || providerConfig.model,
+      model: config.customModel || providerConfig.visionModel || providerConfig.model,
       max_tokens: 2048,
       messages: [
         {

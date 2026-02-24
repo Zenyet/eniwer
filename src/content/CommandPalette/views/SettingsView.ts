@@ -1,9 +1,51 @@
 // Settings View - handles settings configuration
 import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU } from '../../../types';
+import { PRESET_COLORS, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { saveConfig, saveGlobalMenuItems } from '../../../utils/storage';
 import { enforceMaxCount } from '../../../utils/taskStorage';
 import { escapeHtml, getTranslationHint, getAPIKeyHint } from '../utils';
+
+// Model options per provider
+export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = {
+  groq: [
+    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
+    { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (Fast)' },
+    { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B' },
+    { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick 17B' },
+    { id: 'qwen/qwen-3-32b', label: 'Qwen 3 32B' },
+    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
+  ],
+  openai: [
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'gpt-4.1', label: 'GPT-4.1' },
+    { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano' },
+    { id: 'gpt-4o', label: 'GPT-4o' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { id: 'o3', label: 'o3' },
+    { id: 'o4-mini', label: 'o4-mini' },
+  ],
+  anthropic: [
+    { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
+    { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+    { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+    { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+  ],
+};
+
+function getModelOptions(provider: string, currentModel?: string): string {
+  const models = PROVIDER_MODELS[provider];
+  if (!models) return '';
+  return models.map(m => {
+    const selected = currentModel === m.id ? ' selected' : (!currentModel && m === models[0] ? ' selected' : '');
+    return `<option value="${m.id}"${selected}>${m.label}</option>`;
+  }).join('');
+}
 
 export interface SettingsState {
   tempConfig: MenuConfig | null;
@@ -156,6 +198,12 @@ export function getSettingsViewHTML(
           <div class="glass-form-group">
             <label class="glass-form-label">API Key</label>
             <input type="password" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key">
+          </div>
+          <div class="glass-form-group" id="model-select-group"${isCustomProvider ? ' style="display: none"' : ''}>
+            <label class="glass-form-label">模型</label>
+            <select class="glass-select" id="model-select">
+              ${getModelOptions(config.apiProvider, config.customModel)}
+            </select>
           </div>
           <div class="glass-form-group" id="custom-url-group"${isCustomProvider ? '' : ' style="display: none"'}>
             <label class="glass-form-label">API URL</label>
@@ -317,6 +365,15 @@ export function getSettingsViewHTML(
               <button class="glass-color-option ${config.annotation?.defaultColor === 'blue' ? 'active' : ''}" data-color="blue" style="--color: #bfdbfe; --color-border: #60a5fa;"></button>
               <button class="glass-color-option ${config.annotation?.defaultColor === 'pink' ? 'active' : ''}" data-color="pink" style="--color: #fbcfe8; --color-border: #f472b6;"></button>
               <button class="glass-color-option ${config.annotation?.defaultColor === 'purple' ? 'active' : ''}" data-color="purple" style="--color: #ddd6fe; --color-border: #a78bfa;"></button>
+              ${(() => {
+                const dc = config.annotation?.defaultColor || 'yellow';
+                const isCustom = !['yellow', 'green', 'blue', 'pink', 'purple'].includes(dc);
+                const customValue = isCustom ? dc : '#ff6600';
+                const customConfig = isCustom ? getAnnotationColorConfig(dc) : null;
+                return `<div class="glass-color-option glass-color-option-custom ${isCustom ? 'active' : ''}" title="自定义颜色" style="${isCustom ? `--color: ${customConfig!.bg}; --color-border: ${customConfig!.border};` : ''}">
+                  <input type="color" id="annotation-custom-color" value="${customValue}">
+                </div>`;
+              })()}
             </div>
           </div>
           <div class="glass-form-group glass-form-toggle">

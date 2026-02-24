@@ -238,7 +238,7 @@ class TheCircle {
   }
 
   private async handleSelectionNote(): Promise<void> {
-    await this.annotationSystem.createHighlightWithNote();
+    await this.annotationSystem.createHighlightWithNote(this.config.annotation?.defaultColor);
   }
 
   private async handleSaveToAnnotation(
@@ -266,7 +266,7 @@ class TheCircle {
     // First, try to find and select the original text on the page
     const found = this.findAndSelectText(originalText);
     if (found) {
-      await this.annotationSystem.createHighlightWithAI('yellow', aiResult);
+      await this.annotationSystem.createHighlightWithAI(this.config.annotation?.defaultColor || 'yellow', aiResult);
     } else {
       this.showToast('无法定位原文，请手动选择文本');
     }

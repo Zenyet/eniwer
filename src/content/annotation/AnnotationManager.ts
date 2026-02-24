@@ -1,6 +1,6 @@
 // AnnotationManager - handles highlight creation, removal, and restoration
 
-import { Annotation, AnnotationColor, AnnotationAIResult, ANNOTATION_COLORS } from '../../types/annotation';
+import { Annotation, AnnotationColor, AnnotationAIResult, getAnnotationColorConfig } from '../../types/annotation';
 import { PositionResolver } from './PositionResolver';
 import {
   getAnnotationsForUrl,
@@ -82,7 +82,7 @@ export class AnnotationManager {
       // Update highlight color
       const elements = this.highlightElements.get(id);
       if (elements) {
-        const colorConfig = ANNOTATION_COLORS[updates.color];
+        const colorConfig = getAnnotationColorConfig(updates.color);
         elements.forEach(el => {
           el.style.backgroundColor = colorConfig.bg;
           el.style.borderBottomColor = colorConfig.border;
@@ -163,7 +163,7 @@ export class AnnotationManager {
    */
   private wrapRange(range: Range, annotation: Annotation): HTMLElement[] {
     const elements: HTMLElement[] = [];
-    const colorConfig = ANNOTATION_COLORS[annotation.color];
+    const colorConfig = getAnnotationColorConfig(annotation.color);
 
     // For simple single-node selection
     if (

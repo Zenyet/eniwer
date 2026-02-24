@@ -34,10 +34,8 @@ export interface HistoryConfig {
 }
 
 // Annotation config
-export type AnnotationColor = 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
-
 export interface AnnotationConfig {
-  defaultColor: AnnotationColor;
+  defaultColor: string;
   autoSaveAIResult: boolean; // Auto save AI results to annotations
   showPageFilter: boolean; // Show current page filter by default
 }

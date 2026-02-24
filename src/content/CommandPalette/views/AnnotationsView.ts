@@ -1,5 +1,5 @@
 // Annotations View - handles annotation list display and management
-import { Annotation, ANNOTATION_COLORS } from '../../../types/annotation';
+import { Annotation, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { escapeHtml } from '../utils';
 
@@ -165,7 +165,7 @@ export function getAnnotationsContentHTML(
 }
 
 export function getAnnotationEntryHTML(annotation: Annotation, icons: Record<string, string>): string {
-  const colorConfig = ANNOTATION_COLORS[annotation.color];
+  const colorConfig = getAnnotationColorConfig(annotation.color);
   const time = new Date(annotation.createdAt).toLocaleTimeString('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',

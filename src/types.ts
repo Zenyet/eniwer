@@ -84,6 +84,7 @@ export interface MenuConfig {
   annotation?: AnnotationConfig;
   knowledge?: KnowledgeConfig;
   syncOptions?: SyncOptions;
+  autoSaveTask?: boolean;
 }
 
 export interface StorageData {
@@ -311,6 +312,8 @@ export interface SyncData {
   timestamp: number;
   config: Partial<MenuConfig>;
   browseTrail?: BrowseSession[];
+  savedTasks?: unknown[];
+  annotations?: unknown[];
 }
 
 export interface BackupFileInfo {

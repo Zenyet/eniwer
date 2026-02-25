@@ -159,6 +159,8 @@ export class CommandPalette {
 
   // Recent saved tasks from IndexedDB
   private recentSavedTasks: SavedTask[] = [];
+  // Unsaved recent results (in-memory only, cleared on page refresh)
+  private unsavedRecentTasks: SavedTask[] = [];
 
   // Auth state for Google login
   private authState: AuthState | null = null;
@@ -326,10 +328,10 @@ export class CommandPalette {
   }): boolean {
     const actionType = options?.actionType || '';
 
-    // Check if there's already a minimized task for this action type
-    // If so, restore it instead of creating a new one
+    // Check if there's already a minimized task for this action type that is still loading
+    // Only restore if the task is still in progress — completed tasks should not block new requests
     if (actionType) {
-      const existingTask = this.minimizedTasks.find(t => t.actionType === actionType);
+      const existingTask = this.minimizedTasks.find(t => t.actionType === actionType && t.isLoading);
       if (existingTask) {
         // Set callbacks before restoring so stop/refresh buttons work
         this.aiResultCallbacks = callbacks || null;
@@ -448,29 +450,23 @@ export class CommandPalette {
     }
   }
 
+  private _streamUpdateRAF: number | null = null;
+
   public streamUpdate(_chunk: string, fullText: string, thinking?: string, targetStreamKey?: string): void {
     // Use targetStreamKey if provided (for routing to specific task), otherwise use currentStreamKey
     const streamKey = targetStreamKey || this.currentStreamKey;
 
-    // Update active AI result if streamKey matches
+    // Update data immediately (cheap)
     if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
       this.aiResultData.content = fullText;
       this.aiResultData.isLoading = true;
       if (thinking) {
         this.aiResultData.thinking = thinking;
       }
-      // Use unified content update if in commands view with active command
-      if (this.currentView === 'commands' && this.activeCommand) {
-        this.updateUnifiedContent();
-      } else {
-        this.updateAIResultContent();
-      }
     } else if (this.aiResultData) {
     }
 
-    // Also update minimized task with matching streamKey
-    // Note: Don't re-render the list during streaming - just update the data
-    // The loading indicator is already showing, no need to re-render
+    // Also update minimized task data
     if (streamKey) {
       const task = this.minimizedTasks.find(t => t.streamKey === streamKey);
       if (task) {
@@ -479,16 +475,30 @@ export class CommandPalette {
         if (thinking) {
           task.thinking = thinking;
         }
-        // Debug: Log that we're updating minimized task
-      } else if (this.minimizedTasks.length > 0) {
-        // Debug: Log why we couldn't find the task
       }
+    }
+
+    // Batch DOM updates to next animation frame
+    if (!this._streamUpdateRAF) {
+      this._streamUpdateRAF = requestAnimationFrame(() => {
+        this._streamUpdateRAF = null;
+        if (this.aiResultData && this.aiResultData.streamKey === (targetStreamKey || this.currentStreamKey)) {
+          if (this.currentView === 'commands' && this.activeCommand) {
+            this.updateUnifiedContent();
+          } else {
+            this.updateAIResultContent();
+          }
+        }
+      });
     }
   }
 
   public updateAIResult(content: string, thinking?: string, targetStreamKey?: string): void {
     // Use targetStreamKey if provided, otherwise use currentStreamKey
     const streamKey = targetStreamKey || this.currentStreamKey;
+
+    // Track which data completed for auto-save
+    let completedData: AIResultData | null = null;
 
     // Update active AI result if streamKey matches
     if (this.aiResultData && this.aiResultData.streamKey === streamKey) {
@@ -497,6 +507,7 @@ export class CommandPalette {
       if (thinking) {
         this.aiResultData.thinking = thinking;
       }
+      completedData = this.aiResultData;
       // Use unified content update if in commands view with active command
       if (this.currentView === 'commands' && this.activeCommand) {
         this.updateUnifiedContent();
@@ -519,12 +530,37 @@ export class CommandPalette {
         if (wasLoading) {
           this.renderMinimizedTasksIfVisible();
         }
+        // Use minimized task data for auto-save if active data wasn't matched
+        if (!completedData) {
+          completedData = {
+            title: task.title,
+            content: task.content,
+            thinking: task.thinking,
+            originalText: task.originalText,
+            isLoading: false,
+            resultType: task.resultType,
+            translateTargetLanguage: task.translateTargetLanguage,
+            actionType: task.actionType,
+            sourceUrl: task.sourceUrl,
+            sourceTitle: task.sourceTitle,
+            createdAt: task.createdAt,
+          };
+        }
       }
       // Remove from active stream keys since this stream is complete
       this.activeStreamKeys.delete(streamKey);
       // Clear currentStreamKey only if it matches
       if (this.currentStreamKey === streamKey) {
         this.currentStreamKey = null;
+      }
+    }
+
+    // Auto-save if enabled, otherwise add to unsaved recent for quick access
+    if (completedData && completedData.content) {
+      if (this.config.autoSaveTask) {
+        this.autoSaveAIResult(completedData);
+      } else {
+        this.addToUnsavedRecent(completedData);
       }
     }
   }
@@ -1129,18 +1165,84 @@ export class CommandPalette {
     }
   }
 
-  private showSaveFeedback(btn: HTMLButtonElement): void {
+  private async autoSaveAIResult(data: AIResultData): Promise<void> {
+    if (!data.content) return;
+    try {
+      await saveTask({
+        title: data.title,
+        content: data.content,
+        thinking: data.thinking,
+        originalText: data.originalText,
+        resultType: data.resultType,
+        actionType: data.actionType || 'unknown',
+        sourceUrl: data.sourceUrl || window.location.href,
+        sourceTitle: data.sourceTitle || document.title,
+        translateTargetLanguage: data.translateTargetLanguage,
+        createdAt: data.createdAt || Date.now(),
+      });
+      const maxCount = this.config.history?.maxSaveCount || DEFAULT_HISTORY_CONFIG.maxSaveCount;
+      await enforceMaxCount(maxCount);
+      await this.loadRecentSavedTasks();
+
+      // Show save feedback on the save button if visible (with slight delay)
+      const saveBtn = this.shadowRoot?.querySelector('.glass-btn-save') as HTMLButtonElement;
+      if (saveBtn) {
+        this.showSaveFeedback(saveBtn, 600);
+      }
+    } catch (error) {
+      console.error('Auto-save failed:', error);
+    }
+  }
+
+  private addToUnsavedRecent(data: AIResultData): void {
+    // Avoid duplicates by streamKey
+    if (data.streamKey && this.unsavedRecentTasks.some(t => t.id === `unsaved-${data.streamKey}`)) {
+      return;
+    }
+    const task: SavedTask = {
+      id: `unsaved-${data.streamKey || Date.now()}`,
+      title: data.title,
+      content: data.content,
+      thinking: data.thinking,
+      originalText: data.originalText,
+      resultType: data.resultType,
+      actionType: data.actionType || 'unknown',
+      sourceUrl: data.sourceUrl || window.location.href,
+      sourceTitle: data.sourceTitle || document.title,
+      translateTargetLanguage: data.translateTargetLanguage,
+      createdAt: data.createdAt || Date.now(),
+      savedAt: Date.now(),
+    };
+    this.unsavedRecentTasks.unshift(task);
+    // Keep a reasonable limit
+    if (this.unsavedRecentTasks.length > 20) {
+      this.unsavedRecentTasks.pop();
+    }
+    // Re-render recent tasks if visible
+    if (this.shadowRoot && this.currentView === 'commands') {
+      this.renderRecentTasks();
+    }
+  }
+
+  private showSaveFeedback(btn: HTMLButtonElement, delay: number = 0): void {
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-    `;
-    btn.classList.add('saved');
-    setTimeout(() => {
-      btn.innerHTML = originalHTML;
-      btn.classList.remove('saved');
-    }, 1500);
+    const doFeedback = () => {
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+      btn.classList.add('saved');
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.classList.remove('saved');
+      }, 1500);
+    };
+    if (delay > 0) {
+      setTimeout(doFeedback, delay);
+    } else {
+      doFeedback();
+    }
   }
 
   private async saveToAnnotation(btn: HTMLButtonElement): Promise<void> {
@@ -2233,6 +2335,13 @@ export class CommandPalette {
       }
     });
 
+    // Auto save task toggle
+    const autoSaveTask = this.shadowRoot.querySelector('#auto-save-task') as HTMLInputElement;
+    autoSaveTask?.addEventListener('change', () => {
+      tempConfig.autoSaveTask = autoSaveTask.checked;
+      markChanged();
+    });
+
     // ===== Annotation settings =====
     const annotationConfig = tempConfig.annotation || { ...DEFAULT_ANNOTATION_CONFIG };
 
@@ -3023,10 +3132,18 @@ export class CommandPalette {
   }
 
   private getFilteredRecentTasks(): SavedTask[] {
+    // Merge unsaved recent tasks (in-memory) with persisted saved tasks
+    // Unsaved tasks appear first, then saved tasks (dedup by content)
+    const savedIds = new Set(this.recentSavedTasks.map(t => t.id));
+    const merged = [
+      ...this.unsavedRecentTasks.filter(t => !savedIds.has(t.id)),
+      ...this.recentSavedTasks,
+    ];
+
     if (!this.searchQuery) {
-      return this.recentSavedTasks;
+      return merged;
     }
-    return this.recentSavedTasks.filter(task => {
+    return merged.filter(task => {
       const title = task.title.toLowerCase();
       const content = task.content.toLowerCase();
       const actionType = task.actionType.toLowerCase();
@@ -3310,7 +3427,8 @@ export class CommandPalette {
         if (target.classList.contains('glass-recent-close')) return;
         const taskId = el.getAttribute('data-task-id');
         if (taskId) {
-          const task = this.recentSavedTasks.find(t => t.id === taskId);
+          const task = this.recentSavedTasks.find(t => t.id === taskId)
+            || this.unsavedRecentTasks.find(t => t.id === taskId);
           if (task) {
             this.restoreSavedTask(task);
           }
@@ -3345,6 +3463,12 @@ export class CommandPalette {
   }
 
   private async deleteSavedTask(taskId: string): Promise<void> {
+    // Handle unsaved (in-memory only) tasks
+    if (taskId.startsWith('unsaved-')) {
+      this.unsavedRecentTasks = this.unsavedRecentTasks.filter(t => t.id !== taskId);
+      this.renderRecentTasks();
+      return;
+    }
     try {
       await deleteTask(taskId);
       this.recentSavedTasks = this.recentSavedTasks.filter(t => t.id !== taskId);
@@ -4077,7 +4201,13 @@ export class CommandPalette {
     );
 
     try {
+      let _chatStreamRAF: number | null = null;
+      // Cache DOM references for streaming to avoid repeated querySelectorAll
+      let _cachedStreamingTextEl: Element | null = null;
+      let _cachedStreamingContainer: Element | null = null;
+
       const onChunk: OnChunkCallback = (_chunk, fullText, thinking) => {
+        // Update data immediately (cheap)
         const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.role === 'assistant') {
           lastMsg.content = fullText;
@@ -4086,50 +4216,54 @@ export class CommandPalette {
           }
         }
 
-        // Update UI — try .glass-chat-streaming first (original render),
-        // then fall back to last assistant message (after restore from minimized)
-        let streamingTextEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text') as Element | null;
-        let streamingContainer = this.shadowRoot?.querySelector('.glass-chat-streaming') as Element | null;
+        // Batch DOM updates to next animation frame
+        if (!_chatStreamRAF) {
+          _chatStreamRAF = requestAnimationFrame(() => {
+            _chatStreamRAF = null;
 
-        if (!streamingTextEl && this.chatSession === session && this.shadowRoot) {
-          // Chat was restored from minimized — find the last assistant message
-          const allAssistantTexts = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant .glass-chat-msg-text');
-          streamingTextEl = allAssistantTexts[allAssistantTexts.length - 1] || null;
-          const allAssistantMsgs = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant');
-          streamingContainer = allAssistantMsgs[allAssistantMsgs.length - 1] || null;
-        }
+            // Resolve DOM references (use cache when possible)
+            if (!_cachedStreamingTextEl) {
+              _cachedStreamingTextEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text') as Element | null;
+              _cachedStreamingContainer = this.shadowRoot?.querySelector('.glass-chat-streaming') as Element | null;
 
-        if (streamingTextEl) {
-          streamingTextEl.innerHTML = formatAIContent(fullText);
-        }
-
-        // Update thinking section
-        if (thinking && streamingContainer) {
-          let thinkingSection = streamingContainer.querySelector('.glass-thinking-section');
-          if (!thinkingSection) {
-            // Insert thinking section before the text
-            const textEl = streamingContainer.querySelector('.glass-chat-msg-text');
-            if (textEl) {
-              textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(thinking));
-              thinkingSection = streamingContainer.querySelector('.glass-thinking-section');
-              // Bind toggle event
-              const header = thinkingSection?.querySelector('.glass-thinking-header');
-              header?.addEventListener('click', () => {
-                thinkingSection?.classList.toggle('collapsed');
-              });
+              if (!_cachedStreamingTextEl && this.chatSession === session && this.shadowRoot) {
+                const allAssistantTexts = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant .glass-chat-msg-text');
+                _cachedStreamingTextEl = allAssistantTexts[allAssistantTexts.length - 1] || null;
+                const allAssistantMsgs = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant');
+                _cachedStreamingContainer = allAssistantMsgs[allAssistantMsgs.length - 1] || null;
+              }
             }
-          } else {
-            // Update existing thinking content
-            const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
-            if (thinkingContent) {
-              thinkingContent.innerHTML = formatAIContent(thinking);
-            }
-          }
-        }
 
-        // Auto-scroll if chat is visible
-        if (this.chatSession === session) {
-          this.scrollChatToBottom();
+            if (_cachedStreamingTextEl) {
+              _cachedStreamingTextEl.innerHTML = formatAIContent(lastMsg.content);
+            }
+
+            // Update thinking section
+            if (lastMsg.thinking && _cachedStreamingContainer) {
+              let thinkingSection = _cachedStreamingContainer.querySelector('.glass-thinking-section');
+              if (!thinkingSection) {
+                const textEl = _cachedStreamingContainer.querySelector('.glass-chat-msg-text');
+                if (textEl) {
+                  textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(lastMsg.thinking));
+                  thinkingSection = _cachedStreamingContainer.querySelector('.glass-thinking-section');
+                  const header = thinkingSection?.querySelector('.glass-thinking-header');
+                  header?.addEventListener('click', () => {
+                    thinkingSection?.classList.toggle('collapsed');
+                  });
+                }
+              } else {
+                const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
+                if (thinkingContent) {
+                  thinkingContent.innerHTML = formatAIContent(lastMsg.thinking);
+                }
+              }
+            }
+
+            // Auto-scroll if chat is visible
+            if (this.chatSession === session) {
+              this.scrollChatToBottom();
+            }
+          });
         }
       };
 
@@ -4205,12 +4339,17 @@ export class CommandPalette {
     }
   }
 
+  private _scrollRAF: number | null = null;
   private scrollChatToBottom(): void {
     if (!this.shadowRoot) return;
-    const body = this.shadowRoot.querySelector('.glass-body');
-    if (body) {
-      body.scrollTop = body.scrollHeight;
-    }
+    if (this._scrollRAF) return; // Already scheduled
+    this._scrollRAF = requestAnimationFrame(() => {
+      this._scrollRAF = null;
+      const body = this.shadowRoot?.querySelector('.glass-body');
+      if (body) {
+        body.scrollTop = body.scrollHeight;
+      }
+    });
   }
 
   // ========================================

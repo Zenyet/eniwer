@@ -352,6 +352,14 @@ export function getSettingsViewHTML(
           <div class="glass-form-group">
             <button id="clear-history" class="glass-btn glass-btn-danger">清空所有历史记录</button>
           </div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">自动保存结果</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="auto-save-task" ${config.autoSaveTask ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+            <span class="glass-form-hint">翻译、总结页面等 AI 结果完成后自动保存到历史记录</span>
+          </div>
         </div>
 
         <!-- 批注 -->

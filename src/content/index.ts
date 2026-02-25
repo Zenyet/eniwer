@@ -73,7 +73,6 @@ class TheCircle {
     // Initialize annotation system (restore highlights)
     await this.annotationSystem.init();
 
-    console.log('The Panel: Initialized with Command Palette');
   }
 
   private async loadConfig(): Promise<void> {
@@ -113,8 +112,6 @@ class TheCircle {
   private applyTheme(theme: 'dark' | 'light' | 'system'): void {
     const host = getShadowHost();
     const container = host.shadowRoot?.getElementById('thecircle-container');
-
-    console.log('The Panel: Applying theme:', theme);
 
     // Remove existing theme classes from both host and container
     const removeClasses = ['dark', 'light'];
@@ -347,7 +344,6 @@ class TheCircle {
 
     // Capture stream key AFTER showAIResult so it routes updates to this specific task
     const streamKey = this.commandPalette.getCurrentStreamKey();
-    console.log('[handleSelectionTranslate] Captured streamKey:', streamKey);
 
     const runTranslate = async (targetLang: string) => {
       const runId = ++translateRunId;
@@ -356,7 +352,6 @@ class TheCircle {
       const onChunk = this.config.useStreaming
         ? (chunk: string, fullText: string, thinking?: string) => {
             if (runId !== translateRunId) return;
-            console.log('[handleSelectionTranslate] onChunk called with streamKey:', streamKey);
             this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
           }
         : undefined;
@@ -367,7 +362,6 @@ class TheCircle {
 
       if (runId !== translateRunId) return;
 
-      console.log('[handleSelectionTranslate] Request completed, calling updateAIResult with streamKey:', streamKey);
       if (result.type === 'error') {
         this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
       } else if (result.type === 'ai') {
@@ -639,21 +633,18 @@ class TheCircle {
 
         // Capture stream key AFTER showAIResult so it routes updates to this specific task
         const streamKey = this.commandPalette.getCurrentStreamKey();
-        console.log('[handleMenuAction] Captured streamKey:', streamKey, 'for action:', actionType);
 
         // If restored existing task, don't start new request
         if (restored) return;
 
         const onChunk = this.config.useStreaming
           ? (chunk: string, fullText: string, thinking?: string) => {
-              console.log('[handleMenuAction] onChunk called for action:', actionType, 'with streamKey:', streamKey);
               this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
             }
           : undefined;
 
         const result = await this.menuActions.execute(item, onChunk);
 
-        console.log('[handleMenuAction] Request completed for action:', actionType, 'calling updateAIResult with streamKey:', streamKey);
         if (result.type === 'error') {
           this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
         } else if (result.type === 'ai') {

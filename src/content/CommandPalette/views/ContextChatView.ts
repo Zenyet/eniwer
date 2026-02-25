@@ -120,10 +120,12 @@ export function updateStreamingMessage(
 
 export function scrollChatToBottom(shadowRoot: ShadowRoot | null): void {
   if (!shadowRoot) return;
-  const chatContent = shadowRoot.querySelector('.glass-chat-content');
-  if (chatContent) {
-    chatContent.scrollTop = chatContent.scrollHeight;
-  }
+  requestAnimationFrame(() => {
+    const chatContent = shadowRoot.querySelector('.glass-chat-content');
+    if (chatContent) {
+      chatContent.scrollTop = chatContent.scrollHeight;
+    }
+  });
 }
 
 export interface ContextChatCallbacks {

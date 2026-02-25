@@ -303,6 +303,7 @@ export function getStyles(): string {
       .glass-ai-content-area {
         padding: 16px;
         min-height: 100px;
+        contain: layout style;
       }
 
       .glass-ai-content-area .glass-ai-content {
@@ -386,6 +387,7 @@ export function getStyles(): string {
         /* Prevent flicker during scroll by creating a compositing layer */
         transform: translateZ(0);
         -webkit-transform: translateZ(0);
+        contain: layout style;
       }
 
       .glass-commands {
@@ -1328,7 +1330,10 @@ export function getStyles(): string {
         background: var(--glass-bg);
         max-height: 200px;
         overflow-y: auto;
+        overscroll-behavior: contain;
         border-top: 1px solid var(--glass-border);
+        transform: translateZ(0);
+        -webkit-transform: translateZ(0);
       }
 
       .glass-thinking-section.collapsed .glass-thinking-content {
@@ -1398,6 +1403,7 @@ export function getStyles(): string {
       .glass-settings-body {
         max-height: 400px;
         overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       .glass-settings-list {
@@ -2085,6 +2091,7 @@ export function getStyles(): string {
         gap: 12px;
         max-height: 400px;
         overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       .glass-screenshot-preview {
@@ -2391,6 +2398,7 @@ export function getStyles(): string {
         display: flex;
         flex-direction: column;
         gap: 16px;
+        contain: layout style;
       }
 
       .glass-chat-empty {

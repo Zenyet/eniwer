@@ -290,60 +290,41 @@ export async function getAuthStatus(): Promise<AuthState> {
     const tokenData = result[AUTH_TOKEN_KEY];
     const syncEnabled = result[SYNC_ENABLED_KEY] ?? false;
 
-    console.log('[Auth] getAuthStatus called:', {
-      hasAuthState: !!authState,
-      hasTokenData: !!tokenData,
-      tokenExpiresAt: tokenData?.expiresAt,
-      now: Date.now(),
-      isExpired: tokenData?.expiresAt ? tokenData.expiresAt < Date.now() : 'no token',
-      syncEnabled,
-    });
-
-    // Check if we have valid auth state and token
-    if (authState?.isLoggedIn && authState?.user && tokenData?.token) {
-      // Check if token is not expired
-      if (tokenData.expiresAt > Date.now()) {
-        console.log('[Auth] Token valid, returning logged in state');
-        return {
-          isLoggedIn: true,
-          user: authState.user,
-          syncEnabled,
-        };
-      }
-
-      // Token expired - try silent re-authentication
-      console.log('[Auth] Token expired, attempting silent re-auth...');
-      const reauthResult = await silentReauth();
-
-      if (reauthResult.success && reauthResult.user) {
-        console.log('[Auth] Silent re-auth successful');
-        // Re-read sync enabled state
-        const newResult = await chrome.storage.local.get([SYNC_ENABLED_KEY]);
-        return {
-          isLoggedIn: true,
-          user: reauthResult.user,
-          syncEnabled: newResult[SYNC_ENABLED_KEY] ?? false,
-        };
-      }
-
-      // Silent re-auth failed - clear state
-      console.log('[Auth] Silent re-auth failed, clearing auth state');
-      await chrome.storage.local.remove([AUTH_STATE_KEY, AUTH_TOKEN_KEY]);
+    // No auth state at all — never logged in
+    if (!authState?.isLoggedIn || !authState?.user) {
+      return { isLoggedIn: false, user: null, syncEnabled: false };
     }
 
-    console.log('[Auth] Returning not logged in state');
+    // Have auth state with valid token
+    if (tokenData?.token && tokenData.expiresAt > Date.now()) {
+      return { isLoggedIn: true, user: authState.user, syncEnabled };
+    }
+
+    // Token expired or missing — try silent re-auth
+    console.log('[Auth] Token expired, attempting silent re-auth...');
+    const reauthResult = await silentReauth();
+
+    if (reauthResult.success && reauthResult.user) {
+      console.log('[Auth] Silent re-auth successful');
+      const newResult = await chrome.storage.local.get([SYNC_ENABLED_KEY]);
+      return {
+        isLoggedIn: true,
+        user: reauthResult.user,
+        syncEnabled: newResult[SYNC_ENABLED_KEY] ?? false,
+      };
+    }
+
+    // Silent re-auth failed — keep user info visible, don't clear auth state
+    // User will be prompted to re-login when they perform an action that needs a token
+    console.log('[Auth] Silent re-auth failed, keeping user info (token invalid)');
     return {
-      isLoggedIn: false,
-      user: null,
-      syncEnabled: false,
+      isLoggedIn: true,
+      user: authState.user,
+      syncEnabled,
     };
   } catch (error) {
     console.error('Error getting auth status:', error);
-    return {
-      isLoggedIn: false,
-      user: null,
-      syncEnabled: false,
-    };
+    return { isLoggedIn: false, user: null, syncEnabled: false };
   }
 }
 
@@ -354,50 +335,48 @@ export async function setSyncEnabled(enabled: boolean): Promise<void> {
 
 // Refresh token if needed (called before API calls)
 export async function refreshTokenIfNeeded(): Promise<string | null> {
-  const result = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+  const result = await chrome.storage.local.get([AUTH_TOKEN_KEY, AUTH_STATE_KEY]);
   const tokenData = result[AUTH_TOKEN_KEY];
+  const authState = result[AUTH_STATE_KEY];
 
-  if (!tokenData?.token) {
+  // Not logged in at all
+  if (!authState?.isLoggedIn) {
     return null;
   }
 
-  // Check if token will expire soon (within 5 minutes)
-  if (tokenData.expiresAt < Date.now() + 5 * 60 * 1000) {
-    // Token expired or expiring soon - try silent re-authentication
-    console.log('[Auth] Token expired, attempting silent reauth...');
-    const reauthResult = await silentReauth();
-    if (reauthResult.success) {
-      const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-      return newResult[AUTH_TOKEN_KEY]?.token || null;
-    }
-    console.log('[Auth] Silent reauth failed, need manual re-login');
-    return null;
-  }
-
-  // Verify token is still valid by making a lightweight API call
-  try {
-    const response = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: `access_token=${tokenData.token}`,
-    });
-
-    if (!response.ok) {
-      // Token is invalid - try silent reauth before giving up
-      console.log('[Auth] Token invalid, attempting silent reauth...');
-      const reauthResult = await silentReauth();
-      if (reauthResult.success) {
-        const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-        return newResult[AUTH_TOKEN_KEY]?.token || null;
+  // Token still valid and not expiring soon
+  if (tokenData?.token && tokenData.expiresAt > Date.now() + 5 * 60 * 1000) {
+    // Verify token is still valid by making a lightweight API call
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `access_token=${tokenData.token}`,
+      });
+      if (response.ok) {
+        return tokenData.token;
       }
-      await chrome.storage.local.remove([AUTH_STATE_KEY, AUTH_TOKEN_KEY]);
-      return null;
+    } catch {
+      return tokenData.token; // Return existing token if verification fails
     }
-
-    return tokenData.token;
-  } catch {
-    return tokenData.token; // Return existing token if verification fails
   }
+
+  // Token expired, expiring soon, or invalid — try silent re-auth
+  console.log('[Auth] Token needs refresh, attempting silent reauth...');
+  const reauthResult = await silentReauth();
+  if (reauthResult.success) {
+    const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+    return newResult[AUTH_TOKEN_KEY]?.token || null;
+  }
+
+  // Silent re-auth failed — try interactive re-auth (will show Google popup)
+  console.log('[Auth] Silent reauth failed, attempting interactive reauth...');
+  const loginResult = await googleLogin();
+  if (loginResult.success) {
+    const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
+    return newResult[AUTH_TOKEN_KEY]?.token || null;
+  }
+
+  console.log('[Auth] All reauth attempts failed');
+  return null;
 }

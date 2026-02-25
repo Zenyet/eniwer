@@ -1,5 +1,5 @@
 // Cloud sync handler using Google Drive AppData folder
-import { SyncData, BackupFileInfo, MenuConfig, BrowseSession, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
+import { SyncData, BackupFileInfo, MenuConfig, BrowseSession, SyncOptions, DEFAULT_SYNC_OPTIONS, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
 import { getAuthToken, refreshTokenIfNeeded } from './auth-handler';
 import { getStorageData } from '../utils/storage';
 
@@ -117,15 +117,35 @@ async function writeFileToAppData(token: string, fileName: string, data: unknown
 // Get current local data to sync
 async function getLocalSyncData(): Promise<SyncData> {
   const storageData = await getStorageData();
-  const browseTrailResult = await chrome.storage.local.get(['thecircle_browse_trail']);
-  const browseTrail = browseTrailResult.thecircle_browse_trail || [];
+  const syncOptions: SyncOptions = storageData.config?.syncOptions || DEFAULT_SYNC_OPTIONS;
 
-  return {
+  const result = await chrome.storage.local.get([
+    'thecircle_browse_trail',
+    'thecircle_saved_tasks',
+    'thecircle_annotations',
+  ]);
+
+  const data: SyncData = {
     version: SYNC_VERSION,
     timestamp: Date.now(),
     config: storageData.config,
-    browseTrail,
   };
+
+  if (syncOptions.browseTrail) {
+    data.browseTrail = result.thecircle_browse_trail || [];
+  }
+
+  // savedTasks covers translation, summary, and knowledge (they're all SavedTask records)
+  if (syncOptions.translation || syncOptions.summary || syncOptions.knowledge) {
+    data.savedTasks = result.thecircle_saved_tasks || [];
+  }
+
+  if (syncOptions.annotation) {
+    const annotationData = result.thecircle_annotations;
+    data.annotations = annotationData?.annotations || [];
+  }
+
+  return data;
 }
 
 // Apply remote sync data to local storage
@@ -157,6 +177,41 @@ async function applyRemoteSyncData(data: SyncData): Promise<void> {
     const localTrail = (await chrome.storage.local.get(['thecircle_browse_trail'])).thecircle_browse_trail || [];
     const mergedTrail = mergeBrowseTrail(localTrail, data.browseTrail);
     updates.thecircle_browse_trail = mergedTrail;
+  }
+
+  // Merge saved tasks (by id, remote wins on conflict)
+  if (data.savedTasks && data.savedTasks.length > 0) {
+    const localTasks = (await chrome.storage.local.get(['thecircle_saved_tasks'])).thecircle_saved_tasks || [];
+    const taskMap = new Map<string, unknown>();
+    for (const task of localTasks) {
+      taskMap.set((task as { id: string }).id, task);
+    }
+    for (const task of data.savedTasks) {
+      taskMap.set((task as { id: string }).id, task);
+    }
+    // Sort by savedAt desc (newest first)
+    const merged = Array.from(taskMap.values()).sort((a, b) =>
+      ((b as { savedAt: number }).savedAt || 0) - ((a as { savedAt: number }).savedAt || 0)
+    );
+    updates.thecircle_saved_tasks = merged;
+  }
+
+  // Merge annotations (by id, remote wins on conflict)
+  if (data.annotations && data.annotations.length > 0) {
+    const localAnnotations = (await chrome.storage.local.get(['thecircle_annotations'])).thecircle_annotations;
+    const localList = localAnnotations?.annotations || [];
+    const annMap = new Map<string, unknown>();
+    for (const ann of localList) {
+      annMap.set((ann as { id: string }).id, ann);
+    }
+    for (const ann of data.annotations) {
+      annMap.set((ann as { id: string }).id, ann);
+    }
+    // Sort by createdAt desc (newest first)
+    const merged = Array.from(annMap.values()).sort((a, b) =>
+      ((b as { createdAt: number }).createdAt || 0) - ((a as { createdAt: number }).createdAt || 0)
+    );
+    updates.thecircle_annotations = { annotations: merged };
   }
 
   await chrome.storage.local.set(updates);
@@ -368,7 +423,7 @@ export function setupAutoSync(): void {
     if (areaName !== 'local') return;
 
     // Check if relevant data changed
-    const watchedKeys = ['thecircle_data', 'thecircle_browse_trail'];
+    const watchedKeys = ['thecircle_data', 'thecircle_browse_trail', 'thecircle_saved_tasks', 'thecircle_annotations'];
     const hasRelevantChange = watchedKeys.some(key => key in changes);
 
     if (hasRelevantChange) {

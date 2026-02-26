@@ -525,8 +525,8 @@ export function getAccountSettingsHTML(authState: AuthState | null, config: Menu
         <div id="backup-history-section" style="display: ${auth.syncEnabled ? 'block' : 'none'}">
           <div class="glass-backup-header">
             <span class="glass-form-label">备份历史</span>
-            <button class="glass-btn glass-btn-secondary" id="refresh-backups-btn" title="刷新" style="padding: 2px 6px; min-width: auto;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button class="glass-backup-refresh-btn" id="refresh-backups-btn" title="刷新">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"></polyline>
                 <polyline points="1 20 1 14 7 14"></polyline>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
@@ -534,7 +534,13 @@ export function getAccountSettingsHTML(authState: AuthState | null, config: Menu
             </button>
           </div>
           <div id="backup-list" class="glass-backup-list">
-            <span class="glass-form-hint">加载中...</span>
+            <div class="glass-backup-empty">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span>加载中...</span>
+            </div>
           </div>
         </div>
       </div>

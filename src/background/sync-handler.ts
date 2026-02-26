@@ -1,11 +1,11 @@
 // Cloud sync handler using Google Drive AppData folder
-import { SyncData, BackupFileInfo, MenuConfig, BrowseSession, SyncOptions, DEFAULT_SYNC_OPTIONS, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
-import { getAuthToken, refreshTokenIfNeeded } from './auth-handler';
+import { SyncData, BackupFileInfo, BrowseSession, SyncOptions, DEFAULT_SYNC_OPTIONS, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
+import { refreshTokenIfNeeded } from './auth-handler';
 import { getStorageData } from '../utils/storage';
 
-const SYNC_FILE_NAME = 'thepanel-sync.json';
+const SYNC_FILE_NAME = 'eniwer-sync.json';
 const SYNC_VERSION = 1;
-const BACKUP_FILE_PREFIX = 'thepanel-backup-';
+const BACKUP_FILE_PREFIX = 'eniwer-backup-';
 const MAX_BACKUPS = 5;
 const BACKUP_THROTTLE_MS = 3600000; // 1 hour
 
@@ -284,7 +284,7 @@ async function deleteFile(token: string, fileId: string): Promise<boolean> {
 
 // Parse timestamp from backup file name
 function parseTimestampFromName(name: string): number {
-  const match = name.match(/thepanel-backup-(\d+)\.json/);
+  const match = name.match(/eniwer-backup-(\d+)\.json/);
   return match ? parseInt(match[1], 10) : 0;
 }
 

@@ -1698,33 +1698,152 @@ export function getStyles(): string {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 4px;
+        margin-top: 8px;
+        margin-bottom: 2px;
+      }
+
+      .glass-backup-refresh-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-backup-refresh-btn:hover {
+        background: var(--glass-bg-hover);
+        color: var(--text-primary);
       }
 
       .glass-backup-list {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        max-height: 150px;
-        overflow-y: auto;
+        gap: 2px;
         margin-top: 4px;
+        padding-left: 2px;
+      }
+
+      .glass-backup-empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 16px 0;
+        color: var(--text-tertiary);
+        font-size: 12px;
       }
 
       .glass-backup-item {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 4px 8px;
-        border-radius: 4px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: transparent;
+        transition: background var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-backup-item:hover {
         background: var(--glass-bg-hover);
-        font-size: 11px;
-        color: var(--text-secondary);
+      }
+
+      .glass-backup-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .glass-backup-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--glass-border-strong);
+        flex-shrink: 0;
+      }
+
+      .glass-backup-item-latest .glass-backup-dot {
+        background: var(--accent-primary);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+      }
+
+      .glass-backup-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 0;
+      }
+
+      .glass-backup-time {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-primary);
+        line-height: 1.3;
+      }
+
+      .glass-backup-label {
+        font-size: 10px;
+        color: var(--text-tertiary);
+        line-height: 1.3;
+      }
+
+      .glass-backup-item-latest .glass-backup-label {
+        color: var(--accent-primary);
       }
 
       .glass-backup-actions {
         display: flex;
-        gap: 4px;
+        gap: 2px;
         align-items: center;
+        opacity: 0;
+        transition: opacity var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-backup-item:hover .glass-backup-actions {
+        opacity: 1;
+      }
+
+      .glass-backup-action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-backup-action-btn:hover {
+        background: var(--glass-bg-elevated);
+        color: var(--text-primary);
+      }
+
+      .glass-backup-action-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .glass-backup-action-btn-danger:hover {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+      }
+
+      .glass-backup-item-loading .glass-backup-actions {
+        opacity: 1;
+      }
+
+      .glass-backup-spinner {
+        animation: glass-spin 0.7s linear infinite;
       }
 
       .glass-btn-secondary {

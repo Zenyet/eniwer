@@ -2627,27 +2627,54 @@ export class CommandPalette {
     const listEl = this.shadowRoot.querySelector('#backup-list');
     if (!listEl) return;
 
-    listEl.innerHTML = '<span class="glass-form-hint">加载中...</span>';
+    listEl.innerHTML = `<div class="glass-backup-empty">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      <span>加载中...</span>
+    </div>`;
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'LIST_BACKUPS' });
       if (!response.success) {
-        listEl.innerHTML = `<span class="glass-form-hint">${response.error || '加载失败'}</span>`;
+        listEl.innerHTML = `<div class="glass-backup-empty"><span>${response.error || '加载失败'}</span></div>`;
         return;
       }
 
       const backups = response.backups || [];
       if (backups.length === 0) {
-        listEl.innerHTML = '<span class="glass-form-hint">暂无备份</span>';
+        listEl.innerHTML = `<div class="glass-backup-empty">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+          </svg>
+          <span>暂无备份</span>
+        </div>`;
         return;
       }
 
-      listEl.innerHTML = backups.map((b: { id: string; name: string; timestamp: number }) => `
-        <div class="glass-backup-item" data-id="${b.id}">
-          <span>${this.formatBackupTime(b.timestamp)}</span>
+      listEl.innerHTML = backups.map((b: { id: string; name: string; timestamp: number }, i: number) => `
+        <div class="glass-backup-item${i === 0 ? ' glass-backup-item-latest' : ''}" data-id="${b.id}">
+          <div class="glass-backup-info">
+            <div class="glass-backup-dot"></div>
+            <div class="glass-backup-meta">
+              <span class="glass-backup-time">${this.formatBackupTime(b.timestamp)}</span>
+              <span class="glass-backup-label">${i === 0 ? '最新备份' : this.formatRelativeTime(b.timestamp)}</span>
+            </div>
+          </div>
           <div class="glass-backup-actions">
-            <button class="glass-btn glass-btn-secondary glass-btn-restore" data-id="${b.id}" style="padding: 2px 8px; font-size: 11px;">恢复</button>
-            <button class="glass-btn glass-btn-secondary glass-btn-delete-backup" data-id="${b.id}" style="padding: 2px 8px; font-size: 11px; color: #ef4444;">删除</button>
+            <button class="glass-backup-action-btn glass-btn-restore" data-id="${b.id}" title="恢复此备份">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+              </svg>
+            </button>
+            <button class="glass-backup-action-btn glass-backup-action-btn-danger glass-btn-delete-backup" data-id="${b.id}" title="删除此备份">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
           </div>
         </div>
       `).join('');
@@ -2669,21 +2696,36 @@ export class CommandPalette {
       });
     } catch (error) {
       console.error('Load backup list error:', error);
-      listEl.innerHTML = '<span class="glass-form-hint">加载失败</span>';
+      listEl.innerHTML = `<div class="glass-backup-empty"><span>加载失败</span></div>`;
     }
   }
 
+  private formatRelativeTime(timestamp: number): string {
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return '刚刚';
+    if (minutes < 60) return `${minutes} 分钟前`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    return `${Math.floor(days / 30)} 个月前`;
+  }
+
+  private static SPINNER_SVG = '<svg class="glass-backup-spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10" /></svg>';
+
   // Handle restore backup
   private async handleRestoreBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
-    const originalText = btn.textContent;
-    btn.textContent = '恢复中...';
+    const originalHTML = btn.innerHTML;
+    const item = btn.closest('.glass-backup-item');
+    btn.innerHTML = CommandPalette.SPINNER_SVG;
     btn.disabled = true;
+    item?.classList.add('glass-backup-item-loading');
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'RESTORE_BACKUP', payload: { fileId } });
       if (response.success) {
         this.showToast('已恢复备份');
-        // Reload config to reflect changes
         const { getStorageData } = await import('../../utils/storage');
         const data = await getStorageData();
         this.config = data.config;
@@ -2696,16 +2738,19 @@ export class CommandPalette {
       console.error('Restore backup error:', error);
       this.showToast('恢复失败');
     } finally {
-      btn.textContent = originalText;
+      btn.innerHTML = originalHTML;
       btn.disabled = false;
+      item?.classList.remove('glass-backup-item-loading');
     }
   }
 
   // Handle delete backup
   private async handleDeleteBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
-    const originalText = btn.textContent;
-    btn.textContent = '删除中...';
+    const originalHTML = btn.innerHTML;
+    const item = btn.closest('.glass-backup-item');
+    btn.innerHTML = CommandPalette.SPINNER_SVG;
     btn.disabled = true;
+    item?.classList.add('glass-backup-item-loading');
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'DELETE_BACKUP', payload: { fileId } });
@@ -2719,8 +2764,9 @@ export class CommandPalette {
       console.error('Delete backup error:', error);
       this.showToast('删除失败');
     } finally {
-      btn.textContent = originalText;
+      btn.innerHTML = originalHTML;
       btn.disabled = false;
+      item?.classList.remove('glass-backup-item-loading');
     }
   }
 

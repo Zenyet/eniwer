@@ -33,7 +33,7 @@ src/
 - 网页标注与批注
 - AI 摘要与对话
 - Google Drive 云同步与备份
-- 快捷键呼出面板（`Alt+Space`）
+- 快捷键呼出面板（`双击 shift`）
 
 ## License
 

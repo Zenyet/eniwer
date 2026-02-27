@@ -1,5 +1,5 @@
 // Google Drive export handler - export content to Google Docs
-import { refreshTokenIfNeeded } from './auth-handler';
+import { refreshTokenInteractive } from './auth-handler';
 
 interface ExportResult {
   success: boolean;
@@ -72,7 +72,7 @@ export async function exportToGoogleDocs(
   content: string,
   sourceUrl?: string
 ): Promise<ExportResult> {
-  const token = await refreshTokenIfNeeded();
+  const token = await refreshTokenInteractive();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
   }

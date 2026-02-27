@@ -1,105 +1,223 @@
 // Google OAuth authentication handler
-// Uses launchWebAuthFlow - does NOT require logging into Chrome
+// Supports chrome.identity.getAuthToken (Chrome) with launchWebAuthFlow fallback (Edge, Brave, Arc, etc.)
 import { GoogleUser, AuthState } from '../types';
 
 const AUTH_STATE_KEY = 'thecircle_auth_state';
-const AUTH_TOKEN_KEY = 'thecircle_auth_token';
 const SYNC_ENABLED_KEY = 'thecircle_sync_enabled';
+const AUTH_METHOD_KEY = 'thecircle_auth_method';
+const WEB_TOKEN_KEY = 'thecircle_web_token';
 
-// OAuth configuration
-const OAUTH_SCOPES = [
+// Web OAuth config — requires a "Web Application" OAuth client in Google Cloud Console
+// Redirect URI must be set to: chrome.identity.getRedirectURL()
+const WEB_OAUTH_CLIENT_ID = '1071438021242-n8aqlc8of5bgdn8rim048eep6n1jemdg.apps.googleusercontent.com';
+const REDIRECT_URL = chrome.identity.getRedirectURL();
+const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/drive.appdata',
   'https://www.googleapis.com/auth/drive.file',
-];
+].join(' ');
 
-// Get client ID from manifest
-function getClientId(): string {
-  const manifest = chrome.runtime.getManifest();
-  return (manifest as { oauth2?: { client_id?: string } }).oauth2?.client_id || '';
+type AuthMethod = 'chrome' | 'web';
+
+interface WebTokenData {
+  accessToken: string;
+  expiresAt: number;
 }
 
-// Get redirect URL for OAuth
-function getRedirectUrl(): string {
-  return chrome.identity.getRedirectURL();
+// Lock to prevent concurrent interactive login popups
+let isInteractiveAuthInProgress = false;
+
+// --- Storage helpers ---
+
+async function getStoredAuthMethod(): Promise<AuthMethod | null> {
+  const result = await chrome.storage.local.get([AUTH_METHOD_KEY]);
+  return result[AUTH_METHOD_KEY] || null;
 }
 
-// Build OAuth authorization URL
-function buildAuthUrl(silent: boolean = false): string {
-  const clientId = getClientId();
-  const redirectUrl = getRedirectUrl();
-
-  const params: Record<string, string> = {
-    client_id: clientId,
-    redirect_uri: redirectUrl,
-    response_type: 'token',
-    scope: OAUTH_SCOPES.join(' '),
-  };
-
-  if (silent) {
-    // For silent auth, don't show any UI
-    params.prompt = 'none';
-  } else {
-    // For interactive auth, show account picker
-    params.prompt = 'consent';
-  }
-
-  return `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams(params).toString()}`;
+async function setStoredAuthMethod(method: AuthMethod): Promise<void> {
+  await chrome.storage.local.set({ [AUTH_METHOD_KEY]: method });
 }
 
-// Parse token from redirect URL
-function parseTokenFromUrl(url: string): { token: string; expiresIn: number } | null {
+async function getStoredWebToken(): Promise<WebTokenData | null> {
+  const result = await chrome.storage.local.get([WEB_TOKEN_KEY]);
+  return result[WEB_TOKEN_KEY] || null;
+}
+
+async function setStoredWebToken(data: WebTokenData): Promise<void> {
+  await chrome.storage.local.set({ [WEB_TOKEN_KEY]: data });
+}
+
+async function clearStoredWebToken(): Promise<void> {
+  await chrome.storage.local.remove([WEB_TOKEN_KEY]);
+}
+
+// --- Chrome identity API ---
+
+// Cache the probe result so we only test once per service worker lifetime
+let chromeIdentityProbeResult: boolean | null = null;
+
+// Probe whether chrome.identity.getAuthToken actually works.
+// Edge/Brave/Arc expose the function but it hangs on call. A silent (non-interactive)
+// call should resolve almost instantly on real Chrome, so we use a short timeout.
+async function probeChromeIdentity(): Promise<boolean> {
+  if (typeof chrome.identity?.getAuthToken !== 'function') return false;
+
   try {
-    // URL format: https://xxx.chromiumapp.org/#access_token=xxx&token_type=Bearer&expires_in=3600
-    const hash = new URL(url).hash.substring(1);
-    const params = new URLSearchParams(hash);
+    const result = await Promise.race([
+      chrome.identity.getAuthToken({ interactive: false }).then(() => true, () => true),
+      new Promise<false>(resolve => setTimeout(() => resolve(false), 1000)),
+    ]);
+    return result;
+  } catch {
+    return false;
+  }
+}
 
-    const token = params.get('access_token');
-    const expiresIn = parseInt(params.get('expires_in') || '3600', 10);
+async function chromeGetAuthToken(interactive: boolean): Promise<string | null> {
+  if (chromeIdentityProbeResult === null) {
+    chromeIdentityProbeResult = await probeChromeIdentity();
+    console.log(`[Auth] Chrome identity probe: ${chromeIdentityProbeResult ? 'supported' : 'not supported'}`);
+  }
+  if (!chromeIdentityProbeResult) return null;
 
-    if (token) {
-      return { token, expiresIn };
-    }
-    return null;
+  try {
+    const result = await chrome.identity.getAuthToken({ interactive });
+    return result?.token || null;
   } catch (error) {
-    console.error('Error parsing token from URL:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.log(`[Auth] getAuthToken(interactive=${interactive}) failed:`, msg);
     return null;
   }
 }
 
-// Get stored auth token
-export async function getAuthToken(interactive: boolean = false): Promise<string | null> {
-  // First, check stored token
-  const result = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-  const tokenData = result[AUTH_TOKEN_KEY];
+// --- Web OAuth flow ---
 
-  if (tokenData?.token && tokenData?.expiresAt > Date.now()) {
-    return tokenData.token;
+async function webAuthLogin(): Promise<string | null> {
+  try {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', WEB_OAUTH_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', REDIRECT_URL);
+    authUrl.searchParams.set('response_type', 'token');
+    authUrl.searchParams.set('scope', SCOPES);
+
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl.toString(),
+      interactive: true,
+    });
+
+    if (!responseUrl) return null;
+    return extractAndStoreToken(responseUrl);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[Auth] launchWebAuthFlow failed:', msg);
+    return null;
   }
+}
 
-  // Token expired or not found
-  if (!interactive) {
+// Silent token refresh — re-runs the flow with prompt=none
+async function refreshWebTokenSilent(): Promise<string | null> {
+  try {
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', WEB_OAUTH_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', REDIRECT_URL);
+    authUrl.searchParams.set('response_type', 'token');
+    authUrl.searchParams.set('scope', SCOPES);
+    authUrl.searchParams.set('prompt', 'none');
+
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl.toString(),
+      interactive: false,
+    });
+
+    if (!responseUrl) return null;
+    return extractAndStoreToken(responseUrl);
+  } catch {
+    return null;
+  }
+}
+
+function extractAndStoreToken(responseUrl: string): string | null {
+  // Implicit flow returns token in URL fragment: #access_token=...&expires_in=...
+  const hash = new URL(responseUrl).hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  const expiresIn = params.get('expires_in');
+
+  if (!accessToken) {
+    console.error('[Auth] No access_token in redirect URL');
     return null;
   }
 
-  // Need to re-authenticate
-  const loginResult = await googleLogin();
-  if (loginResult.success) {
-    const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-    return newResult[AUTH_TOKEN_KEY]?.token || null;
+  const tokenData: WebTokenData = {
+    accessToken,
+    expiresAt: Date.now() + (Number(expiresIn) || 3600) * 1000,
+  };
+  // Fire and forget — don't block on storage
+  setStoredWebToken(tokenData);
+  return accessToken;
+}
+
+async function getWebToken(interactive: boolean): Promise<string | null> {
+  const stored = await getStoredWebToken();
+
+  if (stored?.accessToken) {
+    // Token still fresh — use it
+    if (stored.expiresAt > Date.now() + 60_000) {
+      return stored.accessToken;
+    }
+    // Expired — try silent refresh
+    const refreshed = await refreshWebTokenSilent();
+    if (refreshed) return refreshed;
+  }
+
+  // No valid token — need interactive login
+  if (!interactive) return null;
+  return webAuthLogin();
+}
+
+// --- Unified token dispatcher ---
+
+async function getToken(interactive: boolean): Promise<string | null> {
+  const storedMethod = await getStoredAuthMethod();
+
+  if (storedMethod === 'chrome') {
+    return chromeGetAuthToken(interactive);
+  }
+
+  if (storedMethod === 'web') {
+    return getWebToken(interactive);
+  }
+
+  // First-time login: try Chrome identity first, fallback to web
+  if (!interactive) {
+    const chromeToken = await chromeGetAuthToken(false);
+    return chromeToken ?? getWebToken(false);
+  }
+
+  console.log('[Auth] First login — trying Chrome identity API...');
+  const chromeToken = await chromeGetAuthToken(true);
+  if (chromeToken) {
+    await setStoredAuthMethod('chrome');
+    return chromeToken;
+  }
+
+  console.log('[Auth] Using web OAuth flow...');
+  const webToken = await webAuthLogin();
+  if (webToken) {
+    await setStoredAuthMethod('web');
+    return webToken;
   }
 
   return null;
 }
 
-// Fetch user info from Google
+// --- Fetch user info ---
+
 async function fetchUserInfo(token: string): Promise<GoogleUser | null> {
   try {
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!response.ok) {
@@ -120,161 +238,62 @@ async function fetchUserInfo(token: string): Promise<GoogleUser | null> {
   }
 }
 
-// Silent re-authentication - try to get a new token without user interaction
-async function silentReauth(): Promise<{ success: boolean; user?: GoogleUser }> {
-  try {
-    const authUrl = buildAuthUrl(true); // silent mode
+// --- Exported functions ---
 
-    console.log('[Auth] Attempting silent re-authentication...');
-
-    const responseUrl = await new Promise<string>((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(
-        {
-          url: authUrl,
-          interactive: false, // No UI, silent only
-        },
-        (responseUrl) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (responseUrl) {
-            resolve(responseUrl);
-          } else {
-            reject(new Error('No response URL'));
-          }
-        }
-      );
-    });
-
-    // Parse token from response URL
-    const tokenResult = parseTokenFromUrl(responseUrl);
-    if (!tokenResult) {
-      console.log('[Auth] Silent reauth: failed to parse token');
-      return { success: false };
-    }
-
-    // Get existing user info from storage (skip fetching to be faster)
-    const result = await chrome.storage.local.get([AUTH_STATE_KEY]);
-    let user = result[AUTH_STATE_KEY]?.user;
-
-    // If no cached user, fetch it
-    if (!user) {
-      user = await fetchUserInfo(tokenResult.token);
-      if (!user) {
-        console.log('[Auth] Silent reauth: failed to fetch user info');
-        return { success: false };
-      }
-    }
-
-    // Save new token
-    const expiresAt = Date.now() + tokenResult.expiresIn * 1000;
-    console.log('[Auth] Silent reauth successful, new token expires:', new Date(expiresAt).toISOString());
-
-    await chrome.storage.local.set({
-      [AUTH_STATE_KEY]: {
-        isLoggedIn: true,
-        user,
-      },
-      [AUTH_TOKEN_KEY]: {
-        token: tokenResult.token,
-        expiresAt,
-      },
-    });
-
-    return { success: true, user };
-  } catch (error) {
-    console.log('[Auth] Silent reauth failed:', error instanceof Error ? error.message : error);
-    return { success: false };
-  }
-}
-
-// Login with Google using launchWebAuthFlow (no Chrome login required)
 export async function googleLogin(): Promise<{ success: boolean; user?: GoogleUser; error?: string }> {
   try {
-    const authUrl = buildAuthUrl();
-
-    // Launch OAuth flow in a popup window
-    const responseUrl = await new Promise<string>((resolve, reject) => {
-      chrome.identity.launchWebAuthFlow(
-        {
-          url: authUrl,
-          interactive: true,
-        },
-        (responseUrl) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (responseUrl) {
-            resolve(responseUrl);
-          } else {
-            reject(new Error('No response URL'));
-          }
-        }
-      );
-    });
-
-    // Parse token from response URL
-    const tokenResult = parseTokenFromUrl(responseUrl);
-    if (!tokenResult) {
+    const token = await getToken(true);
+    if (!token) {
       return { success: false, error: '无法获取授权令牌' };
     }
 
-    // Fetch user info
-    const user = await fetchUserInfo(tokenResult.token);
+    const user = await fetchUserInfo(token);
     if (!user) {
       return { success: false, error: '无法获取用户信息' };
     }
 
-    // Save auth state and token
-    const expiresAt = Date.now() + tokenResult.expiresIn * 1000;
-    console.log('[Auth] Saving token with expiration:', {
-      expiresIn: tokenResult.expiresIn,
-      expiresAt,
-      expiresAtDate: new Date(expiresAt).toISOString(),
-    });
-
     await chrome.storage.local.set({
-      [AUTH_STATE_KEY]: {
-        isLoggedIn: true,
-        user,
-      },
-      [AUTH_TOKEN_KEY]: {
-        token: tokenResult.token,
-        expiresAt,
-      },
+      [AUTH_STATE_KEY]: { isLoggedIn: true, user },
     });
 
+    console.log('[Auth] Login successful:', user.email);
     return { success: true, user };
   } catch (error) {
     console.error('Google login error:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // User cancelled
     if (errorMessage.includes('canceled') || errorMessage.includes('cancelled')) {
       return { success: false, error: '登录已取消' };
     }
-
     return { success: false, error: `登录失败: ${errorMessage}` };
   }
 }
 
-// Logout from Google
 export async function googleLogout(): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get stored token to revoke
-    const result = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-    const tokenData = result[AUTH_TOKEN_KEY];
+    const method = await getStoredAuthMethod();
 
-    if (tokenData?.token) {
-      // Revoke token from Google's servers
-      try {
-        await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${tokenData.token}`);
-      } catch {
-        // Ignore revoke errors
+    if (method === 'web') {
+      const stored = await getStoredWebToken();
+      if (stored?.accessToken) {
+        try {
+          await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${stored.accessToken}`);
+        } catch { /* ignore */ }
+      }
+      await clearStoredWebToken();
+    } else {
+      const token = await chromeGetAuthToken(false);
+      if (token) {
+        if (chromeIdentityProbeResult) {
+          await chrome.identity.removeCachedAuthToken({ token });
+        }
+        try {
+          await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
+        } catch { /* ignore */ }
       }
     }
 
-    // Clear auth state and token
-    await chrome.storage.local.remove([AUTH_STATE_KEY, AUTH_TOKEN_KEY]);
-
+    await chrome.storage.local.remove([AUTH_STATE_KEY, AUTH_METHOD_KEY]);
     return { success: true };
   } catch (error) {
     console.error('Google logout error:', error);
@@ -282,45 +301,27 @@ export async function googleLogout(): Promise<{ success: boolean; error?: string
   }
 }
 
-// Get current auth status
 export async function getAuthStatus(): Promise<AuthState> {
   try {
-    const result = await chrome.storage.local.get([AUTH_STATE_KEY, AUTH_TOKEN_KEY, SYNC_ENABLED_KEY]);
+    const result = await chrome.storage.local.get([AUTH_STATE_KEY, SYNC_ENABLED_KEY]);
     const authState = result[AUTH_STATE_KEY];
-    const tokenData = result[AUTH_TOKEN_KEY];
     const syncEnabled = result[SYNC_ENABLED_KEY] ?? false;
 
-    // No auth state at all — never logged in
     if (!authState?.isLoggedIn || !authState?.user) {
       return { isLoggedIn: false, user: null, syncEnabled: false };
     }
 
-    // Have auth state with valid token
-    if (tokenData?.token && tokenData.expiresAt > Date.now()) {
+    const token = await getToken(false);
+    if (token) {
       return { isLoggedIn: true, user: authState.user, syncEnabled };
     }
 
-    // Token expired or missing — try silent re-auth
-    console.log('[Auth] Token expired, attempting silent re-auth...');
-    const reauthResult = await silentReauth();
-
-    if (reauthResult.success && reauthResult.user) {
-      console.log('[Auth] Silent re-auth successful');
-      const newResult = await chrome.storage.local.get([SYNC_ENABLED_KEY]);
-      return {
-        isLoggedIn: true,
-        user: reauthResult.user,
-        syncEnabled: newResult[SYNC_ENABLED_KEY] ?? false,
-      };
-    }
-
-    // Silent re-auth failed — keep user info visible, don't clear auth state
-    // User will be prompted to re-login when they perform an action that needs a token
-    console.log('[Auth] Silent re-auth failed, keeping user info (token invalid)');
+    console.log('[Auth] Silent token fetch failed, token expired');
     return {
       isLoggedIn: true,
       user: authState.user,
       syncEnabled,
+      tokenExpired: true,
     };
   } catch (error) {
     console.error('Error getting auth status:', error);
@@ -328,55 +329,45 @@ export async function getAuthStatus(): Promise<AuthState> {
   }
 }
 
-// Set sync enabled state
 export async function setSyncEnabled(enabled: boolean): Promise<void> {
   await chrome.storage.local.set({ [SYNC_ENABLED_KEY]: enabled });
 }
 
-// Refresh token if needed (called before API calls)
-export async function refreshTokenIfNeeded(): Promise<string | null> {
-  const result = await chrome.storage.local.get([AUTH_TOKEN_KEY, AUTH_STATE_KEY]);
-  const tokenData = result[AUTH_TOKEN_KEY];
-  const authState = result[AUTH_STATE_KEY];
+export async function getAuthToken(interactive: boolean = false): Promise<string | null> {
+  return getToken(interactive);
+}
 
-  // Not logged in at all
-  if (!authState?.isLoggedIn) {
+export async function refreshTokenIfNeeded(): Promise<string | null> {
+  const result = await chrome.storage.local.get([AUTH_STATE_KEY]);
+  if (!result[AUTH_STATE_KEY]?.isLoggedIn) {
+    return null;
+  }
+  return getToken(false);
+}
+
+export async function refreshTokenInteractive(): Promise<string | null> {
+  const token = await refreshTokenIfNeeded();
+  if (token) return token;
+
+  const result = await chrome.storage.local.get([AUTH_STATE_KEY]);
+  if (!result[AUTH_STATE_KEY]?.isLoggedIn) {
     return null;
   }
 
-  // Token still valid and not expiring soon
-  if (tokenData?.token && tokenData.expiresAt > Date.now() + 5 * 60 * 1000) {
-    // Verify token is still valid by making a lightweight API call
-    try {
-      const response = await fetch('https://www.googleapis.com/oauth2/v1/tokeninfo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `access_token=${tokenData.token}`,
-      });
-      if (response.ok) {
-        return tokenData.token;
-      }
-    } catch {
-      return tokenData.token; // Return existing token if verification fails
+  if (isInteractiveAuthInProgress) {
+    console.log('[Auth] Interactive auth already in progress, skipping');
+    return null;
+  }
+
+  isInteractiveAuthInProgress = true;
+  try {
+    console.log('[Auth] Attempting interactive reauth...');
+    const loginResult = await googleLogin();
+    if (loginResult.success) {
+      return getToken(false);
     }
+    return null;
+  } finally {
+    isInteractiveAuthInProgress = false;
   }
-
-  // Token expired, expiring soon, or invalid — try silent re-auth
-  console.log('[Auth] Token needs refresh, attempting silent reauth...');
-  const reauthResult = await silentReauth();
-  if (reauthResult.success) {
-    const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-    return newResult[AUTH_TOKEN_KEY]?.token || null;
-  }
-
-  // Silent re-auth failed — try interactive re-auth (will show Google popup)
-  console.log('[Auth] Silent reauth failed, attempting interactive reauth...');
-  const loginResult = await googleLogin();
-  if (loginResult.success) {
-    const newResult = await chrome.storage.local.get([AUTH_TOKEN_KEY]);
-    return newResult[AUTH_TOKEN_KEY]?.token || null;
-  }
-
-  console.log('[Auth] All reauth attempts failed');
-  return null;
 }

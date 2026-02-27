@@ -271,6 +271,7 @@ export interface AuthState {
   isLoggedIn: boolean;
   user: GoogleUser | null;
   syncEnabled: boolean;
+  tokenExpired?: boolean;
 }
 
 // Translation fallback config

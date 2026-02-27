@@ -451,6 +451,12 @@ export function getAccountSettingsHTML(authState: AuthState | null, config: Menu
   const auth = authState;
   const syncOpts = config.syncOptions || DEFAULT_SYNC_OPTIONS;
   if (auth?.isLoggedIn && auth.user) {
+    const tokenExpiredNotice = auth.tokenExpired
+      ? `<div class="glass-token-expired-notice">
+          <span>授权已过期</span>
+          <button class="glass-btn-relogin" id="google-relogin-btn">重新登录</button>
+        </div>`
+      : '';
     return `
       <div class="glass-account-info">
         <div class="glass-account-avatar">
@@ -471,6 +477,7 @@ export function getAccountSettingsHTML(authState: AuthState | null, config: Menu
           </svg>
         </button>
       </div>
+      ${tokenExpiredNotice}
       <div class="glass-sync-settings">
         <div class="glass-form-group glass-form-toggle">
           <label class="glass-form-label">云同步</label>

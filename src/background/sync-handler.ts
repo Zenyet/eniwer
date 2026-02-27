@@ -1,6 +1,6 @@
 // Cloud sync handler using Google Drive AppData folder
 import { SyncData, BackupFileInfo, BrowseSession, SyncOptions, DEFAULT_SYNC_OPTIONS, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
-import { refreshTokenIfNeeded } from './auth-handler';
+import { refreshTokenIfNeeded, refreshTokenInteractive } from './auth-handler';
 import { getStorageData } from '../utils/storage';
 
 const SYNC_FILE_NAME = 'eniwer-sync.json';
@@ -335,7 +335,10 @@ async function createBackup(token: string, isAutoSync: boolean): Promise<void> {
 
 // Sync local data to cloud
 export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{ success: boolean; error?: string }> {
-  const token = await refreshTokenIfNeeded();
+  // Auto-sync: silent only; Manual sync: allow interactive login
+  const token = options?.isAutoSync
+    ? await refreshTokenIfNeeded()
+    : await refreshTokenInteractive();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
   }
@@ -367,7 +370,7 @@ export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{
 
 // Sync from cloud to local
 export async function syncFromCloud(): Promise<{ success: boolean; data?: SyncData; error?: string }> {
-  const token = await refreshTokenIfNeeded();
+  const token = await refreshTokenInteractive();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
   }
@@ -456,7 +459,7 @@ export async function listBackups(): Promise<{ success: boolean; backups?: Backu
 
 // Restore a backup by file ID
 export async function restoreBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
-  const token = await refreshTokenIfNeeded();
+  const token = await refreshTokenInteractive();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
   }
@@ -478,7 +481,7 @@ export async function restoreBackup(fileId: string): Promise<{ success: boolean;
 
 // Delete a backup by file ID
 export async function deleteBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
-  const token = await refreshTokenIfNeeded();
+  const token = await refreshTokenInteractive();
   if (!token) {
     return { success: false, error: '未登录或授权已过期' };
   }

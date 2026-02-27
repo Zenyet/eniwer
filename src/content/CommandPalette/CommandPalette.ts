@@ -711,12 +711,6 @@ export class CommandPalette {
     // Store current view
     panel.setAttribute('data-view', this.currentView);
 
-    // Only animate actual view transitions (different view types)
-    if (shouldAnimate) {
-      panel.classList.add('glass-view-transition');
-      setTimeout(() => panel.classList.remove('glass-view-transition'), 200);
-    }
-
     // Position the panel (unless keepPosition is true)
     if (!keepPosition) {
       if (this.currentView === 'ai-result') {
@@ -739,6 +733,22 @@ export class CommandPalette {
       // For other views (browseTrail, contextChat, settings, etc.), keep current position
     }
 
+    // Fade-out → replace content → fade-in to eliminate flicker
+    if (shouldAnimate) {
+      panel.style.opacity = '0';
+      // Use double-rAF to ensure opacity:0 is painted before replacing DOM
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.applyViewContent(panel);
+          panel.style.opacity = '1';
+        });
+      });
+    } else {
+      this.applyViewContent(panel);
+    }
+  }
+
+  private applyViewContent(panel: HTMLElement): void {
     switch (this.currentView) {
       case 'commands':
         panel.innerHTML = this.getCommandsViewHTML();
@@ -2002,6 +2012,10 @@ export class CommandPalette {
     // Google login button
     const googleLoginBtn = this.shadowRoot.querySelector('#google-login-btn');
     googleLoginBtn?.addEventListener('click', () => this.handleGoogleLogin());
+
+    // Re-login button (token expired)
+    const reloginBtn = this.shadowRoot.querySelector('#google-relogin-btn');
+    reloginBtn?.addEventListener('click', () => this.handleGoogleLogin());
 
     // Logout button
     const logoutBtn = this.shadowRoot.querySelector('.glass-btn-logout');

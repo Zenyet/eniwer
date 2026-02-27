@@ -113,6 +113,7 @@ export function getStyles(): string {
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
         font-feature-settings: "kern" 1, "liga" 1;
         -webkit-font-smoothing: antialiased;
+        transition: opacity 120ms ease-out;
       }
 
       .glass-panel.glass-panel-enter {
@@ -1505,7 +1506,35 @@ export function getStyles(): string {
         align-items: center;
         gap: 12px;
         padding: 8px 0;
+        margin-bottom: 8px;
+      }
+
+      .glass-token-expired-notice {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
         margin-bottom: 12px;
+        border-radius: 6px;
+        background: rgba(234, 67, 53, 0.08);
+        border: 1px solid rgba(234, 67, 53, 0.2);
+        font-size: 12px;
+        color: #ea4335;
+      }
+
+      .glass-btn-relogin {
+        background: none;
+        border: none;
+        color: #4285F4;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+      }
+
+      .glass-btn-relogin:hover {
+        background: rgba(66, 133, 244, 0.1);
       }
 
       .glass-account-avatar {
@@ -2333,19 +2362,6 @@ export function getStyles(): string {
       }
 
       /* View Transition */
-      .glass-view-transition {
-        animation: viewTransition var(--duration-fast) var(--ease-out);
-      }
-
-      @keyframes viewTransition {
-        from {
-          opacity: 0.8;
-        }
-        to {
-          opacity: 1;
-        }
-      }
-
       /* ========================================
          Browse Trail View
          ======================================== */

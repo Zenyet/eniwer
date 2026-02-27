@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Eniwer",
-  "version": "1.1.3",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1CKKhiQy513tYdgYXisqMOJqliJTzD4fMITj0wjEIYREv6VjVnxKLAzhcmDjP8WsC5/agk7IfqKeqoMJLzTbgJybJ3tClhNjXtKIP2CIGqTfudz383fZDGpAgKwOdgUDNnRam+PyVETjqzc8hacYGh5ENjJ2zp/oywthc9gJHx4BoYK1cuoDTBTtmUmmA6KnlBnd3evs/5VdZtaSl8rnCPj5naveH20tb+9GvoGvw1JW6Nq63HtopokkTamH/7+qtz2Z2tDftQ1Vc4xwbbwokncInGyYUka8h49WRiHfvHY1+tke4N/a1Np2LrBhvAN7kKEF2qWch0vLuoQb/DvwyQIDAQAB",
+  "version": "1.1.3.2",
   "description": "An AI-powered browsing toolkit — translate, annotate, summarize, chat with pages and more.",
   "icons": {
     "16": "assets/icon-16.png",
@@ -17,7 +18,7 @@
     "identity"
   ],
   "oauth2": {
-    "client_id": "1071438021242-n8aqlc8of5bgdn8rim048eep6n1jemdg.apps.googleusercontent.com",
+    "client_id": "1071438021242-kmm98hmqgpdkevl93ma7i3dhffpnjrqn.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",

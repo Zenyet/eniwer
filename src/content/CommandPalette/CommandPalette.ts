@@ -1145,10 +1145,22 @@ export class CommandPalette {
     }
   }
 
-  private clearActiveCommand(): void {
+  // Ensure menuItems is loaded (needed when panel was opened via showAIResult without show())
+  private async ensureMenuItems(): Promise<void> {
+    if (this.menuItems.length === 0) {
+      try {
+        const data = await getStorageData();
+        this.menuItems = (data.globalMenuItems || []).filter(item => item.enabled !== false);
+      } catch {
+        this.menuItems = [];
+      }
+    }
+  }
+
+  private async clearActiveCommand(): Promise<void> {
     // If there's an active AI action still loading, minimize it to background
     if (this.aiResultData && this.aiResultData.isLoading && this.activeCommand) {
-      this.minimizeToBackground();
+      await this.minimizeToBackground();
       return;
     }
 
@@ -1160,6 +1172,9 @@ export class CommandPalette {
       this.searchQuery = '';
       this.currentView = 'commands';
       this.viewStack = [];
+      await this.ensureMenuItems();
+      this.filteredItems = this.sortByRecent(this.menuItems);
+      this.selectedIndex = 0;
       this.renderCurrentView(true, true);
       return;
     }
@@ -1172,6 +1187,9 @@ export class CommandPalette {
       this.searchQuery = '';
       this.currentView = 'commands';
       this.viewStack = [];
+      await this.ensureMenuItems();
+      this.filteredItems = this.sortByRecent(this.menuItems);
+      this.selectedIndex = 0;
       this.renderCurrentView(true, true);
       return;
     }
@@ -1186,19 +1204,25 @@ export class CommandPalette {
     this.searchQuery = '';
     this.currentView = 'commands';
     this.viewStack = [];
+    await this.ensureMenuItems();
     this.filteredItems = this.sortByRecent(this.menuItems);
     this.selectedIndex = 0;
     this.renderCurrentView(true, true);
   }
 
   // Minimize current task to background without aborting (streaming continues)
-  private minimizeToBackground(): void {
+  private async minimizeToBackground(): Promise<void> {
     this.saveCurrentAsMinimized();
 
     // Clear active state but keep currentStreamKey for updates
     this.activeCommand = null;
     this.activeCommandInput = '';
     this.searchQuery = '';
+    this.currentView = 'commands';
+    this.viewStack = [];
+    await this.ensureMenuItems();
+    this.filteredItems = this.sortByRecent(this.menuItems);
+    this.selectedIndex = 0;
     this.renderCurrentView(true, true);
   }
 
@@ -3441,6 +3465,12 @@ export class CommandPalette {
           this.updateSelection();
         });
       });
+
+      // Clear selection when mouse leaves the command list
+      container.addEventListener('mouseleave', () => {
+        this.selectedIndex = -1;
+        this.updateSelection();
+      });
     }
 
     // Render minimized tasks section
@@ -4299,7 +4329,7 @@ export class CommandPalette {
 
     // Command tag close
     const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', (e) => {
+    tagClose?.addEventListener('click', async (e) => {
       e.stopPropagation();
       // If streaming, minimize to background instead of discarding
       if (this.isChatStreaming && this.chatSession) {
@@ -4309,6 +4339,7 @@ export class CommandPalette {
       this.chatSession = null;
       this.currentView = 'commands';
       this.viewStack = [];
+      await this.ensureMenuItems();
       this.filteredItems = this.sortByRecent(this.menuItems);
       this.selectedIndex = 0;
       this.renderCurrentView(true, true);

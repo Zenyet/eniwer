@@ -9,8 +9,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (logoHeader) logoHeader.innerHTML = icons.logo;
 
   // Load config and stats
-  const result = await chrome.storage.local.get(['thecircle_config', 'thecircle_stats']);
-  const config = result.thecircle_config || DEFAULT_CONFIG;
+  const result = await chrome.storage.local.get('thecircle_data');
+  const data = result.thecircle_data || {};
+  const config = { ...DEFAULT_CONFIG, ...data.config };
 
   // Shortcut recording state
   let isRecording = false;
@@ -123,10 +124,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function saveShortcut(shortcut: string) {
-    const currentConfig = (await chrome.storage.local.get('thecircle_config')).thecircle_config || DEFAULT_CONFIG;
-    await chrome.storage.local.set({
-      thecircle_config: { ...currentConfig, shortcut }
-    });
+    const stored = await chrome.storage.local.get('thecircle_data');
+    const data = stored.thecircle_data || {};
+    const currentConfig = { ...DEFAULT_CONFIG, ...data.config };
+    data.config = { ...currentConfig, shortcut };
+    await chrome.storage.local.set({ thecircle_data: data });
     if (shortcutHintEl) {
       shortcutHintEl.textContent = '快捷键已保存';
       setTimeout(() => {

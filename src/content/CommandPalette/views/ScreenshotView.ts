@@ -38,6 +38,11 @@ export function getScreenshotViewHTML(
         autocomplete="off"
         spellcheck="false"
       />
+      <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="终止" style="display: ${screenshotData?.isLoading ? 'flex' : 'none'}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+        </svg>
+      </button>
       <kbd class="glass-kbd">ESC</kbd>
     </div>
     <div class="glass-divider"></div>
@@ -85,18 +90,22 @@ export function getScreenshotViewHTML(
 
 export function getScreenshotContentHTML(screenshotData: ScreenshotData | null): string {
   if (!screenshotData) return '';
+  let html = '';
 
-  if (screenshotData.isLoading) {
-    return `
-      <div class="glass-loading">
-        <div class="glass-loading-spinner"></div>
-        <span>处理中...</span>
-      </div>
-    `;
+  // Render history items
+  if (screenshotData.history?.length) {
+    for (const item of screenshotData.history) {
+      html += `
+        <div class="glass-screenshot-qa">
+          <div class="glass-screenshot-question">${escapeHtml(item.question)}</div>
+          <div class="glass-screenshot-answer">${escapeHtml(item.answer)}</div>
+        </div>
+      `;
+    }
   }
 
   if (screenshotData.generatedImageUrl) {
-    return `
+    html += `
       <div class="glass-screenshot-result">
         <div class="glass-screenshot-generated-label">生成的图片</div>
         <img class="glass-screenshot-generated-img" src="${screenshotData.generatedImageUrl}" alt="Generated" />
@@ -106,21 +115,37 @@ export function getScreenshotContentHTML(screenshotData: ScreenshotData | null):
         </div>
       </div>
     `;
+    return html;
   }
 
   if (screenshotData.result) {
-    return `
-      <div class="glass-screenshot-result">
-        <div class="glass-screenshot-result-label">AI 分析结果</div>
-        <div class="glass-screenshot-result-text">${escapeHtml(screenshotData.result)}</div>
-        <div class="glass-screenshot-result-actions">
-          <button class="glass-btn glass-btn-copy-result">复制结果</button>
-        </div>
+    html += `
+      <div class="glass-screenshot-qa">
+        <div class="glass-screenshot-question">${escapeHtml(screenshotData.currentQuestion || '描述图片')}</div>
+        <div class="glass-screenshot-answer">${escapeHtml(screenshotData.result)}</div>
+        ${!screenshotData.isLoading ? `<div class="glass-screenshot-result-actions">
+          <button class="glass-footer-btn glass-btn-copy-result" title="复制">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>` : ''}
+      </div>
+    `;
+    return html;
+  }
+
+  if (screenshotData.isLoading) {
+    html += `
+      <div class="glass-loading">
+        <div class="glass-loading-spinner"></div>
+        <span>处理中...</span>
       </div>
     `;
   }
 
-  return '';
+  return html;
 }
 
 export function bindScreenshotViewEvents(ctx: ScreenshotViewContext): () => void {
@@ -182,6 +207,18 @@ export function bindScreenshotViewEvents(ctx: ScreenshotViewContext): () => void
     }
   };
   describeBtn?.addEventListener('click', handleDescribe);
+
+  // Stop button (header)
+  const handleStop = () => {
+    if (ctx.screenshotData) {
+      ctx.setScreenshotData({ ...ctx.screenshotData, isLoading: false });
+    }
+    ctx.screenshotCallbacks?.onStop?.();
+    ctx.renderScreenshotContent();
+    const stopHeader = ctx.shadowRoot?.querySelector('.glass-btn-screenshot-stop-header') as HTMLElement;
+    if (stopHeader) stopHeader.style.display = 'none';
+  };
+  ctx.shadowRoot.querySelector('.glass-btn-screenshot-stop-header')?.addEventListener('click', handleStop);
 
   // Copy result button
   const copyResultBtn = ctx.shadowRoot.querySelector('.glass-btn-copy-result');

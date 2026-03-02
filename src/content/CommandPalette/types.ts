@@ -48,11 +48,18 @@ export interface AIResultCallbacks {
   onSaveToAnnotation?: (originalText: string, content: string, thinking?: string, actionType?: string) => void;
 }
 
+export interface ScreenshotHistoryItem {
+  question: string;
+  answer: string;
+}
+
 export interface ScreenshotData {
   dataUrl: string;
   isLoading?: boolean;
   result?: string;
   generatedImageUrl?: string;
+  history?: ScreenshotHistoryItem[];
+  currentQuestion?: string;
 }
 
 export interface ScreenshotCallbacks {
@@ -62,6 +69,7 @@ export interface ScreenshotCallbacks {
   onDescribe?: () => void;
   onGenerateImage?: (prompt: string) => void;
   onClose?: () => void;
+  onStop?: () => void;
 }
 
 export type MinimizedTaskType = 'ai-result' | 'contextChat' | 'screenshot';

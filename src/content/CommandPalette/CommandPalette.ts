@@ -121,6 +121,7 @@ export class CommandPalette {
   private chatSession: ChatSession | null = null;
   private isChatStreaming = false;
   private isQuickAsk = false;
+  private pendingQuickAskQuestion: string | null = null;
 
   // Annotations state
   private annotationsList: Annotation[] = [];
@@ -143,6 +144,7 @@ export class CommandPalette {
 
   // Drag state
   private isDragging = false;
+  private hasDragged = false;
   private dragStartX = 0;
   private dragStartY = 0;
   private panelStartX = 0;
@@ -262,6 +264,7 @@ export class CommandPalette {
         this.aiResultCallbacks = null;
         this.screenshotData = null;
         this.screenshotCallbacks = null;
+        this.hasDragged = false;
         // Note: chatSession/isChatStreaming are NOT reset here because
         // sendChatMessage may still be running in the background with a local reference
       }, 250);
@@ -371,7 +374,7 @@ export class CommandPalette {
       this.updateTheme();
       this.render();
     } else {
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
 
     return false; // New request started
@@ -413,15 +416,43 @@ export class CommandPalette {
       this.updateTheme();
       this.render();
     } else {
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
   }
+
+  private _screenshotStreamRAF: number | null = null;
 
   public updateScreenshotResult(result: string, isLoading: boolean = false): void {
     if (this.screenshotData) {
       this.screenshotData.result = result;
       this.screenshotData.isLoading = isLoading;
-      this.renderScreenshotContent();
+
+      // When finished, save to history
+      if (!isLoading && result && !result.startsWith('AI') && !result.includes('请配置') && !result.includes('请求失败')) {
+        if (!this.screenshotData.history) this.screenshotData.history = [];
+        this.screenshotData.history.push({
+          question: this.screenshotData.currentQuestion || '描述图片',
+          answer: result,
+        });
+        this.screenshotData.currentQuestion = undefined;
+      }
+
+      // Throttle DOM updates during streaming via rAF
+      if (isLoading) {
+        if (!this._screenshotStreamRAF) {
+          this._screenshotStreamRAF = requestAnimationFrame(() => {
+            this._screenshotStreamRAF = null;
+            this.renderScreenshotContent();
+          });
+        }
+      } else {
+        // Final update: render immediately
+        if (this._screenshotStreamRAF) {
+          cancelAnimationFrame(this._screenshotStreamRAF);
+          this._screenshotStreamRAF = null;
+        }
+        this.renderScreenshotContent();
+      }
     } else {
       // If screenshot was minimized, update the minimized task
       const minimizedTask = this.minimizedTasks.find(t => t.taskType === 'screenshot' && t.isLoading);
@@ -447,6 +478,11 @@ export class CommandPalette {
     const contentArea = this.shadowRoot.querySelector('.glass-screenshot-content');
     if (contentArea) {
       contentArea.innerHTML = this.getScreenshotContentHTML();
+    }
+    // Toggle header stop button visibility
+    const stopHeader = this.shadowRoot.querySelector('.glass-btn-screenshot-stop-header') as HTMLElement;
+    if (stopHeader) {
+      stopHeader.style.display = this.screenshotData.isLoading ? 'flex' : 'none';
     }
   }
 
@@ -617,7 +653,7 @@ export class CommandPalette {
     // Load auth state before rendering
     this.loadAuthState().then(() => {
       if (this.container && this.currentView === 'settings') {
-        this.renderCurrentView();
+        this.renderCurrentView(true, true);
       }
     });
 
@@ -629,7 +665,7 @@ export class CommandPalette {
       this.updateTheme();
       this.render();
     } else {
-      this.renderCurrentView();
+      this.renderCurrentView(true, true);
     }
   }
 
@@ -683,6 +719,11 @@ export class CommandPalette {
       panel.style.left = this.savedPanelPosition.left;
       panel.style.right = this.savedPanelPosition.right;
       panel.style.transform = this.savedPanelPosition.transform;
+      // If panel was previously dragged (fixed positioning), preserve it
+      if (this.savedPanelPosition.transform === 'none') {
+        panel.style.position = 'fixed';
+        this.hasDragged = true;
+      }
     }
 
     this.shadowRoot.appendChild(panel);
@@ -711,8 +752,8 @@ export class CommandPalette {
     // Store current view
     panel.setAttribute('data-view', this.currentView);
 
-    // Position the panel (unless keepPosition is true)
-    if (!keepPosition) {
+    // Position the panel (unless keepPosition is true or user has dragged/restored position)
+    if (!keepPosition && !this.hasDragged) {
       if (this.currentView === 'ai-result') {
         // Position panel to the right side if not already dragged
         if (panel.style.transform !== 'none') {
@@ -787,6 +828,17 @@ export class CommandPalette {
         panel.innerHTML = this.getContextChatViewHTML();
         this.bindContextChatEvents();
         requestAnimationFrame(() => {
+          // Auto-send pending quick ask question
+          if (this.pendingQuickAskQuestion) {
+            const chatInput = this.shadowRoot?.querySelector('.glass-chat-input') as HTMLInputElement;
+            if (chatInput) {
+              chatInput.value = this.pendingQuickAskQuestion;
+              this.pendingQuickAskQuestion = null;
+              this.sendChatMessage(chatInput);
+              return;
+            }
+            this.pendingQuickAskQuestion = null;
+          }
           const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
           input?.focus();
         });
@@ -855,6 +907,13 @@ export class CommandPalette {
           spellcheck="false"
           ${isAIAction && !needsInput ? 'readonly' : ''}
         />
+        ${hasActiveCommand ? `
+          <button class="glass-header-btn glass-btn-stop" title="终止" style="display: ${isLoading ? 'flex' : 'none'}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+          </button>
+        ` : ''}
         <kbd class="glass-kbd">ESC</kbd>
       </div>
       <div class="glass-divider"></div>
@@ -875,11 +934,6 @@ export class CommandPalette {
       <div class="glass-footer">
         ${hasActiveCommand ? `
           <div class="glass-ai-footer-actions">
-            <button class="glass-footer-btn glass-btn-stop" title="终止" style="display: ${isLoading ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-              </svg>
-            </button>
             ${isTranslate ? getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
             ${isTranslate && this.aiResultData?.originalText ? `
               <button class="glass-footer-btn glass-btn-compare" title="对比原文">
@@ -1130,6 +1184,10 @@ export class CommandPalette {
     this.aiResultData = null;
     this.aiResultCallbacks = null;
     this.searchQuery = '';
+    this.currentView = 'commands';
+    this.viewStack = [];
+    this.filteredItems = this.sortByRecent(this.menuItems);
+    this.selectedIndex = 0;
     this.renderCurrentView(true, true);
   }
 
@@ -1407,14 +1465,10 @@ export class CommandPalette {
 
     // Update footer buttons visibility
     if (footer) {
-      const stopBtn = footer.querySelector('.glass-btn-stop') as HTMLElement;
       const copyBtn = footer.querySelector('.glass-btn-copy') as HTMLElement;
       const refreshBtn = footer.querySelector('.glass-btn-refresh') as HTMLElement;
       const saveBtn = footer.querySelector('.glass-btn-save') as HTMLElement;
 
-      if (stopBtn) {
-        stopBtn.style.display = this.aiResultData.isLoading ? 'flex' : 'none';
-      }
       if (copyBtn) {
         copyBtn.style.display = this.aiResultData.content ? 'flex' : 'none';
       }
@@ -1430,6 +1484,12 @@ export class CommandPalette {
     const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
     if (input && !this.aiResultData.isLoading) {
       input.placeholder = '';
+    }
+
+    // Update header stop button visibility
+    const headerStopBtn = this.shadowRoot.querySelector('.glass-search .glass-btn-stop') as HTMLElement;
+    if (headerStopBtn) {
+      headerStopBtn.style.display = this.aiResultData.isLoading ? 'flex' : 'none';
     }
   }
 
@@ -1653,6 +1713,7 @@ export class CommandPalette {
 
   private handleDragEnd = (): void => {
     this.isDragging = false;
+    this.hasDragged = true;
 
     const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
     if (panel) {
@@ -2433,6 +2494,11 @@ export class CommandPalette {
       markChanged();
     });
 
+    // ===== Storage usage =====
+    this.loadStorageUsage();
+    const storageRefreshBtn = this.shadowRoot.querySelector('#storage-refresh-btn');
+    storageRefreshBtn?.addEventListener('click', () => this.loadStorageUsage());
+
     // Reset button (immediate action)
     const resetBtn = this.shadowRoot.querySelector('.glass-btn-reset');
     resetBtn?.addEventListener('click', async () => {
@@ -2455,6 +2521,68 @@ export class CommandPalette {
         this.cancelSettings();
       }
     });
+  }
+
+  private async loadStorageUsage(): Promise<void> {
+    if (!this.shadowRoot) return;
+
+    const QUOTA = 10 * 1024 * 1024; // 10 MB
+
+    const categories: { keys: string[]; label: string; color: string }[] = [
+      { keys: ['thecircle_saved_tasks'], label: 'AI 结果', color: '#3b82f6' },
+      { keys: ['thecircle_annotations'], label: '批注', color: '#a855f7' },
+      { keys: ['thecircle_browse_trail'], label: '浏览轨迹', color: '#22c55e' },
+      { keys: ['thecircle_chat_sessions'], label: '聊天记录', color: '#f97316' },
+      { keys: ['thecircle_data', 'thecircle_config'], label: '配置', color: '#9ca3af' },
+    ];
+
+    const formatBytes = (bytes: number): string => {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    };
+
+    try {
+      const totalBytes = await chrome.storage.local.getBytesInUse(null);
+      let knownBytes = 0;
+
+      const results: { label: string; color: string; bytes: number }[] = [];
+
+      for (const cat of categories) {
+        const bytes = await chrome.storage.local.getBytesInUse(cat.keys);
+        knownBytes += bytes;
+        results.push({ label: cat.label, color: cat.color, bytes });
+      }
+
+      const otherBytes = Math.max(0, totalBytes - knownBytes);
+      results.push({ label: '其他', color: '#d1d5db', bytes: otherBytes });
+
+      // Update progress bar
+      const percent = Math.min((totalBytes / QUOTA) * 100, 100);
+      const fillEl = this.shadowRoot.querySelector('#storage-fill') as HTMLElement;
+      const usedEl = this.shadowRoot.querySelector('#storage-used') as HTMLElement;
+      const percentEl = this.shadowRoot.querySelector('#storage-percent') as HTMLElement;
+      const categoriesEl = this.shadowRoot.querySelector('#storage-categories') as HTMLElement;
+
+      if (fillEl) fillEl.style.width = `${percent}%`;
+      if (usedEl) usedEl.textContent = `${formatBytes(totalBytes)} / 10 MB`;
+      if (percentEl) percentEl.textContent = `${percent.toFixed(1)}%`;
+
+      if (categoriesEl) {
+        categoriesEl.innerHTML = results
+          .filter(r => r.bytes > 0)
+          .map(r => `
+            <div class="glass-storage-category">
+              <span class="glass-storage-dot" style="background: ${r.color}"></span>
+              <span class="glass-storage-category-name">${r.label}</span>
+              <span class="glass-storage-category-size">${formatBytes(r.bytes)}</span>
+            </div>
+          `).join('');
+      }
+    } catch {
+      const usedEl = this.shadowRoot.querySelector('#storage-used') as HTMLElement;
+      if (usedEl) usedEl.textContent = '无法获取存储信息';
+    }
   }
 
   private cancelSettings(): void {
@@ -2930,6 +3058,11 @@ export class CommandPalette {
           autocomplete="off"
           spellcheck="false"
         />
+        <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="终止" style="display: ${this.screenshotData?.isLoading ? 'flex' : 'none'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+          </svg>
+        </button>
         <kbd class="glass-kbd">ESC</kbd>
       </div>
       <div class="glass-divider"></div>
@@ -2977,18 +3110,22 @@ export class CommandPalette {
 
   private getScreenshotContentHTML(): string {
     if (!this.screenshotData) return '';
+    let html = '';
 
-    if (this.screenshotData.isLoading) {
-      return `
-        <div class="glass-loading">
-          <div class="glass-loading-spinner"></div>
-          <span>处理中...</span>
-        </div>
-      `;
+    // Render history items
+    if (this.screenshotData.history?.length) {
+      for (const item of this.screenshotData.history) {
+        html += `
+          <div class="glass-screenshot-qa">
+            <div class="glass-screenshot-question">${escapeHtml(item.question)}</div>
+            <div class="glass-screenshot-answer">${escapeHtml(item.answer)}</div>
+          </div>
+        `;
+      }
     }
 
     if (this.screenshotData.generatedImageUrl) {
-      return `
+      html += `
         <div class="glass-screenshot-result">
           <div class="glass-screenshot-generated-label">生成的图片</div>
           <img class="glass-screenshot-generated-img" src="${this.screenshotData.generatedImageUrl}" alt="Generated" />
@@ -2998,21 +3135,38 @@ export class CommandPalette {
           </div>
         </div>
       `;
+      return html;
     }
 
+    // Show current streaming/finished result
     if (this.screenshotData.result) {
-      return `
-        <div class="glass-screenshot-result">
-          <div class="glass-screenshot-result-label">AI 分析结果</div>
-          <div class="glass-screenshot-result-text">${escapeHtml(this.screenshotData.result)}</div>
-          <div class="glass-screenshot-result-actions">
-            <button class="glass-btn glass-btn-copy-result">复制结果</button>
-          </div>
+      html += `
+        <div class="glass-screenshot-qa">
+          <div class="glass-screenshot-question">${escapeHtml(this.screenshotData.currentQuestion || '描述图片')}</div>
+          <div class="glass-screenshot-answer">${escapeHtml(this.screenshotData.result)}</div>
+          ${!this.screenshotData.isLoading ? `<div class="glass-screenshot-result-actions">
+            <button class="glass-footer-btn glass-btn-copy-result" title="复制">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+          </div>` : ''}
+        </div>
+      `;
+      return html;
+    }
+
+    if (this.screenshotData.isLoading) {
+      html += `
+        <div class="glass-loading">
+          <div class="glass-loading-spinner"></div>
+          <span>处理中...</span>
         </div>
       `;
     }
 
-    return '';
+    return html;
   }
 
   private bindScreenshotViewEvents(): void {
@@ -3058,6 +3212,8 @@ export class CommandPalette {
         e.preventDefault();
         const question = screenshotInput.value.trim();
         if (question) {
+          this.screenshotData!.currentQuestion = question;
+          this.screenshotData!.result = undefined;
           this.screenshotData!.isLoading = true;
           this.renderScreenshotContent();
           this.screenshotCallbacks?.onAskAI?.(question);
@@ -3071,16 +3227,36 @@ export class CommandPalette {
     // Describe button
     const describeBtn = this.shadowRoot.querySelector('.glass-btn-describe');
     describeBtn?.addEventListener('click', () => {
+      this.screenshotData!.currentQuestion = '描述图片';
+      this.screenshotData!.result = undefined;
       this.screenshotData!.isLoading = true;
       this.renderScreenshotContent();
       this.screenshotCallbacks?.onDescribe?.();
     });
 
-    // Copy result button
-    this.shadowRoot.querySelector('.glass-btn-copy-result')?.addEventListener('click', () => {
-      if (this.screenshotData?.result) {
-        navigator.clipboard.writeText(this.screenshotData.result);
-        this.showToast('已复制结果');
+    // Stop button (header)
+    const handleScreenshotStop = () => {
+      if (this.screenshotData) {
+        this.screenshotData.isLoading = false;
+      }
+      this.screenshotCallbacks?.onStop?.();
+      this.renderScreenshotContent();
+    };
+    this.shadowRoot.querySelector('.glass-btn-screenshot-stop-header')?.addEventListener('click', handleScreenshotStop);
+
+    // Copy result button (use event delegation for dynamic content)
+    const contentArea = this.shadowRoot.querySelector('.glass-screenshot-content');
+    contentArea?.addEventListener('click', (e) => {
+      const target = (e.target as HTMLElement).closest('.glass-btn-copy-result');
+      if (target && this.screenshotData) {
+        // Find the answer text in the same QA block
+        const qaBlock = target.closest('.glass-screenshot-qa');
+        const answerEl = qaBlock?.querySelector('.glass-screenshot-answer');
+        const text = answerEl?.textContent || this.screenshotData.result || '';
+        if (text) {
+          navigator.clipboard.writeText(text);
+          this.showCopyFeedback(target as HTMLButtonElement);
+        }
       }
     });
 
@@ -3998,16 +4174,8 @@ export class CommandPalette {
     this.currentView = 'contextChat';
     this.viewStack = [];
     this.searchQuery = '';
+    this.pendingQuickAskQuestion = question;
     this.renderCurrentView(true, true);
-
-    // Auto-send the question after view is rendered
-    requestAnimationFrame(() => {
-      const input = this.shadowRoot?.querySelector('.glass-chat-input') as HTMLInputElement;
-      if (input) {
-        input.value = question;
-        this.sendChatMessage(input);
-      }
-    });
   }
 
   // ========================================
@@ -4056,6 +4224,11 @@ export class CommandPalette {
           spellcheck="false"
           ${this.isChatStreaming ? 'disabled' : ''}
         />
+        <button class="glass-header-btn glass-btn-stop glass-btn-chat-stop" title="终止" style="display: ${this.isChatStreaming ? 'flex' : 'none'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+          </svg>
+        </button>
         <kbd class="glass-kbd">ESC</kbd>
       </div>
       <div class="glass-divider"></div>
@@ -4136,6 +4309,8 @@ export class CommandPalette {
       this.chatSession = null;
       this.currentView = 'commands';
       this.viewStack = [];
+      this.filteredItems = this.sortByRecent(this.menuItems);
+      this.selectedIndex = 0;
       this.renderCurrentView(true, true);
     });
 
@@ -4175,6 +4350,35 @@ export class CommandPalette {
         }
       }
     });
+
+    // Stop button (header)
+    const handleChatStop = () => {
+      this.isChatStreaming = false;
+      abortAllRequests();
+      // Re-enable input
+      if (input) {
+        input.disabled = false;
+        input.placeholder = '输入问题后按回车...';
+      }
+      // Hide stop button
+      const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
+      if (chatStopBtn) chatStopBtn.style.display = 'none';
+      // Re-render chat content
+      const content = this.shadowRoot?.querySelector('.glass-chat-content');
+      if (content && this.chatSession) {
+        content.innerHTML = this.getContextChatContentHTML();
+        content.querySelectorAll('.glass-thinking-section').forEach(section => {
+          const header = section.querySelector('.glass-thinking-header');
+          if (header && !header.hasAttribute('data-bound')) {
+            header.setAttribute('data-bound', 'true');
+            header.addEventListener('click', () => {
+              section.classList.toggle('collapsed');
+            });
+          }
+        });
+      }
+    };
+    this.shadowRoot.querySelector('.glass-btn-chat-stop')?.addEventListener('click', handleChatStop);
 
     // Scroll to bottom
     this.scrollChatToBottom();
@@ -4251,6 +4455,10 @@ export class CommandPalette {
     this.scrollChatToBottom();
 
     this.isChatStreaming = true;
+
+    // Show stop button
+    const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
+    if (chatStopBtn) chatStopBtn.style.display = 'flex';
 
     // Build prompt - use simple prompt for quick ask, context prompt for context chat
     const systemPrompt = this.isQuickAsk
@@ -4355,6 +4563,10 @@ export class CommandPalette {
       }
     } finally {
       this.isChatStreaming = false;
+
+      // Hide stop button
+      const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
+      if (chatStopBtn) chatStopBtn.style.display = 'none';
 
       // If this chat was minimized during streaming, update the minimized task
       const minimizedTask = this.minimizedTasks.find(

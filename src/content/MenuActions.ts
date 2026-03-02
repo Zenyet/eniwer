@@ -12,6 +12,7 @@ import {
   getDescribeImagePrompt,
   getAskImagePrompt,
   OnChunkCallback,
+  abortAllRequests,
 } from '../utils/ai';
 import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
 import type { CommandPalette } from './CommandPalette';
@@ -316,7 +317,12 @@ export class MenuActions {
           openai: 'OpenAI',
           anthropic: 'Anthropic',
           gemini: 'Google Gemini',
-          groq: 'Groq'
+          qwen: '阿里云 (通义)',
+          deepseek: 'DeepSeek',
+          minimax: 'MiniMax',
+          xai: 'xAI',
+          moonshot: 'Moonshot',
+          zhipu: '智谱',
         };
         const name = providerNames[apiProvider] || apiProvider;
         return `请在设置中配置 ${name} API Key`;
@@ -395,6 +401,7 @@ export class MenuActions {
           onAskAI: (question) => this.askAIAboutImage(question),
           onDescribe: () => this.describeImage(),
           onGenerateImage: (prompt) => this.generateImageFromPrompt(prompt),
+          onStop: () => abortAllRequests(),
           onClose: () => {
             // Cleanup handled in CommandPalette
           },
@@ -479,7 +486,7 @@ export class MenuActions {
       return;
     }
 
-    this.commandPalette.updateScreenshotResult('AI 正在分析...', true);
+    this.commandPalette.updateScreenshotResult('', true);
 
     const prompt = getAskImagePrompt(question);
     const response = await callVisionAI(
@@ -507,7 +514,7 @@ export class MenuActions {
       return;
     }
 
-    this.commandPalette.updateScreenshotResult('AI 正在描述图片...', true);
+    this.commandPalette.updateScreenshotResult('', true);
 
     const prompt = getDescribeImagePrompt();
     const response = await callVisionAI(

@@ -8,33 +8,115 @@ import { escapeHtml, getTranslationHint, getAPIKeyHint } from '../utils';
 
 // Model options per provider
 export const PROVIDER_MODELS: Record<string, { id: string; label: string }[]> = {
-  groq: [
-    { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
-    { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (Fast)' },
-    { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B' },
-    { id: 'meta-llama/llama-4-maverick-17b-128e-instruct', label: 'Llama 4 Maverick 17B' },
-    { id: 'qwen/qwen-3-32b', label: 'Qwen 3 32B' },
-    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
-  ],
   openai: [
-    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
-    { id: 'gpt-4.1', label: 'GPT-4.1' },
-    { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano' },
+    { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+    { id: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16K' },
+    { id: 'gpt-4', label: 'GPT-4' },
+    { id: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
     { id: 'gpt-4o', label: 'GPT-4o' },
     { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { id: 'gpt-4.1-nano', label: 'GPT-4.1 Nano' },
+    { id: 'gpt-4.1-mini', label: 'GPT-4.1 Mini' },
+    { id: 'gpt-4.1', label: 'GPT-4.1' },
+    { id: 'o1', label: 'o1' },
+    { id: 'o1-pro', label: 'o1-pro' },
+    { id: 'o3-mini', label: 'o3-mini' },
+    { id: 'o3-mini-high', label: 'o3-mini-high' },
     { id: 'o3', label: 'o3' },
+    { id: 'o3-pro', label: 'o3-pro' },
     { id: 'o4-mini', label: 'o4-mini' },
+    { id: 'gpt-5-nano', label: 'GPT-5 Nano' },
+    { id: 'gpt-5-mini', label: 'GPT-5 Mini' },
+    { id: 'gpt-5', label: 'GPT-5' },
+    { id: 'gpt-5-codex', label: 'GPT-5 Codex' },
+    { id: 'gpt-5-pro', label: 'GPT-5 Pro' },
+    { id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
+    { id: 'gpt-5.1-codex', label: 'GPT-5.1 Codex' },
+    { id: 'gpt-5.1-chat', label: 'GPT-5.1 Chat' },
+    { id: 'gpt-5.1', label: 'GPT-5.1' },
+    { id: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
+    { id: 'gpt-5.2', label: 'GPT-5.2' },
+    { id: 'gpt-5.2-pro', label: 'GPT-5.2 Pro' },
+    { id: 'gpt-5.2-chat', label: 'GPT-5.2 Chat' },
+    { id: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
+    { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex' },
   ],
   anthropic: [
+    { id: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
+    { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { id: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
+    { id: 'claude-opus-4-1', label: 'Claude Opus 4.1' },
     { id: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
     { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+    { id: 'claude-opus-4-5', label: 'Claude Opus 4.5' },
     { id: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
   ],
   gemini: [
-    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.0-flash-001', label: 'Gemini 2.0 Flash' },
     { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-3-pro-preview', label: 'Gemini 3 Pro (Preview)' },
     { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview)' },
+    { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (Preview)' },
+  ],
+  qwen: [
+    { id: 'qwen-max', label: 'Qwen Max' },
+    { id: 'qwen-turbo', label: 'Qwen Turbo' },
+    { id: 'qwen3-max', label: 'Qwen3 Max' },
+    { id: 'qwen3-max-2026-01-23', label: 'Qwen3 Max (2026-01-23)' },
+    { id: 'qwen3-max-2025-09-23', label: 'Qwen3 Max (2025-09-23)' },
+    { id: 'qwen3-max-preview', label: 'Qwen3 Max Preview' },
+    { id: 'qwen3.5-plus', label: 'Qwen3.5 Plus' },
+    { id: 'qwen3.5-plus-2026-02-15', label: 'Qwen3.5 Plus (2026-02-15)' },
+    { id: 'qwen-plus', label: 'Qwen Plus' },
+    { id: 'qwen-plus-latest', label: 'Qwen Plus Latest' },
+    { id: 'qwen-plus-2025-12-01', label: 'Qwen Plus (2025-12-01)' },
+    { id: 'qwen-plus-2025-09-11', label: 'Qwen Plus (2025-09-11)' },
+    { id: 'qwen-plus-2025-07-28', label: 'Qwen Plus (2025-07-28)' },
+    { id: 'qwen-plus-2025-07-14', label: 'Qwen Plus (2025-07-14)' },
+    { id: 'qwen-plus-2025-04-28', label: 'Qwen Plus (2025-04-28)' },
+    { id: 'qwen3.5-flash', label: 'Qwen3.5 Flash' },
+    { id: 'qwen3.5-flash-2026-02-23', label: 'Qwen3.5 Flash (2026-02-23)' },
+    { id: 'qwen-flash', label: 'Qwen Flash' },
+    { id: 'qwen-flash-2025-07-28', label: 'Qwen Flash (2025-07-28)' },
+  ],
+  deepseek: [
+    { id: 'deepseek-chat', label: 'DeepSeek Chat (V3)' },
+    { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner (R1)' },
+  ],
+  minimax: [
+    { id: 'minimax-01', label: 'MiniMax 01' },
+    { id: 'minimax-m1', label: 'MiniMax M1' },
+    { id: 'minimax-m2', label: 'MiniMax M2' },
+    { id: 'minimax-m2.1', label: 'MiniMax M2.1' },
+    { id: 'minimax-m2-her', label: 'MiniMax M2 Her' },
+    { id: 'minimax-m2.5', label: 'MiniMax M2.5' },
+  ],
+  xai: [
+    { id: 'grok-3', label: 'Grok 3' },
+    { id: 'grok-3-mini', label: 'Grok 3 Mini' },
+    { id: 'grok-4', label: 'Grok 4' },
+    { id: 'grok-code-fast-1', label: 'Grok Code Fast' },
+    { id: 'grok-4-fast', label: 'Grok 4 Fast' },
+    { id: 'grok-4.1-fast', label: 'Grok 4.1 Fast' },
+  ],
+  moonshot: [
+    { id: 'kimi-k2', label: 'Kimi K2' },
+    { id: 'kimi-k2-0905', label: 'Kimi K2 (0905)' },
+    { id: 'kimi-k2-thinking', label: 'Kimi K2 (思考)' },
+    { id: 'kimi-k2.5', label: 'Kimi K2.5' },
+  ],
+  zhipu: [
+    { id: 'glm-4-32b', label: 'GLM-4 32B' },
+    { id: 'glm-4.5-air', label: 'GLM-4.5 Air' },
+    { id: 'glm-4.5', label: 'GLM-4.5' },
+    { id: 'glm-4.5v', label: 'GLM-4.5V (视觉)' },
+    { id: 'glm-4.6', label: 'GLM-4.6' },
+    { id: 'glm-4.6v', label: 'GLM-4.6V (视觉)' },
+    { id: 'glm-4.7', label: 'GLM-4.7' },
+    { id: 'glm-4.7-flash', label: 'GLM-4.7 Flash' },
+    { id: 'glm-5', label: 'GLM-5' },
   ],
 };
 
@@ -100,6 +182,88 @@ export function getSettingsViewHTML(
         <div class="glass-settings-section">
           <div class="glass-settings-section-title">账号</div>
           ${getAccountSettingsHTML()}
+        </div>
+
+        <!-- AI 服务 -->
+        <div class="glass-settings-section">
+          <div class="glass-settings-section-title">AI 服务</div>
+          <div class="glass-form-group">
+            <label class="glass-form-label">服务商</label>
+            <select class="glass-select" id="api-provider-select">
+              <option value="openai"${config.apiProvider === 'openai' ? ' selected' : ''}>OpenAI</option>
+              <option value="anthropic"${config.apiProvider === 'anthropic' ? ' selected' : ''}>Anthropic</option>
+              <option value="gemini"${config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
+              <option value="xai"${config.apiProvider === 'xai' ? ' selected' : ''}>xAI (Grok)</option>
+              <option value="qwen"${config.apiProvider === 'qwen' ? ' selected' : ''}>阿里云 (通义)</option>
+              <option value="deepseek"${config.apiProvider === 'deepseek' ? ' selected' : ''}>DeepSeek</option>
+              <option value="minimax"${config.apiProvider === 'minimax' ? ' selected' : ''}>MiniMax</option>
+              <option value="moonshot"${config.apiProvider === 'moonshot' ? ' selected' : ''}>Moonshot (Kimi)</option>
+              <option value="zhipu"${config.apiProvider === 'zhipu' ? ' selected' : ''}>智谱 (Z.ai)</option>
+              <option value="custom"${config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
+            </select>
+            <span class="glass-form-hint" id="api-key-hint">${getAPIKeyHint(config.apiProvider)}</span>
+          </div>
+          <div class="glass-form-group">
+            <label class="glass-form-label">API Key</label>
+            <input type="text" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key" autocomplete="off" data-1p-ignore data-lpignore="true" data-form-type="other" style="-webkit-text-security: disc;">
+          </div>
+          <div class="glass-form-group" id="model-select-group"${isCustomProvider ? ' style="display: none"' : ''}>
+            <label class="glass-form-label">模型</label>
+            <select class="glass-select" id="model-select">
+              ${getModelOptions(config.apiProvider, config.customModel)}
+            </select>
+          </div>
+          <div class="glass-form-group" id="custom-url-group"${isCustomProvider ? '' : ' style="display: none"'}>
+            <label class="glass-form-label">API URL</label>
+            <input type="text" class="glass-input-field" id="custom-url-input" value="${config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
+          </div>
+          <div class="glass-form-group" id="custom-model-group"${isCustomProvider ? '' : ' style="display: none"'}>
+            <label class="glass-form-label">模型名称</label>
+            <input type="text" class="glass-input-field" id="custom-model-input" value="${config.customModel || ''}" placeholder="gpt-4">
+          </div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">流式传输</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="streaming-toggle" ${config.useStreaming ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+          </div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">思考模式</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="thinking-mode-toggle" ${config.useThinkingModel ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+            <span class="glass-form-hint">启用后使用推理模型进行深度思考</span>
+          </div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">AI 生图</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+          </div>
+          <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
+            <div class="glass-form-group">
+              <label class="glass-form-label">生图服务</label>
+              <select class="glass-select" id="image-gen-provider">
+                <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
+                <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
+              </select>
+            </div>
+            <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
+              <label class="glass-form-label">自定义生图 API</label>
+              <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">图片尺寸</label>
+              <select class="glass-select" id="image-size-select">
+                <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
+                <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
+                <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- 翻译设置 -->
@@ -178,83 +342,6 @@ export function getSettingsViewHTML(
               <option value="en"${config.summaryLanguage === 'en' ? ' selected' : ''}>English</option>
               <option value="ja"${config.summaryLanguage === 'ja' ? ' selected' : ''}>日本語</option>
             </select>
-          </div>
-        </div>
-
-        <!-- AI 服务 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">AI 服务</div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">服务商</label>
-            <select class="glass-select" id="api-provider-select">
-              <option value="groq"${config.apiProvider === 'groq' ? ' selected' : ''}>Groq (免费)</option>
-              <option value="openai"${config.apiProvider === 'openai' ? ' selected' : ''}>OpenAI</option>
-              <option value="anthropic"${config.apiProvider === 'anthropic' ? ' selected' : ''}>Anthropic</option>
-              <option value="gemini"${config.apiProvider === 'gemini' ? ' selected' : ''}>Google Gemini</option>
-              <option value="custom"${config.apiProvider === 'custom' ? ' selected' : ''}>自定义</option>
-            </select>
-            <span class="glass-form-hint" id="api-key-hint">${getAPIKeyHint(config.apiProvider)}</span>
-          </div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">API Key</label>
-            <input type="password" class="glass-input-field" id="api-key-input" value="${config.apiKey || ''}" placeholder="输入 API Key">
-          </div>
-          <div class="glass-form-group" id="model-select-group"${isCustomProvider ? ' style="display: none"' : ''}>
-            <label class="glass-form-label">模型</label>
-            <select class="glass-select" id="model-select">
-              ${getModelOptions(config.apiProvider, config.customModel)}
-            </select>
-          </div>
-          <div class="glass-form-group" id="custom-url-group"${isCustomProvider ? '' : ' style="display: none"'}>
-            <label class="glass-form-label">API URL</label>
-            <input type="text" class="glass-input-field" id="custom-url-input" value="${config.customApiUrl || ''}" placeholder="https://api.example.com/v1/chat/completions">
-          </div>
-          <div class="glass-form-group" id="custom-model-group"${isCustomProvider ? '' : ' style="display: none"'}>
-            <label class="glass-form-label">模型名称</label>
-            <input type="text" class="glass-input-field" id="custom-model-input" value="${config.customModel || ''}" placeholder="gpt-4">
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">流式传输</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="streaming-toggle" ${config.useStreaming ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">思考模式</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="thinking-mode-toggle" ${config.useThinkingModel ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-            <span class="glass-form-hint">启用后使用推理模型进行深度思考</span>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">AI 生图</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
-            <div class="glass-form-group">
-              <label class="glass-form-label">生图服务</label>
-              <select class="glass-select" id="image-gen-provider">
-                <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
-                <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>自定义</option>
-              </select>
-            </div>
-            <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
-              <label class="glass-form-label">自定义生图 API</label>
-              <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">图片尺寸</label>
-              <select class="glass-select" id="image-size-select">
-                <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
-                <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>1792 × 1024 (横)</option>
-                <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>1024 × 1792 (竖)</option>
-              </select>
-            </div>
           </div>
         </div>
 
@@ -427,6 +514,37 @@ export function getSettingsViewHTML(
               <input type="checkbox" id="knowledge-group-date" ${config.knowledge?.groupByDate !== false ? 'checked' : ''}>
               <span class="glass-toggle-slider"></span>
             </label>
+          </div>
+        </div>
+
+        <!-- 存储空间 -->
+        <div class="glass-settings-section">
+          <div class="glass-settings-section-title">
+            存储空间
+            <button class="glass-storage-refresh-btn" id="storage-refresh-btn" title="刷新">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="storage-usage-container">
+            <div class="glass-storage-summary">
+              <div class="glass-storage-bar">
+                <div class="glass-storage-fill" id="storage-fill" style="width: 0%"></div>
+              </div>
+              <div class="glass-storage-text">
+                <span id="storage-used">加载中...</span>
+                <span id="storage-percent"></span>
+              </div>
+            </div>
+            <div class="glass-storage-categories" id="storage-categories">
+              <div class="glass-storage-category">
+                <span class="glass-storage-dot" style="background: var(--text-tertiary)"></span>
+                <span class="glass-storage-category-name">加载中...</span>
+              </div>
+            </div>
           </div>
         </div>
 

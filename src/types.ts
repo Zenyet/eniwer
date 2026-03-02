@@ -68,7 +68,7 @@ export interface MenuConfig {
   theme: 'dark' | 'light' | 'system';
   preferredLanguage: string;
   summaryLanguage: string;
-  apiProvider: 'groq' | 'openai' | 'anthropic' | 'gemini' | 'custom';
+  apiProvider: 'openai' | 'anthropic' | 'gemini' | 'qwen' | 'deepseek' | 'minimax' | 'xai' | 'moonshot' | 'zhipu' | 'custom';
   apiKey?: string;
   customApiUrl?: string;
   customModel?: string;
@@ -126,7 +126,7 @@ export const DEFAULT_CONFIG: MenuConfig = {
   theme: 'system',
   preferredLanguage: 'zh-CN',
   summaryLanguage: 'auto',
-  apiProvider: 'groq',
+  apiProvider: 'deepseek',
   useStreaming: true,
   screenshot: DEFAULT_SCREENSHOT_CONFIG,
   popoverPosition: 'above',

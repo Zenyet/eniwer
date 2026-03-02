@@ -10,11 +10,6 @@ interface ProviderConfig {
 }
 
 const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
-  groq: {
-    apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile',
-    visionModel: 'llama-3.2-90b-vision-preview',
-  },
   openai: {
     apiUrl: 'https://api.openai.com/v1/chat/completions',
     model: 'gpt-4.1-mini',
@@ -32,6 +27,34 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     model: 'gemini-2.5-flash',
     thinkingModel: 'gemini-2.5-flash',
     visionModel: 'gemini-2.5-flash',
+  },
+  qwen: {
+    apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    model: 'qwen-plus',
+    visionModel: 'qwen-vl-plus',
+  },
+  deepseek: {
+    apiUrl: 'https://api.deepseek.com/chat/completions',
+    model: 'deepseek-chat',
+    thinkingModel: 'deepseek-reasoner',
+  },
+  minimax: {
+    apiUrl: 'https://api.minimax.chat/v1/text/chatcompletion_v2',
+    model: 'minimax-m2.5',
+  },
+  xai: {
+    apiUrl: 'https://api.x.ai/v1/chat/completions',
+    model: 'grok-4.1-fast',
+    visionModel: 'grok-4.1-fast',
+  },
+  moonshot: {
+    apiUrl: 'https://api.moonshot.cn/v1/chat/completions',
+    model: 'kimi-k2.5',
+  },
+  zhipu: {
+    apiUrl: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-4.7',
+    visionModel: 'glm-4.6v',
   },
 };
 
@@ -56,7 +79,7 @@ export async function callAI(
   const useStreaming = config.useStreaming && !!onChunk;
 
   // Validate API key requirement
-  if (provider !== 'groq' && !config.apiKey) {
+  if (!config.apiKey) {
     return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
   }
 
@@ -73,7 +96,6 @@ export async function callAI(
         return await callAnthropicAPI(prompt, systemPrompt, config, useStreaming, onChunk, signal);
       case 'gemini':
         return await callGeminiAPI(prompt, systemPrompt, config, useStreaming, onChunk, signal);
-      case 'groq':
       case 'openai':
       case 'custom':
       default:
@@ -87,7 +109,7 @@ export async function callAI(
   }
 }
 
-// OpenAI compatible API (for Groq, OpenAI, and custom providers)
+// OpenAI compatible API (for OpenAI, and OpenAI-compatible providers)
 async function callOpenAICompatibleAPI(
   prompt: string,
   systemPrompt: string,
@@ -100,7 +122,7 @@ async function callOpenAICompatibleAPI(
   let apiUrl: string;
   let model: string;
   let apiKey = config.apiKey;
-  const useThinking = config.useThinkingModel && provider === 'openai';
+  const useThinking = config.useThinkingModel && (provider === 'openai' || (PROVIDER_CONFIGS[provider]?.thinkingModel !== undefined));
 
   if (provider === 'custom') {
     apiUrl = config.customApiUrl!;
@@ -119,8 +141,20 @@ async function callOpenAICompatibleAPI(
   // Check if using OpenAI o1/o3 thinking models
   const isOpenAIThinkingModel = useThinking && (model.startsWith('o1') || model.startsWith('o3'));
 
-  // Check for DeepSeek reasoner model (custom provider)
-  const isDeepSeekReasoner = provider === 'custom' && config.customModel?.includes('deepseek-reasoner');
+  // Check for DeepSeek reasoner model
+  const isDeepSeekReasoner = (provider === 'deepseek' && model.includes('deepseek-reasoner')) ||
+    (provider === 'custom' && config.customModel?.includes('deepseek-reasoner'));
+
+  // Providers that return reasoning_content and support thinking toggle
+  // - zhipu & moonshot: thinking: {type: "disabled"} to disable (default enabled)
+  // - qwen: enable_thinking: false to disable
+  // - xai: always reasons, cannot disable
+  const thinkingEnabled = config.useThinkingModel;
+  const hasReasoningContent = isDeepSeekReasoner ||
+    (provider === 'zhipu' && thinkingEnabled !== false) ||
+    (provider === 'moonshot' && thinkingEnabled) ||
+    (provider === 'qwen' && thinkingEnabled) ||
+    (provider === 'xai' && thinkingEnabled);
 
   // Build request body based on model type
   let requestBody: Record<string, unknown>;
@@ -156,6 +190,26 @@ async function callOpenAICompatibleAPI(
       max_tokens: 2048,
       stream: useStreaming,
     };
+
+    // Provider-specific thinking toggle
+    if (provider === 'zhipu') {
+      // Zhipu: thinking enabled by default, must explicitly disable
+      if (!thinkingEnabled) {
+        requestBody.thinking = { type: 'disabled' };
+      }
+    } else if (provider === 'moonshot') {
+      // Moonshot: disable thinking when not requested
+      if (!thinkingEnabled) {
+        requestBody.thinking = { type: 'disabled' };
+      }
+    } else if (provider === 'qwen') {
+      // Qwen3: enable_thinking param; non-streaming MUST disable thinking
+      if (thinkingEnabled && useStreaming) {
+        requestBody.enable_thinking = true;
+      } else {
+        requestBody.enable_thinking = false;
+      }
+    }
   }
 
   const response = await fetch(apiUrl, {
@@ -184,14 +238,14 @@ async function callOpenAICompatibleAPI(
   }
 
   if (useStreaming && onChunk) {
-    return await processOpenAIStream(response, onChunk, signal, isDeepSeekReasoner);
+    return await processOpenAIStream(response, onChunk, signal, hasReasoningContent);
   }
 
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content;
 
-  // Handle DeepSeek reasoner response
-  if (isDeepSeekReasoner) {
+  // Handle reasoning_content response (DeepSeek / Zhipu / Qwen / Moonshot / xAI)
+  if (hasReasoningContent) {
     const reasoning = data.choices?.[0]?.message?.reasoning_content;
     if (result) {
       return { success: true, result, thinking: reasoning };
@@ -209,7 +263,7 @@ async function processOpenAIStream(
   response: Response,
   onChunk: OnChunkCallback,
   signal?: AbortSignal,
-  isDeepSeekReasoner?: boolean
+  hasReasoningContent?: boolean
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -242,8 +296,8 @@ async function processOpenAIStream(
           try {
             const parsed = JSON.parse(data);
             const content = parsed.choices?.[0]?.delta?.content;
-            // Handle DeepSeek reasoner's reasoning_content in streaming
-            if (isDeepSeekReasoner) {
+            // Handle reasoning_content in streaming (DeepSeek Reasoner & Zhipu)
+            if (hasReasoningContent) {
               const reasoning = parsed.choices?.[0]?.delta?.reasoning_content;
               if (reasoning) {
                 thinkingText += reasoning;
@@ -570,7 +624,7 @@ export async function callVisionAI(
   const useStreaming = config.useStreaming && !!onChunk;
 
   // Validate API key requirement
-  if (provider !== 'groq' && !config.apiKey) {
+  if (!config.apiKey) {
     return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
   }
 
@@ -580,7 +634,6 @@ export async function callVisionAI(
         return await callAnthropicVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk, signal);
       case 'gemini':
         return await callGeminiVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk, signal);
-      case 'groq':
       case 'openai':
       default:
         return await callOpenAIVisionAPI(imageDataUrl, prompt, config, useStreaming, onChunk, signal);
@@ -616,13 +669,7 @@ async function callOpenAIVisionAPI(
     model = config.customModel || providerConfig.visionModel || providerConfig.model;
   }
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
-    },
-    body: JSON.stringify({
+  const requestBody: Record<string, unknown> = {
       model,
       messages: [
         {
@@ -640,7 +687,22 @@ async function callOpenAIVisionAPI(
       ],
       max_tokens: 2048,
       stream: useStreaming,
-    }),
+    };
+
+  // Disable thinking for vision calls to avoid unnecessary overhead
+  if (provider === 'zhipu' || provider === 'moonshot') {
+    requestBody.thinking = { type: 'disabled' };
+  } else if (provider === 'qwen') {
+    requestBody.enable_thinking = false;
+  }
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+    },
+    body: JSON.stringify(requestBody),
     signal,
   });
 

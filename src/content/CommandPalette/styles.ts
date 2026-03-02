@@ -184,6 +184,8 @@ export function getStyles(): string {
         align-items: center;
         gap: 12px;
         padding: 14px 16px;
+        min-height: 56px;
+        box-sizing: border-box;
       }
 
       .glass-search.glass-draggable {
@@ -1241,6 +1243,10 @@ export function getStyles(): string {
         height: 14px;
       }
 
+      .glass-btn-copy-result {
+        height: 32px;
+      }
+
       .glass-btn-stop {
         background: rgba(239, 68, 68, 0.1);
         border-color: rgba(239, 68, 68, 0.3);
@@ -1798,8 +1804,8 @@ export function getStyles(): string {
       }
 
       .glass-backup-item-latest .glass-backup-dot {
-        background: var(--accent-primary);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+        background: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
       }
 
       .glass-backup-meta {
@@ -1818,12 +1824,12 @@ export function getStyles(): string {
 
       .glass-backup-label {
         font-size: 10px;
-        color: var(--text-tertiary);
+        color: var(--text-secondary);
         line-height: 1.3;
       }
 
       .glass-backup-item-latest .glass-backup-label {
-        color: var(--accent-primary);
+        color: #60a5fa;
       }
 
       .glass-backup-actions {
@@ -2163,6 +2169,89 @@ export function getStyles(): string {
         color: var(--text-primary);
       }
 
+      /* Storage usage */
+      .glass-settings-section-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .glass-storage-refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border: none;
+        background: transparent;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-storage-refresh-btn:hover {
+        color: var(--text-secondary);
+        background: var(--glass-bg-hover);
+      }
+
+      .glass-storage-summary {
+        margin-bottom: 10px;
+      }
+
+      .glass-storage-bar {
+        height: 6px;
+        background: var(--glass-bg-hover);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+
+      .glass-storage-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #3b82f6, #60a5fa);
+        border-radius: 3px;
+        transition: width 0.4s ease;
+        min-width: 0;
+      }
+
+      .glass-storage-text {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .glass-storage-categories {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .glass-storage-category {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .glass-storage-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .glass-storage-category-name {
+        flex: 1;
+      }
+
+      .glass-storage-category-size {
+        color: var(--text-tertiary);
+        font-variant-numeric: tabular-nums;
+      }
+
       .glass-settings-footer {
         justify-content: flex-end;
       }
@@ -2290,6 +2379,23 @@ export function getStyles(): string {
         color: var(--text-secondary);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .glass-streaming-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: glass-dot-pulse 1s ease-in-out infinite;
+      }
+
+      @keyframes glass-dot-pulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
       }
 
       .glass-screenshot-result-text {
@@ -2297,11 +2403,36 @@ export function getStyles(): string {
         line-height: 1.6;
         color: var(--text-primary);
         white-space: pre-wrap;
-        max-height: 150px;
-        overflow-y: auto;
         padding: 12px;
         background: var(--glass-bg-hover);
         border-radius: 8px;
+      }
+
+      .glass-screenshot-qa {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding-bottom: 10px;
+        border-bottom: 0.5px solid var(--glass-border);
+        margin-bottom: 10px;
+      }
+
+      .glass-screenshot-qa:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+      }
+
+      .glass-screenshot-question {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+
+      .glass-screenshot-answer {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text-primary);
+        white-space: pre-wrap;
       }
 
       .glass-screenshot-generated-img {
@@ -2353,7 +2484,8 @@ export function getStyles(): string {
         font-size: 13px;
         opacity: 0;
         transition: all var(--duration-fast) var(--ease-out);
-        z-index: 10;
+        z-index: 2147483647;
+        pointer-events: none;
       }
 
       .glass-toast.show {

@@ -117,9 +117,20 @@ export function getTranslationHint(provider: string): string {
  * Get API key hint text
  */
 export function getAPIKeyHint(provider: string): string {
-  if (provider === 'groq') return '使用 Groq 免费服务无需配置 API Key';
   if (provider === 'custom') return '如果你的 API 需要认证，请填写 API Key';
-  return `请填写你的 ${provider.toUpperCase()} API Key`;
+  const providerNames: Record<string, string> = {
+    openai: 'OpenAI',
+    anthropic: 'Anthropic',
+    gemini: 'Google Gemini',
+    qwen: '阿里云 (通义)',
+    deepseek: 'DeepSeek',
+    minimax: 'MiniMax',
+    xai: 'xAI',
+    moonshot: 'Moonshot',
+    zhipu: '智谱',
+  };
+  const name = providerNames[provider] || provider.toUpperCase();
+  return `请填写你的 ${name} API Key`;
 }
 
 /**

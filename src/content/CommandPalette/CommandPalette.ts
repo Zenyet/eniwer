@@ -9,6 +9,7 @@ import { loadChatSession, saveChatSession, createNewChatSession, createChatMessa
 import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../../utils/ai';
 import { getAllAnnotations, deleteAnnotation as deleteAnnotationFromStorage } from '../annotation/storage';
 import { Annotation, ANNOTATION_COLORS } from '../../types/annotation';
+import { t, setLocale } from '../../i18n';
 
 // Import views
 import {
@@ -156,6 +157,8 @@ export class CommandPalette {
   private minimizedTasks: MinimizedTask[] = [];
   private minimizedTaskIdCounter = 0;
   private currentStreamKey: string | null = null; // Key to identify current active stream
+  private autoRestoreTaskId: string | null = null; // ID of task to auto-restore on next show()
+  private autoRestoreView: ViewType | null = null; // Non-task view to auto-restore on next show()
   // Track all active stream keys for concurrent tasks
   private activeStreamKeys: Set<string> = new Set();
 
@@ -196,18 +199,41 @@ export class CommandPalette {
     this.menuItems = items.filter(item => item.enabled !== false);
     this.filteredItems = this.sortByRecent(this.menuItems);
     this.callbacks = callbacks;
+    this.updateTheme();
+    // Refresh recent saved tasks when showing
+    this.loadRecentSavedTasks();
+
+    // Check if we should auto-restore the previous view
+    if (this.autoRestoreTaskId) {
+      const taskIndex = this.minimizedTasks.findIndex(t => t.id === this.autoRestoreTaskId);
+      this.autoRestoreTaskId = null;
+      if (taskIndex !== -1) {
+        const task = this.minimizedTasks.splice(taskIndex, 1)[0];
+        this.restoreStateFromTask(task);
+        this.render();
+        return;
+      }
+    }
+
+    // Check if we should auto-restore a non-task view (settings, annotations, knowledge, etc.)
+    if (this.autoRestoreView) {
+      const view = this.autoRestoreView;
+      this.autoRestoreView = null;
+      this.currentView = view;
+      this.viewStack = [];
+      this.render();
+      return;
+    }
+
+    // Normal flow - reset to commands view
     this.selectedIndex = 0;
     this.searchQuery = '';
-    // Reset view state - clear active command to show commands list
     this.currentView = 'commands';
     this.viewStack = [];
     this.activeCommand = null;
     this.activeCommandInput = '';
     this.aiResultData = null;
     this.aiResultCallbacks = null;
-    this.updateTheme();
-    // Refresh recent saved tasks when showing
-    this.loadRecentSavedTasks();
     this.render();
   }
 
@@ -224,14 +250,27 @@ export class CommandPalette {
         this.saveCurrentAsMinimized();
       }
 
-      // Auto-minimize active chat streaming task before hiding
-      if (this.isChatStreaming && this.chatSession) {
+      // Auto-minimize active chat session before hiding (streaming or completed)
+      if (this.chatSession) {
         this.saveChatAsMinimized();
       }
 
-      // Auto-minimize active screenshot loading task before hiding
-      if (this.screenshotData?.isLoading) {
+      // Auto-minimize active screenshot before hiding (loading or completed)
+      if (this.screenshotData) {
         this.saveScreenshotAsMinimized();
+      }
+
+      // Determine auto-restore strategy for next show()
+      this.autoRestoreTaskId = null;
+      this.autoRestoreView = null;
+      const nonTaskViews: ViewType[] = ['settings', 'settings-menu', 'annotations', 'knowledge', 'browseTrail'];
+      if (nonTaskViews.includes(this.currentView)) {
+        // Non-task view: restore the view directly (data persists in memory)
+        // Restore 'settings-menu' as 'settings' since viewStack won't be preserved
+        this.autoRestoreView = this.currentView === 'settings-menu' ? 'settings' : this.currentView;
+      } else if (this.currentView !== 'commands' || this.activeCommand) {
+        // Task-based view was saved as minimized — record its ID
+        this.autoRestoreTaskId = this.minimizedTasks[this.minimizedTasks.length - 1]?.id || null;
       }
 
       const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
@@ -293,15 +332,15 @@ export class CommandPalette {
 
   private getViewTitle(view: ViewType): string {
     const titles: Record<ViewType, string> = {
-      'commands': '命令',
-      'ai-result': this.aiResultData?.title || 'AI 结果',
-      'settings': '设置',
-      'settings-menu': '菜单管理',
-      'screenshot': '截图',
-      'browseTrail': '浏览轨迹',
-      'contextChat': '上下文追问',
-      'annotations': '批注',
-      'knowledge': '知识库',
+      'commands': t('view.commands'),
+      'ai-result': this.aiResultData?.title || t('view.aiResult'),
+      'settings': t('view.settings'),
+      'settings-menu': t('view.settingsMenu'),
+      'screenshot': t('view.screenshot'),
+      'browseTrail': t('view.browseTrail'),
+      'contextChat': t('view.contextChat'),
+      'annotations': t('view.annotations'),
+      'knowledge': t('view.knowledge'),
     };
     return titles[view];
   }
@@ -398,7 +437,7 @@ export class CommandPalette {
     this.activeCommand = {
       id: 'screenshot',
       action: 'screenshot',
-      label: '截图',
+      label: t('menu.screenshot'),
       icon: '',
       enabled: true,
       order: 0,
@@ -428,10 +467,10 @@ export class CommandPalette {
       this.screenshotData.isLoading = isLoading;
 
       // When finished, save to history
-      if (!isLoading && result && !result.startsWith('AI') && !result.includes('请配置') && !result.includes('请求失败')) {
+      if (!isLoading && result && !result.startsWith('AI') && !result.includes(t('aiResult.configureHint')) && !result.includes(t('aiResult.requestFailed'))) {
         if (!this.screenshotData.history) this.screenshotData.history = [];
         this.screenshotData.history.push({
-          question: this.screenshotData.currentQuestion || '描述图片',
+          question: this.screenshotData.currentQuestion || t('screenshot.describeImage'),
           answer: result,
         });
         this.screenshotData.currentQuestion = undefined;
@@ -865,20 +904,20 @@ export class CommandPalette {
   private getCommandsViewHTML(): string {
     const hasActiveCommand = this.activeCommand !== null;
     const isAIAction = hasActiveCommand && ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'].includes(this.activeCommand?.action || '');
-    const needsInput = hasActiveCommand && ['contextChat'].includes(this.activeCommand?.action || '');
+    const needsInput = hasActiveCommand && ['contextChat', 'translateInput'].includes(this.activeCommand?.action || '');
     const isLoading = this.aiResultData?.isLoading ?? false;
     const isTranslate = this.aiResultData?.resultType === 'translate';
     const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
 
     // Determine placeholder text
-    let placeholder = '搜索命令或直接提问...';
+    let placeholder = t('palette.searchPlaceholder');
     if (hasActiveCommand) {
       if (needsInput) {
-        placeholder = '输入内容后按回车...';
+        placeholder = t('palette.inputPlaceholder');
       } else if (isTranslate && this.aiResultData?.originalText) {
         placeholder = '';  // Will show original text in input
       } else if (isLoading) {
-        placeholder = '处理中...';
+        placeholder = t('palette.processingPlaceholder');
       } else {
         placeholder = '';
       }
@@ -892,7 +931,7 @@ export class CommandPalette {
         ${hasActiveCommand ? `
           <div class="glass-command-tag" data-action="${this.activeCommand?.action}">
             <span class="glass-command-tag-icon">${this.activeCommand?.icon || ''}</span>
-            <span class="glass-command-tag-label">${escapeHtml(this.activeCommand?.label || '')}</span>
+            <span class="glass-command-tag-label">${escapeHtml(this.activeCommand?.customLabel || t(this.activeCommand?.label || ''))}</span>
             <button class="glass-command-tag-close">&times;</button>
           </div>
         ` : `
@@ -908,7 +947,7 @@ export class CommandPalette {
           ${isAIAction && !needsInput ? 'readonly' : ''}
         />
         ${hasActiveCommand ? `
-          <button class="glass-header-btn glass-btn-stop" title="终止" style="display: ${isLoading ? 'flex' : 'none'}">
+          <button class="glass-header-btn glass-btn-stop" title="${t('common.abort')}" style="display: ${isLoading ? 'flex' : 'none'}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="6" y="6" width="12" height="12" rx="2"></rect>
             </svg>
@@ -936,18 +975,18 @@ export class CommandPalette {
           <div class="glass-ai-footer-actions">
             ${isTranslate ? getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
             ${isTranslate && this.aiResultData?.originalText ? `
-              <button class="glass-footer-btn glass-btn-compare" title="对比原文">
+              <button class="glass-footer-btn glass-btn-compare" title="${t('aiResult.compareOriginal')}">
                 ${icons.columns}
               </button>
             ` : ''}
-            <button class="glass-footer-btn glass-btn-copy" title="复制" style="display: ${this.aiResultData?.content ? 'flex' : 'none'}">
+            <button class="glass-footer-btn glass-btn-copy" title="${t('common.copy')}" style="display: ${this.aiResultData?.content ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
               </svg>
             </button>
             ${this.activeCommand?.action === 'summarizePage' && !isSavedTask ? `
-              <button class="glass-footer-btn glass-btn-refresh" title="重新总结" style="display: ${!isLoading ? 'flex' : 'none'}">
+              <button class="glass-footer-btn glass-btn-refresh" title="${t('aiResult.resummarize')}" style="display: ${!isLoading ? 'flex' : 'none'}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 2v6h-6"></path>
                   <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
@@ -957,7 +996,7 @@ export class CommandPalette {
               </button>
             ` : ''}
             ${!isSavedTask ? `
-            <button class="glass-footer-btn glass-btn-save" title="保存" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
+            <button class="glass-footer-btn glass-btn-save" title="${t('common.save')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                 <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -965,14 +1004,14 @@ export class CommandPalette {
               </svg>
             </button>
             ${this.aiResultData?.originalText ? `
-            <button class="glass-footer-btn glass-btn-annotate" title="保存到批注" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
+            <button class="glass-footer-btn glass-btn-annotate" title="${t('aiResult.saveToAnnotation')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9"></path>
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
               </svg>
             </button>
             ` : ''}
-            <button class="glass-footer-btn glass-btn-export-drive" title="导出到 Google Drive" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
+            <button class="glass-footer-btn glass-btn-export-drive" title="${t('aiResult.exportToDrive')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2L4.5 12.5h5.5v9.5h4v-9.5h5.5L12 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M4 18.5L8 12.5L12 18.5L16 12.5L20 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -982,8 +1021,8 @@ export class CommandPalette {
           </div>
         ` : `
           <div class="glass-hints">
-            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></kbd><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></kbd> 导航</span>
-            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg></kbd> 执行</span>
+            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></kbd><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></kbd> ${t('palette.navigate')}</span>
+            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg></kbd> ${t('palette.execute')}</span>
           </div>
         `}
         <div class="glass-brand">
@@ -1088,6 +1127,14 @@ export class CommandPalette {
         if (e.key === 'Escape') {
           e.preventDefault();
           this.clearActiveCommand();
+        } else if (e.key === 'Enter' && this.activeCommand?.action === 'translateInput') {
+          e.preventDefault();
+          const text = input.value.trim();
+          if (text) {
+            this.callbacks?.onTranslateInput?.(text);
+            input.value = '';
+            this.activeCommandInput = '';
+          }
         }
         // For commands that need input (like contextChat), handle Enter
         return;
@@ -1316,6 +1363,37 @@ export class CommandPalette {
     }
   }
 
+  private async saveChatToKnowledge(btn: HTMLButtonElement): Promise<void> {
+    if (!this.chatSession) return;
+    const lastAssistantMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'assistant' && m.content);
+    if (!lastAssistantMsg) return;
+
+    // Title: first 20 chars of last user message
+    const lastUserMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'user');
+    const title = lastUserMsg
+      ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
+      : (this.isQuickAsk ? t('chat.quickAsk') : t('menu.contextChat'));
+
+    try {
+      await saveTask({
+        title,
+        content: lastAssistantMsg.content,
+        thinking: lastAssistantMsg.thinking,
+        resultType: 'general',
+        actionType: this.isQuickAsk ? 'quickAsk' : 'contextChat',
+        sourceUrl: window.location.href,
+        sourceTitle: document.title,
+        createdAt: Date.now(),
+      });
+      const maxCount = this.config.history?.maxSaveCount || DEFAULT_HISTORY_CONFIG.maxSaveCount;
+      await enforceMaxCount(maxCount);
+      await this.loadRecentSavedTasks();
+      this.showSaveFeedback(btn);
+    } catch (error) {
+      console.error('Failed to save chat:', error);
+    }
+  }
+
   private showSaveFeedback(btn: HTMLButtonElement, delay: number = 0): void {
     const originalHTML = btn.innerHTML;
     const doFeedback = () => {
@@ -1367,7 +1445,7 @@ export class CommandPalette {
       btn.classList.add('saved');
     } catch (error) {
       console.error('Save to annotation error:', error);
-      this.showToast('保存失败');
+      this.showToast(t('chat.saveFailed'));
       btn.innerHTML = originalHTML;
     } finally {
       btn.disabled = false;
@@ -1383,7 +1461,7 @@ export class CommandPalette {
 
     // Check if logged in
     if (!this.authState?.isLoggedIn) {
-      this.showToast('请先登录 Google 账号');
+      this.showToast(t('settings.loginGoogle'));
       return;
     }
 
@@ -1412,19 +1490,19 @@ export class CommandPalette {
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         `;
-        this.showToast('已导出到 Google Docs');
+        this.showToast(t('settings.exportedToDocs'));
 
         // Open the doc in a new tab
         setTimeout(() => {
           window.open(response.fileUrl, '_blank');
         }, 500);
       } else {
-        this.showToast(response.error || '导出失败');
+        this.showToast(response.error || t('settings.exportFailed'));
         btn.innerHTML = originalHTML;
       }
     } catch (error) {
       console.error('Export to Drive error:', error);
-      this.showToast('导出失败');
+      this.showToast(t('settings.exportFailed'));
       btn.innerHTML = originalHTML;
     } finally {
       btn.disabled = false;
@@ -1547,12 +1625,12 @@ export class CommandPalette {
         <div class="glass-header-actions">
           ${isTranslate ? getTranslateLanguageSelectHTML(data.translateTargetLanguage || 'zh-CN') : ''}
           ${isTranslate ? `
-            <button class="glass-header-btn glass-btn-compare" title="对比原文">
+            <button class="glass-header-btn glass-btn-compare" title="${t('aiResult.compareOriginal')}">
               ${icons.columns}
             </button>
           ` : ''}
           ${isPageAction && !data.isLoading ? `
-            <button class="glass-header-btn glass-btn-refresh" title="重新总结">
+            <button class="glass-header-btn glass-btn-refresh" title="${t('aiResult.resummarize')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 2v6h-6"></path>
                 <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
@@ -1561,18 +1639,18 @@ export class CommandPalette {
               </svg>
             </button>
           ` : ''}
-          <button class="glass-header-btn glass-btn-copy" title="复制">
+          <button class="glass-header-btn glass-btn-copy" title="${t('common.copy')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
           </button>
-          <button class="glass-header-btn glass-btn-stop" title="终止" style="display: ${data.isLoading ? 'flex' : 'none'}">
+          <button class="glass-header-btn glass-btn-stop" title="${t('common.abort')}" style="display: ${data.isLoading ? 'flex' : 'none'}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="6" y="6" width="12" height="12" rx="2"></rect>
             </svg>
           </button>
-          <button class="glass-minimize-btn" title="最小化">
+          <button class="glass-minimize-btn" title="${t('common.minimize')}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
@@ -1801,7 +1879,7 @@ export class CommandPalette {
     const lastUserMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'user');
     const title = lastUserMsg
       ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
-      : '对话';
+      : t('chat.conversation');
 
     const task: MinimizedTask = {
       id: `task-${++this.minimizedTaskIdCounter}`,
@@ -1814,7 +1892,7 @@ export class CommandPalette {
       taskType: 'contextChat',
       chatSession: this.chatSession,
       isQuickAsk: this.isQuickAsk,
-      iconHtml: icons.messageCircle,
+      iconHtml: this.isQuickAsk ? icons.messageCircle : icons.contextChat,
     };
     this.minimizedTasks.push(task);
 
@@ -1828,10 +1906,10 @@ export class CommandPalette {
 
     const task: MinimizedTask = {
       id: `task-${++this.minimizedTaskIdCounter}`,
-      title: '截图分析',
+      title: t('screenshot.screenshotAnalysis'),
       content: this.screenshotData.result || '',
       resultType: 'general',
-      isLoading: true,
+      isLoading: this.screenshotData.isLoading,
       minimizedAt: Date.now(),
       createdAt: Date.now(),
       taskType: 'screenshot',
@@ -1851,25 +1929,12 @@ export class CommandPalette {
     this.hide();
   }
 
-  private restoreMinimizedTask(taskId: string): void {
-    // Find and remove the target task from minimized list first
-    // (before saveCurrentAsMinimized to avoid dedup conflicts)
-    const taskIndex = this.minimizedTasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-    const task = this.minimizedTasks.splice(taskIndex, 1)[0];
-
-    // Branch by task type
+  /**
+   * Restore state from a minimized task without rendering.
+   * Sets all relevant properties so the view can be rendered afterward.
+   */
+  private restoreStateFromTask(task: MinimizedTask): void {
     if (task.taskType === 'contextChat') {
-      // Save current active state as minimized before overwriting
-      this.saveCurrentAsMinimized();
-      if (this.isChatStreaming && this.chatSession) {
-        this.saveChatAsMinimized();
-      }
-      if (this.screenshotData?.isLoading) {
-        this.saveScreenshotAsMinimized();
-      }
-
-      // Restore chat session
       this.chatSession = task.chatSession || null;
       this.isQuickAsk = task.isQuickAsk || false;
       this.isChatStreaming = task.isLoading;
@@ -1877,29 +1942,18 @@ export class CommandPalette {
       this.activeCommand = {
         id: task.isQuickAsk ? 'quickAsk' : 'contextChat',
         action: 'contextChat',
-        label: task.isQuickAsk ? '快速提问' : '上下文追问',
-        icon: icons.messageCircle,
+        label: task.isQuickAsk ? t('chat.quickAskLabel') : t('chat.contextChatLabel'),
+        icon: task.isQuickAsk ? icons.messageCircle : icons.contextChat,
         enabled: true,
         order: 0,
       };
 
       this.currentView = 'contextChat';
       this.viewStack = [];
-      this.renderCurrentView(true, true);
       return;
     }
 
     if (task.taskType === 'screenshot') {
-      // Save current active state as minimized before overwriting
-      this.saveCurrentAsMinimized();
-      if (this.isChatStreaming && this.chatSession) {
-        this.saveChatAsMinimized();
-      }
-      if (this.screenshotData?.isLoading) {
-        this.saveScreenshotAsMinimized();
-      }
-
-      // Restore screenshot data
       this.screenshotData = {
         dataUrl: task.screenshotDataUrl || '',
         isLoading: task.isLoading,
@@ -1909,7 +1963,7 @@ export class CommandPalette {
       this.activeCommand = {
         id: 'screenshot',
         action: 'screenshot',
-        label: '截图',
+        label: t('menu.screenshot'),
         icon: '',
         enabled: true,
         order: 0,
@@ -1917,15 +1971,10 @@ export class CommandPalette {
 
       this.currentView = 'screenshot';
       this.viewStack = [];
-      this.renderCurrentView(true, true);
       return;
     }
 
     // Default: ai-result task type
-    // Save current active task as minimized before overwriting
-    this.saveCurrentAsMinimized();
-
-    // Restore as active AI result
     this.aiResultData = {
       title: task.title,
       content: task.content,
@@ -1935,20 +1984,17 @@ export class CommandPalette {
       resultType: task.resultType,
       translateTargetLanguage: task.translateTargetLanguage,
       iconHtml: task.iconHtml,
-      streamKey: task.streamKey, // Restore streamKey for ongoing updates
-      // Extended metadata
+      streamKey: task.streamKey,
       actionType: task.actionType,
       sourceUrl: task.sourceUrl,
       sourceTitle: task.sourceTitle,
       createdAt: task.createdAt,
     };
 
-    // If this task is still loading, restore the stream key reference
     if (task.isLoading && task.streamKey) {
       this.currentStreamKey = task.streamKey;
     }
 
-    // Create a mock MenuItem for the active command
     this.activeCommand = {
       id: task.actionType || 'unknown',
       label: task.title,
@@ -1958,15 +2004,32 @@ export class CommandPalette {
       order: 0,
     };
 
-    // Restore callbacks from minimized task, ensuring onStop is available
     this.aiResultCallbacks = {
       ...task.callbacks,
       onStop: () => abortAllRequests(),
     };
 
-    // Use unified interface - stay in commands view with active command
     this.currentView = 'commands';
     this.viewStack = [];
+  }
+
+  private restoreMinimizedTask(taskId: string): void {
+    // Find and remove the target task from minimized list first
+    // (before saveCurrentAsMinimized to avoid dedup conflicts)
+    const taskIndex = this.minimizedTasks.findIndex(t => t.id === taskId);
+    if (taskIndex === -1) return;
+    const task = this.minimizedTasks.splice(taskIndex, 1)[0];
+
+    // Save current active state as minimized before overwriting
+    this.saveCurrentAsMinimized();
+    if (this.isChatStreaming && this.chatSession) {
+      this.saveChatAsMinimized();
+    }
+    if (this.screenshotData?.isLoading) {
+      this.saveScreenshotAsMinimized();
+    }
+
+    this.restoreStateFromTask(task);
     this.renderCurrentView(true, true);
   }
 
@@ -2002,12 +2065,12 @@ export class CommandPalette {
         contentEl.innerHTML = `
           <div class="glass-compare-view">
             <div class="glass-compare-item">
-              <div class="glass-compare-label">原文</div>
+              <div class="glass-compare-label">${t('aiResult.originalText')}</div>
               <div class="glass-compare-content">${formatAIContent(this.aiResultData.originalText)}</div>
             </div>
             <div class="glass-compare-divider"></div>
             <div class="glass-compare-item">
-              <div class="glass-compare-label">译文</div>
+              <div class="glass-compare-label">${t('aiResult.translatedText')}</div>
               <div class="glass-compare-content">${this.aiResultData.isLoading && !this.aiResultData.content ? getLoadingHTML() : formatAIContent(this.aiResultData.content)}</div>
             </div>
           </div>
@@ -2237,6 +2300,14 @@ export class CommandPalette {
       markChanged();
     });
 
+    // UI language select
+    const uiLangSelect = this.shadowRoot.querySelector('#ui-lang-select') as HTMLSelectElement;
+    uiLangSelect?.addEventListener('change', () => {
+      tempConfig.uiLanguage = uiLangSelect.value;
+      setLocale(uiLangSelect.value);
+      markChanged();
+    });
+
     // Summary language select
     const summarySelect = this.shadowRoot.querySelector('#summary-lang-select') as HTMLSelectElement;
     summarySelect?.addEventListener('change', () => {
@@ -2426,11 +2497,11 @@ export class CommandPalette {
     // Clear history (immediate action, not affected by save/cancel)
     const clearBtn = this.shadowRoot.querySelector('#clear-history');
     clearBtn?.addEventListener('click', async () => {
-      if (confirm('确定要清空所有历史记录吗？此操作不可撤销。')) {
+      if (confirm(t('confirm.clearHistory'))) {
         const { clearAllTasks } = await import('../../utils/taskStorage');
         await clearAllTasks();
         this.recentSavedTasks = [];
-        this.showToast('历史记录已清空');
+        this.showToast(t('settings.historyCleared'));
       }
     });
 
@@ -2526,14 +2597,14 @@ export class CommandPalette {
     // Reset button (immediate action)
     const resetBtn = this.shadowRoot.querySelector('.glass-btn-reset');
     resetBtn?.addEventListener('click', async () => {
-      if (confirm('确定要重置所有设置吗？')) {
+      if (confirm(t('confirm.resetSettings'))) {
         await saveConfig(DEFAULT_CONFIG);
         await saveGlobalMenuItems(DEFAULT_GLOBAL_MENU);
         this.config = { ...DEFAULT_CONFIG };
         this.tempConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
         this.settingsMenuItems = [...DEFAULT_GLOBAL_MENU];
         this.settingsChanged = false;
-        this.showToast('已重置为默认设置');
+        this.showToast(t('settings.resetDone'));
         this.renderCurrentView(true, true);
       }
     });
@@ -2553,11 +2624,11 @@ export class CommandPalette {
     const QUOTA = 10 * 1024 * 1024; // 10 MB
 
     const categories: { keys: string[]; label: string; color: string }[] = [
-      { keys: ['thecircle_saved_tasks'], label: 'AI 结果', color: '#3b82f6' },
-      { keys: ['thecircle_annotations'], label: '批注', color: '#a855f7' },
-      { keys: ['thecircle_browse_trail'], label: '浏览轨迹', color: '#22c55e' },
-      { keys: ['thecircle_chat_sessions'], label: '聊天记录', color: '#f97316' },
-      { keys: ['thecircle_data', 'thecircle_config'], label: '配置', color: '#9ca3af' },
+      { keys: ['thecircle_saved_tasks'], label: t('storage.aiResults'), color: '#3b82f6' },
+      { keys: ['thecircle_annotations'], label: t('storage.annotations'), color: '#a855f7' },
+      { keys: ['thecircle_browse_trail'], label: t('storage.browseTrail'), color: '#22c55e' },
+      { keys: ['thecircle_chat_sessions'], label: t('storage.chatRecords'), color: '#f97316' },
+      { keys: ['thecircle_data', 'thecircle_config'], label: t('storage.config'), color: '#9ca3af' },
     ];
 
     const formatBytes = (bytes: number): string => {
@@ -2579,7 +2650,7 @@ export class CommandPalette {
       }
 
       const otherBytes = Math.max(0, totalBytes - knownBytes);
-      results.push({ label: '其他', color: '#d1d5db', bytes: otherBytes });
+      results.push({ label: t('storage.other'), color: '#d1d5db', bytes: otherBytes });
 
       // Update progress bar
       const percent = Math.min((totalBytes / QUOTA) * 100, 100);
@@ -2605,7 +2676,7 @@ export class CommandPalette {
       }
     } catch {
       const usedEl = this.shadowRoot.querySelector('#storage-used') as HTMLElement;
-      if (usedEl) usedEl.textContent = '无法获取存储信息';
+      if (usedEl) usedEl.textContent = t('settings.cannotGetStorageInfo');
     }
   }
 
@@ -2628,6 +2699,8 @@ export class CommandPalette {
   private async saveSettings(): Promise<void> {
     if (!this.tempConfig) return;
 
+    const langChanged = this.tempConfig.uiLanguage !== this.config.uiLanguage;
+
     // Save to storage
     await saveConfig(this.tempConfig);
     this.config = this.tempConfig;
@@ -2641,7 +2714,12 @@ export class CommandPalette {
     // Keep tempConfig for continued editing, just reset changed flag
     this.tempConfig = JSON.parse(JSON.stringify(this.config));
     this.settingsChanged = false;
-    this.showToast('设置已保存');
+    this.showToast(t('settings.saved'));
+
+    // Re-render settings view if language changed so all labels update immediately
+    if (langChanged) {
+      this.renderCurrentView(true, true);
+    }
   }
 
   // Account Settings HTML
@@ -2668,13 +2746,13 @@ export class CommandPalette {
       if (response.success) {
         await this.loadAuthState();
         this.renderCurrentView(true, true);
-        this.showToast('登录成功');
+        this.showToast(t('settings.loginSuccess'));
       } else {
-        this.showToast(response.error || '登录失败');
+        this.showToast(response.error || t('settings.loginFailed'));
       }
     } catch (error) {
       console.error('Google login error:', error);
-      this.showToast('登录失败');
+      this.showToast(t('settings.loginFailed'));
     }
   }
 
@@ -2685,13 +2763,13 @@ export class CommandPalette {
       if (response.success) {
         this.authState = { isLoggedIn: false, user: null, syncEnabled: false };
         this.renderCurrentView(true, true);
-        this.showToast('已退出登录');
+        this.showToast(t('settings.logoutSuccess'));
       } else {
-        this.showToast(response.error || '退出失败');
+        this.showToast(response.error || t('settings.logoutFailed'));
       }
     } catch (error) {
       console.error('Google logout error:', error);
-      this.showToast('退出失败');
+      this.showToast(t('settings.logoutFailed'));
     }
   }
 
@@ -2712,37 +2790,37 @@ export class CommandPalette {
           this.config = data.config;
           this.tempConfig = JSON.parse(JSON.stringify(this.config));
           this.renderCurrentView(true, true);
-          this.showToast('同步已开启，已恢复云端配置');
+          this.showToast(t('settings.syncEnabledWithRestore'));
         } else {
           // No cloud data, upload current config
           await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
-          this.showToast('同步已开启');
+          this.showToast(t('settings.syncEnabled'));
         }
       } else {
-        this.showToast('同步已关闭');
+        this.showToast(t('settings.syncDisabled'));
       }
     } catch (error) {
       console.error('Sync toggle error:', error);
-      this.showToast('操作失败');
+      this.showToast(t('settings.operationFailed'));
     }
   }
 
   // Manual sync to cloud
   private async handleSyncToCloud(btn: HTMLButtonElement): Promise<void> {
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<span class="glass-spinner"></span> 同步中...';
+    btn.innerHTML = '<span class="glass-spinner"></span> ' + t('settings.syncing');
     btn.disabled = true;
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
       if (response.success) {
-        this.showToast('已上传到云端');
+        this.showToast(t('settings.uploadSuccess'));
       } else {
-        this.showToast(response.error || '上传失败');
+        this.showToast(response.error || t('settings.uploadFailed'));
       }
     } catch (error) {
       console.error('Sync to cloud error:', error);
-      this.showToast('上传失败');
+      this.showToast(t('settings.uploadFailed'));
     } finally {
       btn.innerHTML = originalHTML;
       btn.disabled = false;
@@ -2752,13 +2830,13 @@ export class CommandPalette {
   // Manual sync from cloud
   private async handleSyncFromCloud(btn: HTMLButtonElement): Promise<void> {
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<span class="glass-spinner"></span> 同步中...';
+    btn.innerHTML = '<span class="glass-spinner"></span> ' + t('settings.syncing');
     btn.disabled = true;
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'SYNC_FROM_CLOUD' });
       if (response.success) {
-        this.showToast('已从云端恢复');
+        this.showToast(t('settings.downloadSuccess'));
         // Reload config to reflect changes
         const { getStorageData } = await import('../../utils/storage');
         const data = await getStorageData();
@@ -2766,11 +2844,11 @@ export class CommandPalette {
         this.tempConfig = JSON.parse(JSON.stringify(this.config));
         this.renderCurrentView(true, true);
       } else {
-        this.showToast(response.error || '恢复失败');
+        this.showToast(response.error || t('settings.restoreFailed'));
       }
     } catch (error) {
       console.error('Sync from cloud error:', error);
-      this.showToast(`恢复失败: ${error}`);
+      this.showToast(t('settings.restoreFailed'));
     } finally {
       btn.innerHTML = originalHTML;
       btn.disabled = false;
@@ -2798,13 +2876,13 @@ export class CommandPalette {
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
-      <span>加载中...</span>
+      <span>${t('common.loading')}</span>
     </div>`;
 
     try {
       const response = await chrome.runtime.sendMessage({ type: 'LIST_BACKUPS' });
       if (!response.success) {
-        listEl.innerHTML = `<div class="glass-backup-empty"><span>${response.error || '加载失败'}</span></div>`;
+        listEl.innerHTML = `<div class="glass-backup-empty"><span>${response.error || t('settings.loadFailed')}</span></div>`;
         return;
       }
 
@@ -2814,7 +2892,7 @@ export class CommandPalette {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
           </svg>
-          <span>暂无备份</span>
+          <span>${t('settings.noBackups')}</span>
         </div>`;
         return;
       }
@@ -2825,17 +2903,17 @@ export class CommandPalette {
             <div class="glass-backup-dot"></div>
             <div class="glass-backup-meta">
               <span class="glass-backup-time">${this.formatBackupTime(b.timestamp)}</span>
-              <span class="glass-backup-label">${i === 0 ? '最新备份' : this.formatRelativeTime(b.timestamp)}</span>
+              <span class="glass-backup-label">${i === 0 ? t('settings.latestBackup') : this.formatRelativeTime(b.timestamp)}</span>
             </div>
           </div>
           <div class="glass-backup-actions">
-            <button class="glass-backup-action-btn glass-btn-restore" data-id="${b.id}" title="恢复此备份">
+            <button class="glass-backup-action-btn glass-btn-restore" data-id="${b.id}" title="${t('settings.restoreBackup')}">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1 4 1 10 7 10"></polyline>
                 <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
               </svg>
             </button>
-            <button class="glass-backup-action-btn glass-backup-action-btn-danger glass-btn-delete-backup" data-id="${b.id}" title="删除此备份">
+            <button class="glass-backup-action-btn glass-backup-action-btn-danger glass-btn-delete-backup" data-id="${b.id}" title="${t('settings.deleteBackup')}">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -2862,20 +2940,20 @@ export class CommandPalette {
       });
     } catch (error) {
       console.error('Load backup list error:', error);
-      listEl.innerHTML = `<div class="glass-backup-empty"><span>加载失败</span></div>`;
+      listEl.innerHTML = `<div class="glass-backup-empty"><span>${t('settings.loadFailed')}</span></div>`;
     }
   }
 
   private formatRelativeTime(timestamp: number): string {
     const diff = Date.now() - timestamp;
     const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return '刚刚';
-    if (minutes < 60) return `${minutes} 分钟前`;
+    if (minutes < 1) return t('time.justNow');
+    if (minutes < 60) return t('time.minutesAgo', { n: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} 小时前`;
+    if (hours < 24) return t('time.hoursAgo', { n: hours });
     const days = Math.floor(hours / 24);
-    if (days < 30) return `${days} 天前`;
-    return `${Math.floor(days / 30)} 个月前`;
+    if (days < 30) return t('time.daysAgo', { n: days });
+    return t('time.monthsAgo', { n: Math.floor(days / 30) });
   }
 
   private static SPINNER_SVG = '<svg class="glass-backup-spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10" /></svg>';
@@ -2891,18 +2969,18 @@ export class CommandPalette {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'RESTORE_BACKUP', payload: { fileId } });
       if (response.success) {
-        this.showToast('已恢复备份');
+        this.showToast(t('settings.backupRestored'));
         const { getStorageData } = await import('../../utils/storage');
         const data = await getStorageData();
         this.config = data.config;
         this.tempConfig = JSON.parse(JSON.stringify(this.config));
         this.renderCurrentView(true, true);
       } else {
-        this.showToast(response.error || '恢复失败');
+        this.showToast(response.error || t('settings.restoreFailed'));
       }
     } catch (error) {
       console.error('Restore backup error:', error);
-      this.showToast('恢复失败');
+      this.showToast(t('settings.restoreFailed'));
     } finally {
       btn.innerHTML = originalHTML;
       btn.disabled = false;
@@ -2921,14 +2999,14 @@ export class CommandPalette {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'DELETE_BACKUP', payload: { fileId } });
       if (response.success) {
-        this.showToast('已删除备份');
+        this.showToast(t('settings.backupDeleted'));
         this.loadBackupList();
       } else {
-        this.showToast(response.error || '删除失败');
+        this.showToast(response.error || t('settings.deleteFailed'));
       }
     } catch (error) {
       console.error('Delete backup error:', error);
-      this.showToast('删除失败');
+      this.showToast(t('settings.deleteFailed'));
     } finally {
       btn.innerHTML = originalHTML;
       btn.disabled = false;
@@ -2976,7 +3054,7 @@ export class CommandPalette {
         if (item) {
           item.enabled = input.checked;
           await saveGlobalMenuItems(this.settingsMenuItems);
-          this.showToast('菜单项已更新');
+          this.showToast(t('settings.menuItemUpdated'));
         }
       });
     });
@@ -2989,7 +3067,7 @@ export class CommandPalette {
           this.settingsMenuItems = this.settingsMenuItems.filter(m => m.id !== id);
           await saveGlobalMenuItems(this.settingsMenuItems);
           this.renderCurrentView(true, true);
-          this.showToast('菜单项已删除');
+          this.showToast(t('settings.menuItemDeleted'));
         }
       });
     });
@@ -2997,7 +3075,7 @@ export class CommandPalette {
     // Add button
     const addBtn = this.shadowRoot.querySelector('.glass-btn-add');
     addBtn?.addEventListener('click', () => {
-      this.showToast('请在设置页面添加自定义菜单项');
+      this.showToast(t('settings.addCustomInSettings'));
     });
 
     // Setup drag and drop
@@ -3072,17 +3150,17 @@ export class CommandPalette {
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="screenshot">
           <span class="glass-command-tag-icon">${icons.screenshot || icons.camera || ''}</span>
-          <span class="glass-command-tag-label">截图</span>
+          <span class="glass-command-tag-label">${t('menu.screenshot')}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
           type="text"
           class="glass-input glass-screenshot-input"
-          placeholder="输入问题，按回车询问 AI..."
+          placeholder="${t('screenshot.inputPlaceholder')}"
           autocomplete="off"
           spellcheck="false"
         />
-        <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="终止" style="display: ${this.screenshotData?.isLoading ? 'flex' : 'none'}">
+        <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="${t('common.abort')}" style="display: ${this.screenshotData?.isLoading ? 'flex' : 'none'}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="6" y="6" width="12" height="12" rx="2"></rect>
           </svg>
@@ -3106,14 +3184,14 @@ export class CommandPalette {
               <polyline points="7 10 12 15 17 10"/>
               <line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            保存
+            ${t('common.save')}
           </button>
           <button class="glass-btn glass-btn-copy-img">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            复制
+            ${t('common.copy')}
           </button>
           <button class="glass-btn glass-btn-describe">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3122,7 +3200,7 @@ export class CommandPalette {
               <line x1="16" y1="13" x2="8" y2="13"></line>
               <line x1="16" y1="17" x2="8" y2="17"></line>
             </svg>
-            描述
+            ${t('screenshot.describeBtn')}
           </button>
         </div>
         <div class="glass-brand">
@@ -3151,11 +3229,11 @@ export class CommandPalette {
     if (this.screenshotData.generatedImageUrl) {
       html += `
         <div class="glass-screenshot-result">
-          <div class="glass-screenshot-generated-label">生成的图片</div>
+          <div class="glass-screenshot-generated-label">${t('screenshot.generatedImage')}</div>
           <img class="glass-screenshot-generated-img" src="${this.screenshotData.generatedImageUrl}" alt="Generated" />
           <div class="glass-screenshot-result-actions">
-            <button class="glass-btn glass-btn-copy-result">复制图片</button>
-            <button class="glass-btn glass-btn-save-result">保存图片</button>
+            <button class="glass-btn glass-btn-copy-result">${t('screenshot.copyImage')}</button>
+            <button class="glass-btn glass-btn-save-result">${t('screenshot.saveImage')}</button>
           </div>
         </div>
       `;
@@ -3166,10 +3244,10 @@ export class CommandPalette {
     if (this.screenshotData.result) {
       html += `
         <div class="glass-screenshot-qa">
-          <div class="glass-screenshot-question">${escapeHtml(this.screenshotData.currentQuestion || '描述图片')}</div>
+          <div class="glass-screenshot-question">${escapeHtml(this.screenshotData.currentQuestion || t('screenshot.describeImage'))}</div>
           <div class="glass-screenshot-answer">${escapeHtml(this.screenshotData.result)}</div>
           ${!this.screenshotData.isLoading ? `<div class="glass-screenshot-result-actions">
-            <button class="glass-footer-btn glass-btn-copy-result" title="复制">
+            <button class="glass-footer-btn glass-btn-copy-result" title="${t('common.copy')}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -3185,7 +3263,7 @@ export class CommandPalette {
       html += `
         <div class="glass-loading">
           <div class="glass-loading-spinner"></div>
-          <span>处理中...</span>
+          <span>${t('common.processing')}</span>
         </div>
       `;
     }
@@ -3251,7 +3329,7 @@ export class CommandPalette {
     // Describe button
     const describeBtn = this.shadowRoot.querySelector('.glass-btn-describe');
     describeBtn?.addEventListener('click', () => {
-      this.screenshotData!.currentQuestion = '描述图片';
+      this.screenshotData!.currentQuestion = t('screenshot.describeImage');
       this.screenshotData!.result = undefined;
       this.screenshotData!.isLoading = true;
       this.renderScreenshotContent();
@@ -3324,7 +3402,7 @@ export class CommandPalette {
     } else {
       // Filter commands locally (instant)
       this.filteredItems = this.menuItems.filter(item => {
-        const label = (item.customLabel || item.label).toLowerCase();
+        const label = (item.customLabel || t(item.label)).toLowerCase();
         const action = item.action.toLowerCase();
         return label.includes(this.searchQuery) || action.includes(this.searchQuery);
       });
@@ -3433,14 +3511,14 @@ export class CommandPalette {
     if (this.filteredItems.length === 0) {
       container.innerHTML = `
         <div class="glass-empty">
-          <span>没有匹配的命令</span>
+          <span>${t('palette.noMatchingCommands')}</span>
         </div>
       `;
     } else {
       container.innerHTML = this.filteredItems.map((item, index) => {
         const isSelected = index === this.selectedIndex;
         const displayIcon = item.customIcon || item.icon;
-        const displayLabel = item.customLabel || item.label;
+        const displayLabel = item.customLabel || t(item.label);
         const shortcutKey = index < 9 && !this.searchQuery ? index + 1 : null;
         const isRecent = this.recentCommands.includes(item.id) && !this.searchQuery;
 
@@ -3448,7 +3526,7 @@ export class CommandPalette {
           <div class="glass-item ${isSelected ? 'selected' : ''}" data-index="${index}">
             <div class="glass-item-icon">${displayIcon}</div>
             <div class="glass-item-label">${escapeHtml(displayLabel)}</div>
-            ${isRecent ? '<span class="glass-item-badge">最近</span>' : ''}
+            ${isRecent ? `<span class="glass-item-badge">${t('palette.recent')}</span>` : ''}
             ${shortcutKey ? `<kbd class="glass-item-key">${shortcutKey}</kbd>` : ''}
           </div>
         `;
@@ -3486,7 +3564,7 @@ export class CommandPalette {
     if (!hasResults && !this.isGlobalSearchLoading) {
       container.innerHTML = `
         <div class="glass-empty">
-          <span>没有找到匹配的结果</span>
+          <span>${t('palette.noMatchingResults')}</span>
         </div>
       `;
       return;
@@ -3498,11 +3576,11 @@ export class CommandPalette {
     if (commands.length > 0) {
       html += `
         <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.command} 命令</div>
+          <div class="glass-search-section-title">${icons.command} ${t('palette.commandsSection')}</div>
           ${commands.slice(0, 5).map((item, index) => `
             <div class="glass-item ${index === this.selectedIndex ? 'selected' : ''}" data-type="command" data-index="${index}" data-id="${item.id}">
               <div class="glass-item-icon">${item.customIcon || item.icon}</div>
-              <div class="glass-item-label">${escapeHtml(item.customLabel || item.label)}</div>
+              <div class="glass-item-label">${escapeHtml(item.customLabel || t(item.label))}</div>
             </div>
           `).join('')}
         </div>
@@ -3513,10 +3591,10 @@ export class CommandPalette {
     if (knowledge.length > 0) {
       html += `
         <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.library} 知识库</div>
+          <div class="glass-search-section-title">${icons.library} ${t('palette.knowledgeSection')}</div>
           ${knowledge.map(item => {
             const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
-            const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
+            const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
             const preview = item.content.substring(0, 60) + (item.content.length > 60 ? '...' : '');
             return `
               <div class="glass-search-result" data-type="knowledge" data-id="${item.id}" data-url="${escapeHtml(item.url)}">
@@ -3537,12 +3615,12 @@ export class CommandPalette {
     if (trails.length > 0) {
       html += `
         <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.history} 浏览轨迹</div>
+          <div class="glass-search-section-title">${icons.history} ${t('palette.browseTrailSection')}</div>
           ${trails.map(entry => `
             <div class="glass-search-result" data-type="trail" data-url="${escapeHtml(entry.url)}">
               <div class="glass-search-result-icon">${icons.globe}</div>
               <div class="glass-search-result-content">
-                <div class="glass-search-result-title">${escapeHtml(entry.title || '无标题')}</div>
+                <div class="glass-search-result-title">${escapeHtml(entry.title || t('trail.noTitle'))}</div>
                 ${entry.summary ? `<div class="glass-search-result-preview">${escapeHtml(entry.summary.substring(0, 60))}...</div>` : ''}
                 <div class="glass-search-result-meta">${new URL(entry.url).hostname}</div>
               </div>
@@ -3557,7 +3635,7 @@ export class CommandPalette {
       html += `
         <div class="glass-search-loading">
           <span class="glass-search-loading-spinner"></span>
-          <span>搜索中...</span>
+          <span>${t('palette.searchingResults')}</span>
         </div>
       `;
     }
@@ -3611,7 +3689,7 @@ export class CommandPalette {
     }
 
     section.innerHTML = `
-      <div class="glass-section-label">进行中</div>
+      <div class="glass-section-label">${t('palette.inProgress')}</div>
       ${this.minimizedTasks.map(task => {
         const icon = task.iconHtml || getDefaultMinimizedIcon();
         const meta = getTaskMetaInfo(task);
@@ -3619,7 +3697,7 @@ export class CommandPalette {
           <div class="glass-minimized-task" data-task-id="${task.id}">
             <div class="glass-task-icon">${icon}</div>
             <div class="glass-task-info">
-              <div class="glass-task-title">${escapeHtml(task.title)}</div>
+              <div class="glass-task-title">${escapeHtml(t(task.title))}</div>
               <div class="glass-task-meta">${meta}</div>
             </div>
             ${task.isLoading ? '<div class="glass-minimized-task-loading"></div>' : ''}
@@ -3668,7 +3746,7 @@ export class CommandPalette {
     }
 
     section.innerHTML = `
-      <div class="glass-section-label">最近记录</div>
+      <div class="glass-section-label">${t('palette.recentRecords')}</div>
       ${filteredTasks.map(task => {
         const icon = getActionIcon(task.actionType);
         const meta = getSavedTaskMetaInfo(task);
@@ -3676,7 +3754,7 @@ export class CommandPalette {
           <div class="glass-recent-task" data-task-id="${task.id}">
             <div class="glass-task-icon">${icon}</div>
             <div class="glass-task-info">
-              <div class="glass-task-title">${escapeHtml(task.title)}</div>
+              <div class="glass-task-title">${escapeHtml(t(task.title))}</div>
               <div class="glass-task-meta">${meta}</div>
             </div>
             <button class="glass-recent-close" data-task-id="${task.id}">&times;</button>
@@ -3745,14 +3823,37 @@ export class CommandPalette {
   }
 
   private restoreSavedTask(task: SavedTask): void {
+    // Restore quickAsk/contextChat tasks as contextChat view
+    if (task.actionType === 'quickAsk' || task.actionType === 'contextChat') {
+      const session = createNewChatSession(task.sourceUrl || window.location.href, task.sourceTitle || document.title);
+      session.messages.push(createChatMessage('user', task.title));
+      session.messages.push(createChatMessage('assistant', task.content, undefined, task.thinking));
+      this.chatSession = session;
+      this.isQuickAsk = task.actionType === 'quickAsk';
+      this.activeCommand = {
+        id: task.actionType,
+        action: 'contextChat',
+        label: task.actionType === 'quickAsk' ? t('chat.quickAskLabel') : t('chat.contextChatLabel'),
+        icon: task.actionType === 'quickAsk' ? icons.messageCircle : icons.contextChat,
+        enabled: true,
+        order: 0,
+      };
+      this.currentView = 'contextChat';
+      this.viewStack = [];
+      this.renderCurrentView(true, true);
+      return;
+    }
+
     // Create a mock active command to show the command tag
     const actionLabelMap: Record<string, string> = {
-      translate: '翻译',
-      summarize: '总结',
-      summarizePage: '总结页面',
-      explain: '解释',
-      rewrite: '改写',
-      codeExplain: '代码解释',
+      translate: t('action.translate'),
+      summarize: t('action.summarize'),
+      summarizePage: t('action.summarizePage'),
+      explain: t('action.explain'),
+      rewrite: t('action.rewrite'),
+      codeExplain: t('action.codeExplain'),
+      contextChat: t('action.contextChat'),
+      quickAsk: t('action.quickAsk'),
     };
 
     this.activeCommand = {
@@ -3815,10 +3916,10 @@ export class CommandPalette {
       if (result.success && result.result) {
         this.updateAIResult(result.result);
       } else {
-        this.updateAIResult(result.error || '翻译失败');
+        this.updateAIResult(result.error || t('aiResult.translationFailed'));
       }
     } catch (error) {
-      this.updateAIResult(`错误: ${error}`);
+      this.updateAIResult(t('aiResult.error', { error: String(error) }));
     }
   }
 
@@ -3883,6 +3984,13 @@ export class CommandPalette {
       return;
     }
 
+    // translateInput — enter input mode to type text for translation
+    if (item.action === 'translateInput') {
+      this.setActiveCommand(item);
+      this.renderCurrentView(true, true);
+      return;
+    }
+
     // AI actions will call showAIResult() which transitions the view,
     // so we should not hide the palette for these actions
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
@@ -3923,7 +4031,7 @@ export class CommandPalette {
     this.activeCommand = {
       id: 'browseTrail',
       action: 'browseTrail',
-      label: '浏览轨迹',
+      label: t('menu.browseTrail'),
       icon: icons.history,
       enabled: true,
       order: 0,
@@ -3938,13 +4046,13 @@ export class CommandPalette {
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="browseTrail">
           <span class="glass-command-tag-icon">${icons.history}</span>
-          <span class="glass-command-tag-label">浏览轨迹</span>
+          <span class="glass-command-tag-label">${t('menu.browseTrail')}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
           type="text"
           class="glass-input"
-          placeholder="搜索历史记录..."
+          placeholder="${t('trail.searchPlaceholder')}"
           autocomplete="off"
           spellcheck="false"
         />
@@ -3958,8 +4066,8 @@ export class CommandPalette {
       </div>
       <div class="glass-footer">
         <div class="glass-trail-footer-actions">
-          <button class="glass-btn glass-btn-trail-clear">清空历史</button>
-          <button class="glass-btn glass-btn-trail-export">导出</button>
+          <button class="glass-btn glass-btn-trail-clear">${t('trail.clearHistory')}</button>
+          <button class="glass-btn glass-btn-trail-export">${t('common.export')}</button>
         </div>
         <div class="glass-brand">
           <span class="glass-logo">${icons.logo}</span>
@@ -3991,10 +4099,10 @@ export class CommandPalette {
         <div class="glass-trail-empty">
           <div class="glass-trail-empty-icon">${icons.history}</div>
           <div class="glass-trail-empty-text">
-            ${query ? '没有找到匹配的记录' : '还没有浏览记录'}
+            ${query ? t('trail.noMatchingRecords') : t('trail.noRecordsYet')}
           </div>
           <div class="glass-trail-empty-hint">
-            ${query ? '试试其他关键词' : '浏览网页时会自动记录'}
+            ${query ? t('trail.tryOtherKeywords') : t('trail.autoRecordHint')}
           </div>
         </div>
       `;
@@ -4012,7 +4120,7 @@ export class CommandPalette {
         <div class="glass-trail-date">${date}</div>
         <div class="glass-trail-entries">
           ${entries.map(entry => {
-            const time = new Date(entry.visitedAt).toLocaleTimeString('zh-CN', {
+            const time = new Date(entry.visitedAt).toLocaleTimeString(undefined, {
               hour: '2-digit',
               minute: '2-digit',
             });
@@ -4022,13 +4130,13 @@ export class CommandPalette {
             return `
               <div class="glass-trail-entry" data-url="${escapeHtml(entry.url)}">
                 <div class="glass-trail-entry-info">
-                  <div class="glass-trail-entry-title">${escapeHtml(entry.title || '无标题')}</div>
+                  <div class="glass-trail-entry-title">${escapeHtml(entry.title || t('trail.noTitle'))}</div>
                   <div class="glass-trail-entry-meta">
                     <span class="glass-trail-entry-domain">${escapeHtml(domain)}</span>
                     <span class="glass-trail-entry-time">${time}</span>
                   </div>
                 </div>
-                <button class="glass-trail-entry-delete" data-id="${entry.id}" title="删除">&times;</button>
+                <button class="glass-trail-entry-delete" data-id="${entry.id}" title="${t('common.delete')}">&times;</button>
               </div>
             `;
           }).join('')}
@@ -4039,7 +4147,7 @@ export class CommandPalette {
     const loadMoreHTML = hasMore ? `
       <div class="glass-trail-load-more">
         <button class="glass-btn glass-btn-load-more">
-          加载更多 (${filtered.length - this.browseTrailDisplayCount} 条)
+          ${t('trail.loadMore', { count: filtered.length - this.browseTrailDisplayCount })}
         </button>
       </div>
     ` : '';
@@ -4057,11 +4165,11 @@ export class CommandPalette {
       let label: string;
 
       if (date === today) {
-        label = '今天';
+        label = t('time.today');
       } else if (date === yesterday) {
-        label = '昨天';
+        label = t('time.yesterday');
       } else {
-        label = new Date(entry.visitedAt).toLocaleDateString('zh-CN', {
+        label = new Date(entry.visitedAt).toLocaleDateString(undefined, {
           month: 'long',
           day: 'numeric',
           weekday: 'short',
@@ -4121,7 +4229,7 @@ export class CommandPalette {
     // Footer actions
     const clearBtn = this.shadowRoot.querySelector('.glass-btn-trail-clear');
     clearBtn?.addEventListener('click', async () => {
-      if (confirm('确定要清空所有浏览记录吗？')) {
+      if (confirm(t('confirm.clearBrowseTrail'))) {
         await clearTrailHistory();
         this.browseTrailSessions = [];
         const content = this.shadowRoot?.querySelector('.glass-trail-content');
@@ -4134,7 +4242,7 @@ export class CommandPalette {
     const exportBtn = this.shadowRoot.querySelector('.glass-btn-trail-export');
     exportBtn?.addEventListener('click', () => {
       exportTrailData(this.browseTrailSessions);
-      this.showToast('已导出浏览历史');
+      this.showToast(t('trail.exported'));
     });
 
     // Bind entry events
@@ -4196,7 +4304,7 @@ export class CommandPalette {
     this.activeCommand = {
       id: 'quickAsk',
       action: 'contextChat',
-      label: '快速提问',
+      label: t('chat.quickAskLabel'),
       icon: icons.messageCircle,
       enabled: true,
       order: 0,
@@ -4227,8 +4335,8 @@ export class CommandPalette {
     this.activeCommand = {
       id: 'contextChat',
       action: 'contextChat',
-      label: '上下文追问',
-      icon: icons.messageCircle,
+      label: t('chat.contextChatLabel'),
+      icon: icons.contextChat,
       enabled: true,
       order: 0,
     };
@@ -4238,23 +4346,23 @@ export class CommandPalette {
   }
 
   private getContextChatViewHTML(): string {
-    const label = this.activeCommand?.label || '上下文追问';
+    const label = this.activeCommand?.customLabel || t(this.activeCommand?.label || 'menu.contextChat');
     return `
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="contextChat">
-          <span class="glass-command-tag-icon">${icons.messageCircle}</span>
+          <span class="glass-command-tag-icon">${this.isQuickAsk ? icons.messageCircle : icons.contextChat}</span>
           <span class="glass-command-tag-label">${escapeHtml(label)}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
           type="text"
           class="glass-input glass-chat-input"
-          placeholder="输入问题后按回车..."
+          placeholder="${t('chat.inputPlaceholder')}"
           autocomplete="off"
           spellcheck="false"
           ${this.isChatStreaming ? 'disabled' : ''}
         />
-        <button class="glass-header-btn glass-btn-stop glass-btn-chat-stop" title="终止" style="display: ${this.isChatStreaming ? 'flex' : 'none'}">
+        <button class="glass-header-btn glass-btn-stop glass-btn-chat-stop" title="${t('common.abort')}" style="display: ${this.isChatStreaming ? 'flex' : 'none'}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="6" y="6" width="12" height="12" rx="2"></rect>
           </svg>
@@ -4269,7 +4377,14 @@ export class CommandPalette {
       </div>
       <div class="glass-footer">
         <div class="glass-chat-footer-actions">
-          <button class="glass-btn glass-btn-chat-clear">清空对话</button>
+          <button class="glass-btn glass-btn-chat-clear">${t('chat.clearChat')}</button>
+          <button class="glass-footer-btn glass-btn-chat-save" title="${t('common.save')}" style="display: ${this.chatSession?.messages?.some(m => m.role === 'assistant' && m.content) && !this.isChatStreaming ? 'flex' : 'none'}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </button>
         </div>
         <div class="glass-brand">
           <span class="glass-logo">${icons.logo}</span>
@@ -4281,18 +4396,18 @@ export class CommandPalette {
   private getContextChatContentHTML(): string {
     if (!this.chatSession || this.chatSession.messages.length === 0) {
       const emptyText = this.isQuickAsk
-        ? '直接输入问题，AI 将为你解答'
-        : '开始提问，AI 将基于当前页面内容回答';
+        ? t('chat.emptyQuickAsk')
+        : t('chat.emptyContextChat');
       return `
         <div class="glass-chat-empty">
-          <div class="glass-chat-empty-icon">${icons.messageCircle}</div>
+          <div class="glass-chat-empty-icon">${this.isQuickAsk ? icons.messageCircle : icons.contextChat}</div>
           <div class="glass-chat-empty-text">${emptyText}</div>
         </div>
       `;
     }
 
     return this.chatSession.messages.map(msg => {
-      const roleLabel = msg.role === 'user' ? '你' : 'AI';
+      const roleLabel = msg.role === 'user' ? t('chat.roleUser') : t('chat.roleAI');
       const roleClass = msg.role === 'user' ? 'glass-chat-msg-user' : 'glass-chat-msg-assistant';
 
       let contentHtml = '';
@@ -4379,7 +4494,16 @@ export class CommandPalette {
         if (content) {
           content.innerHTML = this.getContextChatContentHTML();
         }
+        // Hide save button since there's no content
+        const chatSaveBtn = this.shadowRoot?.querySelector('.glass-btn-chat-save') as HTMLElement;
+        if (chatSaveBtn) chatSaveBtn.style.display = 'none';
       }
+    });
+
+    // Save chat to knowledge base
+    const chatSaveBtn = this.shadowRoot.querySelector('.glass-btn-chat-save');
+    chatSaveBtn?.addEventListener('click', () => {
+      this.saveChatToKnowledge(chatSaveBtn as HTMLButtonElement);
     });
 
     // Stop button (header)
@@ -4389,7 +4513,7 @@ export class CommandPalette {
       // Re-enable input
       if (input) {
         input.disabled = false;
-        input.placeholder = '输入问题后按回车...';
+        input.placeholder = t('chat.inputPlaceholder');
       }
       // Hide stop button
       const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
@@ -4446,7 +4570,7 @@ export class CommandPalette {
     // Clear input
     input.value = '';
     input.disabled = true;
-    input.placeholder = 'AI 正在回复...';
+    input.placeholder = t('chat.aiReplying');
 
     // Update display
     const content = this.shadowRoot?.querySelector('.glass-chat-content');
@@ -4493,7 +4617,7 @@ export class CommandPalette {
 
     // Build prompt - use simple prompt for quick ask, context prompt for context chat
     const systemPrompt = this.isQuickAsk
-      ? '你是一个有帮助的AI助手。请简洁、准确地回答用户的问题。'
+      ? t('chat.quickAskSystemPrompt')
       : getContextChatSystemPrompt(session);
     const conversationHistory = buildConversationPrompt(
       session.messages.slice(0, -1) // Exclude the empty assistant message
@@ -4521,6 +4645,11 @@ export class CommandPalette {
             _chatStreamRAF = null;
 
             // Resolve DOM references (use cache when possible)
+            // Invalidate cache if element is detached (panel was destroyed and recreated)
+            if (_cachedStreamingTextEl && !_cachedStreamingTextEl.isConnected) {
+              _cachedStreamingTextEl = null;
+              _cachedStreamingContainer = null;
+            }
             if (!_cachedStreamingTextEl) {
               _cachedStreamingTextEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text') as Element | null;
               _cachedStreamingContainer = this.shadowRoot?.querySelector('.glass-chat-streaming') as Element | null;
@@ -4579,7 +4708,7 @@ export class CommandPalette {
       } else {
         const lastMsg = session.messages[session.messages.length - 1];
         if (lastMsg.role === 'assistant') {
-          lastMsg.content = response.error || 'AI 请求失败';
+          lastMsg.content = response.error || t('chat.aiRequestFailed');
         }
       }
 
@@ -4590,7 +4719,7 @@ export class CommandPalette {
     } catch (error) {
       const lastMsg = session.messages[session.messages.length - 1];
       if (lastMsg.role === 'assistant') {
-        lastMsg.content = `错误: ${error}`;
+        lastMsg.content = t('aiResult.error', { error: String(error) });
       }
     } finally {
       this.isChatStreaming = false;
@@ -4598,6 +4727,12 @@ export class CommandPalette {
       // Hide stop button
       const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
       if (chatStopBtn) chatStopBtn.style.display = 'none';
+
+      // Show save button if there's assistant content
+      const chatSaveBtn = this.shadowRoot?.querySelector('.glass-btn-chat-save') as HTMLElement;
+      if (chatSaveBtn && session.messages.some(m => m.role === 'assistant' && m.content)) {
+        chatSaveBtn.style.display = 'flex';
+      }
 
       // If this chat was minimized during streaming, update the minimized task
       const minimizedTask = this.minimizedTasks.find(
@@ -4611,6 +4746,31 @@ export class CommandPalette {
           minimizedTask.content = lastAssistantMsg.content;
         }
         this.renderMinimizedTasksIfVisible();
+      }
+    }
+
+    // Save/record chat result (similar to AI result completion in streamComplete)
+    const lastAssistantMsg = session.messages[session.messages.length - 1];
+    if (lastAssistantMsg?.role === 'assistant' && lastAssistantMsg.content && !lastAssistantMsg.content.startsWith(t('aiResult.errorPrefix'))) {
+      const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user');
+      const chatTitle = lastUserMsg
+        ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
+        : (this.isQuickAsk ? t('chat.quickAsk') : t('menu.contextChat'));
+      const chatResultData: AIResultData = {
+        title: chatTitle,
+        content: lastAssistantMsg.content,
+        thinking: lastAssistantMsg.thinking,
+        isLoading: false,
+        resultType: 'general',
+        actionType: this.isQuickAsk ? 'quickAsk' : 'contextChat',
+        sourceUrl: window.location.href,
+        sourceTitle: document.title,
+        createdAt: Date.now(),
+      };
+      if (this.config.autoSaveTask) {
+        this.autoSaveAIResult(chatResultData);
+      } else {
+        this.addToUnsavedRecent(chatResultData);
       }
     }
 
@@ -4636,7 +4796,7 @@ export class CommandPalette {
       const currentInput = this.shadowRoot.querySelector('.glass-chat-input') as HTMLInputElement;
       if (currentInput) {
         currentInput.disabled = false;
-        currentInput.placeholder = '输入问题后按回车...';
+        currentInput.placeholder = t('chat.inputPlaceholder');
         currentInput.focus();
       }
     }
@@ -4676,13 +4836,13 @@ export class CommandPalette {
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="annotations">
           <span class="glass-command-tag-icon">${icons.highlighter}</span>
-          <span class="glass-command-tag-label">批注</span>
+          <span class="glass-command-tag-label">${t('menu.annotations')}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
           type="text"
           class="glass-input"
-          placeholder="搜索批注..."
+          placeholder="${t('annotations.searchPlaceholder')}"
           autocomplete="off"
           spellcheck="false"
         />
@@ -4690,8 +4850,8 @@ export class CommandPalette {
       </div>
       <div class="glass-divider"></div>
       <div class="glass-knowledge-filter">
-        <button class="glass-filter-btn ${this.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
-        <button class="glass-filter-btn ${this.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">当前页面</button>
+        <button class="glass-filter-btn ${this.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">${t('annotations.all')}</button>
+        <button class="glass-filter-btn ${this.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">${t('annotations.currentPage')}</button>
       </div>
       <div class="glass-body">
         <div class="glass-knowledge-content">
@@ -4700,7 +4860,7 @@ export class CommandPalette {
       </div>
       <div class="glass-footer">
         <div class="glass-knowledge-footer-info">
-          ${this.getLocalFilteredAnnotations().length} 条批注
+          ${t('annotations.count', { count: this.getLocalFilteredAnnotations().length })}
         </div>
         <div class="glass-brand">
           <span class="glass-logo">${icons.logo}</span>
@@ -4763,7 +4923,7 @@ export class CommandPalette {
         // Update footer count
         const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
         if (footerInfo) {
-          footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
+          footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
         }
       });
     });
@@ -4779,7 +4939,7 @@ export class CommandPalette {
       // Update footer count
       const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
       if (footerInfo) {
-        footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
+        footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
       }
     });
 
@@ -4833,7 +4993,7 @@ export class CommandPalette {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = (btn as HTMLElement).dataset.id;
-        if (id && confirm('确定要删除这条批注吗？')) {
+        if (id && confirm(t('confirm.deleteAnnotation'))) {
           await deleteAnnotationFromStorage(id);
           // Remove from local list
           this.annotationsList = this.annotationsList.filter(a => a.id !== id);
@@ -4846,7 +5006,7 @@ export class CommandPalette {
           // Update footer count
           const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
           if (footerInfo) {
-            footerInfo.textContent = `${this.getLocalFilteredAnnotations().length} 条批注`;
+            footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
           }
         }
       });
@@ -4896,13 +5056,13 @@ export class CommandPalette {
       <div class="glass-search glass-draggable">
         <div class="glass-command-tag" data-action="knowledge">
           <span class="glass-command-tag-icon">${icons.library}</span>
-          <span class="glass-command-tag-label">知识库</span>
+          <span class="glass-command-tag-label">${t('menu.knowledge')}</span>
           <button class="glass-command-tag-close">&times;</button>
         </div>
         <input
           type="text"
           class="glass-input"
-          placeholder="搜索知识库..."
+          placeholder="${t('knowledge.searchPlaceholder')}"
           autocomplete="off"
           spellcheck="false"
         />
@@ -4910,9 +5070,9 @@ export class CommandPalette {
       </div>
       <div class="glass-divider"></div>
       <div class="glass-knowledge-filter">
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">批注</button>
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">AI 结果</button>
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">${t('knowledge.all')}</button>
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">${t('knowledge.annotationsOnly')}</button>
+        <button class="glass-filter-btn ${this.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">${t('knowledge.aiResultsOnly')}</button>
       </div>
       <div class="glass-body">
         <div class="glass-knowledge-content">
@@ -4922,9 +5082,9 @@ export class CommandPalette {
       <div class="glass-footer">
         <div class="glass-footer-content">
           <div class="glass-knowledge-footer-info">
-            ${this.getLocalFilteredKnowledgeItems().length} 条记录
+            ${t('knowledge.count', { count: this.getLocalFilteredKnowledgeItems().length })}
           </div>
-          <button class="glass-footer-btn glass-btn-export-knowledge" title="导出">
+          <button class="glass-footer-btn glass-btn-export-knowledge" title="${t('common.export')}">
             ${icons.download}
           </button>
         </div>
@@ -5018,7 +5178,7 @@ export class CommandPalette {
   private updateKnowledgeFooter(): void {
     const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
     if (footerInfo) {
-      footerInfo.textContent = `${this.getLocalFilteredKnowledgeItems().length} 条记录`;
+      footerInfo.textContent = t('knowledge.count', { count: this.getLocalFilteredKnowledgeItems().length });
     }
   }
 
@@ -5055,7 +5215,7 @@ export class CommandPalette {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const id = (btn as HTMLElement).dataset.id;
-        if (id && confirm('确定要删除这条记录吗？')) {
+        if (id && confirm(t('confirm.deleteRecord'))) {
           // Delete from storage
           if (id.startsWith('ann_')) {
             await deleteAnnotationFromStorage(id.replace('ann_', ''));
@@ -5079,12 +5239,12 @@ export class CommandPalette {
   private openKnowledgeAIResult(item: KnowledgeItem): void {
     // Create a mock active command to show the command tag
     const actionLabelMap: Record<string, string> = {
-      translate: '翻译',
-      summarize: '总结',
-      summarizePage: '总结页面',
-      explain: '解释',
-      rewrite: '改写',
-      codeExplain: '代码解释',
+      translate: t('action.translate'),
+      summarize: t('action.summarize'),
+      summarizePage: t('action.summarizePage'),
+      explain: t('action.explain'),
+      rewrite: t('action.rewrite'),
+      codeExplain: t('action.codeExplain'),
     };
 
     const actionType = item.actionType || 'translate';
@@ -5134,9 +5294,9 @@ export class CommandPalette {
   private exportKnowledge(): void {
     const items = this.getLocalFilteredKnowledgeItems();
 
-    let markdown = `# 知识库导出\n\n`;
-    markdown += `导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
-    markdown += `总计: ${items.length} 条记录\n\n---\n\n`;
+    let markdown = `# ${t('knowledge.exportTitle')}\n\n`;
+    markdown += `${t('knowledge.exportTime')}: ${new Date().toLocaleString()}\n`;
+    markdown += `${t('knowledge.exportTotal', { count: items.length })}\n\n---\n\n`;
 
     const groups = groupKnowledgeByDate(items);
 
@@ -5144,21 +5304,21 @@ export class CommandPalette {
       markdown += `## ${date}\n\n`;
 
       for (const item of groupItems) {
-        const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
+        const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
         markdown += `### ${typeLabel}\n\n`;
 
         if (item.pageTitle) {
-          markdown += `**来源**: [${item.pageTitle}](${item.url})\n\n`;
+          markdown += `**${t('knowledge.source')}**: [${item.pageTitle}](${item.url})\n\n`;
         }
 
         if (item.originalText) {
-          markdown += `**原文**:\n> ${item.originalText}\n\n`;
+          markdown += `**${t('knowledge.originalText')}**:\n> ${item.originalText}\n\n`;
         }
 
-        markdown += `**内容**:\n${item.content}\n\n`;
+        markdown += `**${t('knowledge.content')}**:\n${item.content}\n\n`;
 
         if (item.note) {
-          markdown += `**笔记**: ${item.note}\n\n`;
+          markdown += `**${t('knowledge.note')}**: ${item.note}\n\n`;
         }
 
         if (item.aiResult) {

@@ -2,6 +2,7 @@
 import { icons } from '../../icons';
 import { AIResultData, MinimizedTask } from './types';
 import { SavedTask } from '../../utils/taskStorage';
+import { t } from '../../i18n';
 
 /**
  * Escape HTML special characters
@@ -31,7 +32,7 @@ export function getLoadingHTML(): string {
   return `
     <div class="glass-loading">
       <div class="glass-spinner"></div>
-      <span>正在思考...</span>
+      <span>${t('loading.thinking')}</span>
     </div>
   `;
 }
@@ -49,7 +50,7 @@ export function getThinkingSectionHTML(thinking: string | undefined): string {
           <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
           <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
-        <span>思考过程</span>
+        <span>${t('aiResult.thinkingProcess')}</span>
         <svg class="glass-thinking-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -71,9 +72,9 @@ export function formatTimeAgo(timestamp: number): string {
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
 
-  if (seconds < 60) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
+  if (seconds < 60) return t('time.justNow');
+  if (minutes < 60) return t('time.minutesAgo', { n: minutes });
+  if (hours < 24) return t('time.hoursAgo', { n: hours });
   return new Date(timestamp).toLocaleDateString();
 }
 
@@ -104,11 +105,11 @@ export function getTranslateLanguageSelectHTML(currentLang: string): string {
  */
 export function getTranslationHint(provider: string): string {
   switch (provider) {
-    case 'ai': return '使用配置的 AI 服务商进行翻译，效果最佳但需要 API Key';
-    case 'google': return '使用 Google 翻译，免费，无需配置';
-    case 'microsoft': return '使用微软翻译，免费，无需配置';
-    case 'deeplx': return '使用 DeepLX 翻译服务，需要填写 API Key';
-    case 'custom': return '自定义翻译 API，接口格式: POST { text, source_lang, target_lang }';
+    case 'ai': return t('hint.translationAI');
+    case 'google': return t('hint.translationGoogle');
+    case 'microsoft': return t('hint.translationMicrosoft');
+    case 'deeplx': return t('hint.translationDeepLX');
+    case 'custom': return t('hint.translationCustom');
     default: return '';
   }
 }
@@ -117,20 +118,20 @@ export function getTranslationHint(provider: string): string {
  * Get API key hint text
  */
 export function getAPIKeyHint(provider: string): string {
-  if (provider === 'custom') return '如果你的 API 需要认证，请填写 API Key';
+  if (provider === 'custom') return t('hint.apiKeyCustom');
   const providerNames: Record<string, string> = {
     openai: 'OpenAI',
     anthropic: 'Anthropic',
     gemini: 'Google Gemini',
-    qwen: '阿里云 (通义)',
+    qwen: t('settings.providerQwen'),
     deepseek: 'DeepSeek',
     minimax: 'MiniMax',
     xai: 'xAI',
     moonshot: 'Moonshot',
-    zhipu: '智谱',
+    zhipu: t('settings.providerZhipu'),
   };
   const name = providerNames[provider] || provider.toUpperCase();
-  return `请填写你的 ${name} API Key`;
+  return t('hint.apiKeyProvider', { name });
 }
 
 /**
@@ -155,10 +156,12 @@ export function getActionIcon(actionType: string): string {
     explain: icons.explain,
     rewrite: icons.rewrite,
     codeExplain: icons.codeExplain,
-    contextChat: icons.messageCircle,
+    contextChat: icons.contextChat,
+    quickAsk: icons.messageCircle,
+    translateInput: icons.translate,
     screenshot: icons.screenshot,
   };
-  return iconMap[actionType] || icons.messageCircle;
+  return iconMap[actionType] || icons.contextChat;
 }
 
 /**
@@ -171,9 +174,9 @@ export function getTaskMetaInfo(task: MinimizedTask): string {
   parts.push(timeAgo);
 
   if (task.taskType === 'contextChat') {
-    parts.push(task.isQuickAsk ? '快速提问' : '上下文追问');
+    parts.push(task.isQuickAsk ? t('chat.quickAskLabel') : t('chat.contextChatLabel'));
   } else if (task.taskType === 'screenshot') {
-    parts.push('截图分析');
+    parts.push(t('screenshot.screenshotAnalysis'));
   } else if (task.actionType === 'summarizePage') {
     if (task.sourceTitle) {
       parts.push(task.sourceTitle);
@@ -195,7 +198,7 @@ export function getTaskMetaInfo(task: MinimizedTask): string {
   }
 
   if (task.isLoading) {
-    parts.push('处理中');
+    parts.push(t('common.processing'));
   }
 
   return parts.join(' · ');

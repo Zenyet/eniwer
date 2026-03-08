@@ -19,6 +19,19 @@ import { googleLogin, googleLogout, getAuthStatus, setSyncEnabled } from './auth
 import { freeTranslate, shouldUseFreeTranslate } from './free-translate-handler';
 import { syncToCloud, syncFromCloud, setupAutoSync, listBackups, restoreBackup, deleteBackup } from './sync-handler';
 import { exportToGoogleDocs } from './drive-export-handler';
+import { initI18n, setLocale, t } from '../i18n';
+
+// Initialize i18n on background startup
+initI18n();
+
+// Listen for language changes
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.thecircle_data?.newValue?.config?.uiLanguage) {
+    setLocale(changes.thecircle_data.newValue.config.uiLanguage);
+    // Rebuild context menus with new language
+    setupImageSearchMenu();
+  }
+});
 
 // Handle messages from content script
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
@@ -213,7 +226,7 @@ async function handleStreamingAIRequest(port: chrome.runtime.Port, payload: AIRe
         port.postMessage({ type: 'AI_STREAM_CHUNK', payload: { requestId, chunk: result.result, fullText: result.result } });
         port.postMessage({ type: 'AI_STREAM_END', payload: { requestId, ...result } });
       } else {
-        port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: result.error || '翻译失败' } });
+        port.postMessage({ type: 'AI_STREAM_ERROR', payload: { requestId, error: result.error || t('contextMenu.translationFailed') } });
       }
       return;
     }
@@ -405,16 +418,16 @@ async function setupImageSearchMenu() {
   // Create parent menu
   chrome.contextMenus.create({
     id: 'image-search-parent',
-    title: '搜图',
+    title: t('contextMenu.imageSearch'),
     contexts: ['image'],
   });
 
   // Create search engine sub-menus based on config
   const searchEngines = [
-    { id: 'google', title: 'Google 搜图', enabled: config.google },
-    { id: 'yandex', title: 'Yandex 搜图', enabled: config.yandex },
-    { id: 'bing', title: 'Bing 搜图', enabled: config.bing },
-    { id: 'tineye', title: 'TinEye 搜图', enabled: config.tineye },
+    { id: 'google', title: t('contextMenu.googleImageSearch'), enabled: config.google },
+    { id: 'yandex', title: t('contextMenu.yandexImageSearch'), enabled: config.yandex },
+    { id: 'bing', title: t('contextMenu.bingImageSearch'), enabled: config.bing },
+    { id: 'tineye', title: t('contextMenu.tineyeImageSearch'), enabled: config.tineye },
   ];
 
   for (const engine of searchEngines) {

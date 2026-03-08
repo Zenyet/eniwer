@@ -1,6 +1,7 @@
 // Screenshot View Module
 import { ScreenshotData, ScreenshotCallbacks } from '../types';
 import { escapeHtml } from '../utils';
+import { t } from '../../../i18n';
 
 export interface ScreenshotViewContext {
   shadowRoot: ShadowRoot | null;
@@ -28,17 +29,17 @@ export function getScreenshotViewHTML(
     <div class="glass-search glass-draggable">
       <div class="glass-command-tag" data-action="screenshot">
         <span class="glass-command-tag-icon">${icons.screenshot || icons.camera || ''}</span>
-        <span class="glass-command-tag-label">截图</span>
+        <span class="glass-command-tag-label">${t('menu.screenshot')}</span>
         <button class="glass-command-tag-close">&times;</button>
       </div>
       <input
         type="text"
         class="glass-input glass-screenshot-input"
-        placeholder="输入问题，按回车询问 AI..."
+        placeholder="${t('screenshot.inputPlaceholder')}"
         autocomplete="off"
         spellcheck="false"
       />
-      <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="终止" style="display: ${screenshotData?.isLoading ? 'flex' : 'none'}">
+      <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="${t('common.abort')}" style="display: ${screenshotData?.isLoading ? 'flex' : 'none'}">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="6" y="6" width="12" height="12" rx="2"></rect>
         </svg>
@@ -62,14 +63,14 @@ export function getScreenshotViewHTML(
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          保存
+          ${t('common.save')}
         </button>
         <button class="glass-btn glass-btn-copy-img">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
-          复制
+          ${t('common.copy')}
         </button>
         <button class="glass-btn glass-btn-describe">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -78,7 +79,7 @@ export function getScreenshotViewHTML(
             <line x1="16" y1="13" x2="8" y2="13"></line>
             <line x1="16" y1="17" x2="8" y2="17"></line>
           </svg>
-          描述
+          ${t('screenshot.describeBtn')}
         </button>
       </div>
       <div class="glass-brand">
@@ -107,11 +108,11 @@ export function getScreenshotContentHTML(screenshotData: ScreenshotData | null):
   if (screenshotData.generatedImageUrl) {
     html += `
       <div class="glass-screenshot-result">
-        <div class="glass-screenshot-generated-label">生成的图片</div>
+        <div class="glass-screenshot-generated-label">${t('screenshot.generatedImage')}</div>
         <img class="glass-screenshot-generated-img" src="${screenshotData.generatedImageUrl}" alt="Generated" />
         <div class="glass-screenshot-result-actions">
-          <button class="glass-btn glass-btn-copy-result">复制图片</button>
-          <button class="glass-btn glass-btn-save-result">保存图片</button>
+          <button class="glass-btn glass-btn-copy-result">${t('screenshot.copyImage')}</button>
+          <button class="glass-btn glass-btn-save-result">${t('screenshot.saveImage')}</button>
         </div>
       </div>
     `;
@@ -121,10 +122,10 @@ export function getScreenshotContentHTML(screenshotData: ScreenshotData | null):
   if (screenshotData.result) {
     html += `
       <div class="glass-screenshot-qa">
-        <div class="glass-screenshot-question">${escapeHtml(screenshotData.currentQuestion || '描述图片')}</div>
+        <div class="glass-screenshot-question">${escapeHtml(screenshotData.currentQuestion || t('screenshot.describeImage'))}</div>
         <div class="glass-screenshot-answer">${escapeHtml(screenshotData.result)}</div>
         ${!screenshotData.isLoading ? `<div class="glass-screenshot-result-actions">
-          <button class="glass-footer-btn glass-btn-copy-result" title="复制">
+          <button class="glass-footer-btn glass-btn-copy-result" title="${t('common.copy')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -140,7 +141,7 @@ export function getScreenshotContentHTML(screenshotData: ScreenshotData | null):
     html += `
       <div class="glass-loading">
         <div class="glass-loading-spinner"></div>
-        <span>处理中...</span>
+        <span>${t('common.processing')}</span>
       </div>
     `;
   }
@@ -225,7 +226,7 @@ export function bindScreenshotViewEvents(ctx: ScreenshotViewContext): () => void
   const handleCopyResult = () => {
     if (ctx.screenshotData?.result) {
       navigator.clipboard.writeText(ctx.screenshotData.result);
-      ctx.showToast('已复制结果');
+      ctx.showToast(t('common.copiedResult'));
     }
   };
   copyResultBtn?.addEventListener('click', handleCopyResult);

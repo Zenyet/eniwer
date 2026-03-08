@@ -7,6 +7,7 @@ import { AnnotationColor, AnnotationAIResult, AIResultType } from '../types/anno
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
 import { abortAllRequests } from '../utils/ai';
+import { initI18n, setLocale, t } from '../i18n';
 import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow, getShadowHost } from './ShadowHost';
 import './styles.css';
 
@@ -65,6 +66,7 @@ class TheCircle {
     }
 
     await this.loadConfig();
+    await initI18n(this.config.uiLanguage);
     this.setupKeyboardShortcut();
     this.setupMessageListener();
     this.setupStorageListener();
@@ -96,6 +98,10 @@ class TheCircle {
       if (changes.thecircle_data) {
         const newData = changes.thecircle_data.newValue;
         if (newData?.config) {
+          // Update locale if language changed
+          if (newData.config.uiLanguage && newData.config.uiLanguage !== this.config.uiLanguage) {
+            setLocale(newData.config.uiLanguage);
+          }
           this.config = newData.config;
           this.menuActions.setConfig(this.config);
           this.commandPalette.setConfig(this.config);
@@ -265,7 +271,7 @@ class TheCircle {
     if (found) {
       await this.annotationSystem.createHighlightWithAI(this.config.annotation?.defaultColor || 'yellow', aiResult);
     } else {
-      this.showToast('无法定位原文，请手动选择文本');
+      this.showToast(t('content.cannotLocateOriginalText'));
     }
   }
 
@@ -311,7 +317,7 @@ class TheCircle {
     // Find the translate menu item from selection menu
     const translateItem = this.selectionMenuItems.find(item => item.action === 'translate');
     if (!translateItem) {
-      this.showToast('翻译功能未配置');
+      this.showToast(t('content.translateNotConfigured'));
       return;
     }
 
@@ -363,7 +369,65 @@ class TheCircle {
       if (runId !== translateRunId) return;
 
       if (result.type === 'error') {
-        this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
+        this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
+      } else if (result.type === 'ai') {
+        this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
+      }
+    };
+
+    await runTranslate(this.config.preferredLanguage || 'zh-CN');
+  }
+
+  private async handleTranslateInput(text: string): Promise<void> {
+    const translateItem = this.globalMenuItems.find(item => item.action === 'translateInput')
+      || { id: 'translateInput', icon: '', label: 'menu.translateInput', action: 'translate', enabled: true, order: 0 };
+
+    // Reuse the translate menu item but with the typed text as selectedText
+    const translateActionItem = this.selectionMenuItems.find(item => item.action === 'translate')
+      || { ...translateItem, action: 'translate' };
+
+    this.menuActions.setSelectedText(text);
+
+    let translateRunId = 0;
+
+    this.commandPalette.setActiveCommand(translateItem);
+    this.commandPalette.showAIResult(translateItem.label, {
+      onStop: () => abortAllRequests(),
+      onTranslateLanguageChange: (targetLang) => {
+        void runTranslate(targetLang);
+      },
+      onSaveToAnnotation: (originalText, content, thinking, actionType) => {
+        void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
+      },
+    }, {
+      originalText: text,
+      resultType: 'translate',
+      translateTargetLanguage: this.config.preferredLanguage || 'zh-CN',
+      iconHtml: translateItem.icon,
+      actionType: 'translate',
+    });
+
+    const streamKey = this.commandPalette.getCurrentStreamKey();
+
+    const runTranslate = async (targetLang: string) => {
+      const runId = ++translateRunId;
+      this.menuActions.setSelectedText(text);
+
+      const onChunk = this.config.useStreaming
+        ? (chunk: string, fullText: string, thinking?: string) => {
+            if (runId !== translateRunId) return;
+            this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
+          }
+        : undefined;
+
+      const result = await this.menuActions.execute(translateActionItem, onChunk, {
+        translateTargetLanguage: targetLang,
+      });
+
+      if (runId !== translateRunId) return;
+
+      if (result.type === 'error') {
+        this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
       } else if (result.type === 'ai') {
         this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
       }
@@ -468,6 +532,9 @@ class TheCircle {
         onClose: () => {
           // Cleanup if needed
         },
+        onTranslateInput: (text) => {
+          void this.handleTranslateInput(text);
+        },
       });
     }
     // Navigate to settings view
@@ -493,6 +560,9 @@ class TheCircle {
       },
       onClose: () => {
         // Cleanup if needed
+      },
+      onTranslateInput: (text) => {
+        void this.handleTranslateInput(text);
       },
     });
   }
@@ -567,7 +637,7 @@ class TheCircle {
           if (runId !== translateRunId) return;
 
           if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
+            this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
           } else if (result.type === 'ai') {
             this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
           }
@@ -608,7 +678,7 @@ class TheCircle {
           const result = await this.menuActions.execute(item, onChunk);
 
           if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || '未知错误', undefined, refreshStreamKey || undefined);
+            this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, refreshStreamKey || undefined);
           } else if (result.type === 'ai') {
             this.commandPalette.updateAIResult(result.result || '', result.thinking, refreshStreamKey || undefined);
           }
@@ -646,7 +716,7 @@ class TheCircle {
         const result = await this.menuActions.execute(item, onChunk);
 
         if (result.type === 'error') {
-          this.commandPalette.updateAIResult(result.result || '未知错误', undefined, streamKey || undefined);
+          this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
         } else if (result.type === 'ai') {
           this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
         }
@@ -660,9 +730,9 @@ class TheCircle {
       const result = await this.menuActions.execute(item);
 
       if (result.type === 'error') {
-        this.showToast(result.result || '未知错误');
+        this.showToast(result.result || t('content.unknownError'));
       } else if (result.type === 'success') {
-        this.showToast(result.result || '操作成功');
+        this.showToast(result.result || t('content.operationSuccess'));
       } else if (result.type === 'info') {
         this.showToast(result.result || '');
       }

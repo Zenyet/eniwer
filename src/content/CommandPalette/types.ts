@@ -39,6 +39,7 @@ export interface AIResultData {
 export interface CommandPaletteCallbacks {
   onSelect: (item: MenuItem) => void;
   onClose: () => void;
+  onTranslateInput?: (text: string) => void;
 }
 
 export interface AIResultCallbacks {

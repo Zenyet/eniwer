@@ -1,6 +1,7 @@
 import { icons } from "../icons";
 import { PRESET_COLORS, getAnnotationColorConfig } from "../types/annotation";
 import { appendToShadow, removeFromShadow } from "./ShadowHost";
+import { t } from "../i18n";
 
 export interface SelectionPopoverCallbacks {
   onTranslate: () => void;
@@ -230,7 +231,7 @@ export class SelectionPopover {
 
     return `
       ${colorButtons}
-      <div class="thecircle-selection-popover-color-btn thecircle-selection-popover-color-custom" title="自定义颜色">
+      <div class="thecircle-selection-popover-color-btn thecircle-selection-popover-color-custom" title="${t('popover.customColor')}">
         <input type="color" class="thecircle-selection-popover-color-input" value="#ff6600">
       </div>
     `;
@@ -250,13 +251,13 @@ export class SelectionPopover {
           ${this.buildSearchEngineButtons()}
         </div>
         <div class="thecircle-selection-popover-divider"></div>
-        <button class="thecircle-selection-popover-btn thecircle-selection-popover-btn-highlight" data-action="note" title="批注">
+        <button class="thecircle-selection-popover-btn thecircle-selection-popover-btn-highlight" data-action="note" title="${t('popover.annotation')}">
           ${highlightIcon}
         </button>
-        <button class="thecircle-selection-popover-btn" data-action="translate" title="翻译">
+        <button class="thecircle-selection-popover-btn" data-action="translate" title="${t('popover.translate')}">
           ${icons.translate}
         </button>
-        <button class="thecircle-selection-popover-btn" data-action="more" title="更多">
+        <button class="thecircle-selection-popover-btn" data-action="more" title="${t('popover.more')}">
           ${moreIcon}
         </button>
       </div>

@@ -1,5 +1,6 @@
 // Google Drive export handler - export content to Google Docs
 import { refreshTokenInteractive } from './auth-handler';
+import { t } from '../i18n';
 
 interface ExportResult {
   success: boolean;
@@ -74,7 +75,7 @@ export async function exportToGoogleDocs(
 ): Promise<ExportResult> {
   const token = await refreshTokenInteractive();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('drive.notLoggedIn') };
   }
 
   try {
@@ -84,7 +85,7 @@ export async function exportToGoogleDocs(
     // Add source URL if provided
     let fullHtml = htmlContent;
     if (sourceUrl) {
-      fullHtml = `<p><em>来源: <a href="${sourceUrl}">${sourceUrl}</a></em></p><hr>${htmlContent}`;
+      fullHtml = `<p><em>${t('drive.source')}: <a href="${sourceUrl}">${sourceUrl}</a></em></p><hr>${htmlContent}`;
     }
 
     // Create the document using Drive API with HTML import
@@ -111,7 +112,7 @@ export async function exportToGoogleDocs(
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Failed to create Google Doc:', response.status, errorText);
-      return { success: false, error: `创建文档失败: ${response.status}` };
+      return { success: false, error: t('drive.createFailed', { status: String(response.status) }) };
     }
 
     const data = await response.json();
@@ -125,7 +126,7 @@ export async function exportToGoogleDocs(
       return { success: true, fileUrl: `https://docs.google.com/document/d/${data.id}/edit` };
     }
 
-    return { success: false, error: '无法获取文档链接' };
+    return { success: false, error: t('drive.cannotGetLink') };
   } catch (error) {
     console.error('Export to Google Docs error:', error);
     return { success: false, error: String(error) };
@@ -142,7 +143,7 @@ export async function exportMultipleToGoogleDocs(
     .map((item, index) => {
       let section = `## ${item.title}\n\n${item.content}`;
       if (item.sourceUrl) {
-        section = `*来源: ${item.sourceUrl}*\n\n${section}`;
+        section = `*${t('drive.source')}: ${item.sourceUrl}*\n\n${section}`;
       }
       if (index < items.length - 1) {
         section += '\n\n---\n\n';

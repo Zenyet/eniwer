@@ -1,6 +1,7 @@
 // Context Chat View - handles AI chat conversations
 import { ChatSession, MenuItem } from '../../../types';
 import { escapeHtml, formatAIContent, getLoadingHTML, getThinkingSectionHTML } from '../utils';
+import { t } from '../../../i18n';
 
 export interface ContextChatState {
   chatSession: ChatSession | null;
@@ -22,18 +23,18 @@ export function getContextChatViewHTML(
   icons: Record<string, string>,
   getContentHTML: () => string
 ): string {
-  const label = activeCommand?.label || '上下文追问';
+  const label = activeCommand?.customLabel || t(activeCommand?.label || 'menu.contextChat');
   return `
     <div class="glass-search glass-draggable">
       <div class="glass-command-tag" data-action="contextChat">
-        <span class="glass-command-tag-icon">${icons.messageCircle}</span>
+        <span class="glass-command-tag-icon">${state.isQuickAsk ? icons.messageCircle : icons.contextChat}</span>
         <span class="glass-command-tag-label">${escapeHtml(label)}</span>
         <button class="glass-command-tag-close">&times;</button>
       </div>
       <input
         type="text"
         class="glass-input glass-chat-input"
-        placeholder="输入问题后按回车..."
+        placeholder="${t('chat.inputPlaceholder')}"
         autocomplete="off"
         spellcheck="false"
         ${state.isChatStreaming ? 'disabled' : ''}
@@ -48,7 +49,7 @@ export function getContextChatViewHTML(
     </div>
     <div class="glass-footer">
       <div class="glass-chat-footer-actions">
-        <button class="glass-btn glass-btn-chat-clear">清空对话</button>
+        <button class="glass-btn glass-btn-chat-clear">${t('chat.clearChat')}</button>
       </div>
       <div class="glass-brand">
         <span class="glass-logo">${icons.logo}</span>
@@ -63,18 +64,18 @@ export function getContextChatContentHTML(
 ): string {
   if (!state.chatSession || state.chatSession.messages.length === 0) {
     const emptyText = state.isQuickAsk
-      ? '直接输入问题，AI 将为你解答'
-      : '开始提问，AI 将基于当前页面内容回答';
+      ? t('chat.emptyQuickAsk')
+      : t('chat.emptyContextChat');
     return `
       <div class="glass-chat-empty">
-        <div class="glass-chat-empty-icon">${icons.messageCircle}</div>
+        <div class="glass-chat-empty-icon">${state.isQuickAsk ? icons.messageCircle : icons.contextChat}</div>
         <div class="glass-chat-empty-text">${emptyText}</div>
       </div>
     `;
   }
 
   return state.chatSession.messages.map(msg => {
-    const roleLabel = msg.role === 'user' ? '你' : 'AI';
+    const roleLabel = msg.role === 'user' ? t('chat.roleUser') : t('chat.roleAI');
     const roleClass = msg.role === 'user' ? 'glass-chat-msg-user' : 'glass-chat-msg-assistant';
 
     let contentHtml = '';

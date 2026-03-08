@@ -2,6 +2,7 @@
 
 import { Annotation, AnnotationAIResult, PRESET_COLORS, getAnnotationColorConfig } from '../../types/annotation';
 import { appendToShadow, removeFromShadow } from '../ShadowHost';
+import { t } from '../../i18n';
 
 export interface NotePopupCallbacks {
   onSave: (id: string, note: string, color: string) => void;
@@ -9,12 +10,15 @@ export interface NotePopupCallbacks {
   onClose: () => void;
 }
 
-const AI_TYPE_LABELS: Record<string, string> = {
-  translate: '翻译',
-  explain: '解释',
-  summarize: '总结',
-  rewrite: '改写',
-};
+function getAITypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    translate: t('note.aiTypeTranslate'),
+    explain: t('note.aiTypeExplain'),
+    summarize: t('note.aiTypeSummarize'),
+    rewrite: t('note.aiTypeRewrite'),
+  };
+  return labels[type] || type;
+}
 
 export class NotePopup {
   private popup: HTMLElement | null = null;
@@ -82,15 +86,15 @@ export class NotePopup {
         </div>
         <textarea
           class="thecircle-note-popup-input"
-          placeholder="添加批注..."
+          placeholder="${t('note.addAnnotationPlaceholder')}"
           rows="3"
         >${this.escapeHtml(annotation.note || '')}</textarea>
         <div class="thecircle-note-popup-actions">
           <button class="thecircle-note-popup-btn thecircle-note-popup-btn-delete" data-action="delete">
-            删除
+            ${t('note.delete')}
           </button>
           <button class="thecircle-note-popup-btn thecircle-note-popup-btn-save" data-action="save">
-            保存
+            ${t('note.save')}
           </button>
         </div>
       </div>
@@ -117,7 +121,7 @@ export class NotePopup {
   private renderAIResult(aiResult?: AnnotationAIResult): string {
     if (!aiResult) return '';
 
-    const typeLabel = AI_TYPE_LABELS[aiResult.type] || aiResult.type;
+    const typeLabel = getAITypeLabel(aiResult.type);
     const thinkingSection = aiResult.thinking ? `
       <div class="thecircle-note-popup-ai-thinking">
         <div class="thecircle-note-popup-ai-thinking-header" data-action="toggle-thinking">
@@ -126,7 +130,7 @@ export class NotePopup {
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
-          <span>思考过程</span>
+          <span>${t('note.thinkingProcess')}</span>
           <svg class="thecircle-note-popup-ai-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -174,7 +178,7 @@ export class NotePopup {
     return `${presetButtons}
       <div
         class="thecircle-note-popup-color-btn thecircle-note-popup-color-custom ${isCustomColor ? 'active' : ''}"
-        title="自定义颜色"
+        title="${t('note.customColor')}"
         style="${isCustomColor ? `background: ${getAnnotationColorConfig(currentColor).bg}; border-color: ${getAnnotationColorConfig(currentColor).border};` : ''}"
       >
         <input type="color" class="thecircle-note-popup-color-input" value="${customColorValue}">

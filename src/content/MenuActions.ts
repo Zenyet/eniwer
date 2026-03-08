@@ -16,6 +16,7 @@ import {
 } from '../utils/ai';
 import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
 import type { CommandPalette } from './CommandPalette';
+import { t } from '../i18n';
 
 export interface ScreenshotFlowCallbacks {
   onToast: (message: string) => void;
@@ -97,7 +98,7 @@ export class MenuActions {
 
   private async handleTranslate(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
-      return { type: 'error', result: '请先选择要翻译的文字' };
+      return { type: 'error', result: t('validate.selectTextToTranslate') };
     }
 
     return this.callAIAction('translate', this.selectedText, onChunk, options);
@@ -105,7 +106,7 @@ export class MenuActions {
 
   private async handleSummarize(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
-      return { type: 'error', result: '请先选择要总结的文字' };
+      return { type: 'error', result: t('validate.selectTextToSummarize') };
     }
 
     return this.callAIAction('summarize', this.selectedText, onChunk, options);
@@ -113,7 +114,7 @@ export class MenuActions {
 
   private async handleExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
-      return { type: 'error', result: '请先选择要解释的文字' };
+      return { type: 'error', result: t('validate.selectTextToExplain') };
     }
 
     return this.callAIAction('explain', this.selectedText, onChunk);
@@ -121,7 +122,7 @@ export class MenuActions {
 
   private async handleRewrite(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
-      return { type: 'error', result: '请先选择要改写的文字' };
+      return { type: 'error', result: t('validate.selectTextToRewrite') };
     }
 
     return this.callAIAction('rewrite', this.selectedText, onChunk);
@@ -129,7 +130,7 @@ export class MenuActions {
 
   private async handleCodeExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
     if (!this.selectedText) {
-      return { type: 'error', result: '请先选择要解释的代码' };
+      return { type: 'error', result: t('validate.selectCodeToExplain') };
     }
 
     return this.callAIAction('codeExplain', this.selectedText, onChunk);
@@ -142,7 +143,7 @@ export class MenuActions {
   private async handleAskPage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
     const question = options.pageQuestion?.trim() || '';
     if (!question) {
-      return { type: 'error', result: '请输入你想问的问题' };
+      return { type: 'error', result: t('validate.enterQuestion') };
     }
     const pageContent = document.body.innerText.slice(0, 10000);
     const prompt = `Webpage content:\n${pageContent}\n\nUser question:\n${question}`;
@@ -163,7 +164,7 @@ export class MenuActions {
     const content = hasSelection ? selectionText.slice(0, 10000) : pageContent;
 
     if (!content) {
-      return { type: 'error', result: '页面内容为空，无法改写' };
+      return { type: 'error', result: t('validate.pageContentEmpty') };
     }
 
     const instruction = options.rewriteInstruction?.trim();
@@ -179,9 +180,9 @@ export class MenuActions {
       if (response.success) {
         return { type: 'ai', result: response.result };
       }
-      return { type: 'error', result: response.error || 'AI 请求失败' };
+      return { type: 'error', result: response.error || t('validate.aiRequestFailed') };
     } catch (error) {
-      return { type: 'error', result: `请求失败: ${error}` };
+      return { type: 'error', result: t('validate.requestFailed', { error: String(error) }) };
     }
   }
 
@@ -223,10 +224,10 @@ export class MenuActions {
             }
             return { type: 'ai', result: response.result };
           } else {
-            return { type: 'error', result: response.error || '翻译失败' };
+            return { type: 'error', result: response.error || t('validate.translationFailed') };
           }
         } catch (error) {
-          return { type: 'error', result: `翻译失败: ${error}` };
+          return { type: 'error', result: t('validate.translationFailedWithError', { error: String(error) }) };
         }
       }
 
@@ -247,10 +248,10 @@ export class MenuActions {
             }
             return { type: 'ai', result: response.result };
           } else {
-            return { type: 'error', result: response.error || '翻译失败' };
+            return { type: 'error', result: response.error || t('validate.translationFailed') };
           }
         } catch (error) {
-          return { type: 'error', result: `翻译失败: ${error}` };
+          return { type: 'error', result: t('validate.translationFailedWithError', { error: String(error) }) };
         }
       }
     }
@@ -297,10 +298,10 @@ export class MenuActions {
       if (response.success) {
         return { type: 'ai', result: response.result, thinking: response.thinking };
       } else {
-        return { type: 'error', result: response.error || 'AI 请求失败' };
+        return { type: 'error', result: response.error || t('validate.aiRequestFailed') };
       }
     } catch (error) {
-      return { type: 'error', result: `请求失败: ${error}` };
+      return { type: 'error', result: t('validate.requestFailed', { error: String(error) }) };
     }
   }
 
@@ -308,8 +309,8 @@ export class MenuActions {
     const { apiProvider, apiKey, customApiUrl, customModel } = this.config;
 
     if (apiProvider === 'custom') {
-      if (!customApiUrl) return '请在设置中配置自定义 API 地址';
-      if (!customModel) return '请在设置中配置自定义模型名称';
+      if (!customApiUrl) return t('validate.configureCustomApiUrl');
+      if (!customModel) return t('validate.configureCustomModel');
     } else {
       // Standard providers need a key
       if (!apiKey) {
@@ -317,15 +318,15 @@ export class MenuActions {
           openai: 'OpenAI',
           anthropic: 'Anthropic',
           gemini: 'Google Gemini',
-          qwen: '阿里云 (通义)',
+          qwen: t('settings.providerQwen'),
           deepseek: 'DeepSeek',
           minimax: 'MiniMax',
           xai: 'xAI',
           moonshot: 'Moonshot',
-          zhipu: '智谱',
+          zhipu: t('settings.providerZhipu'),
         };
         const name = providerNames[apiProvider] || apiProvider;
-        return `请在设置中配置 ${name} API Key`;
+        return t('validate.configureProviderApiKey', { name });
       }
     }
     return null;
@@ -341,9 +342,9 @@ export class MenuActions {
   private handleCopy(): { type: string; result: string } {
     if (this.selectedText) {
       navigator.clipboard.writeText(this.selectedText);
-      return { type: 'success', result: '已复制到剪贴板' };
+      return { type: 'success', result: t('validate.copiedToClipboard') };
     }
-    return { type: 'error', result: '没有选中的文字' };
+    return { type: 'error', result: t('validate.noTextSelected') };
   }
 
   private handleSendToAI(): { type: string; url: string } {
@@ -366,7 +367,7 @@ export class MenuActions {
         await this.captureAndShowPanel(area);
       },
       onCancel: () => {
-        this.flowCallbacks?.onToast('截图已取消');
+        this.flowCallbacks?.onToast(t('screenshot.cancelled'));
       },
     });
     return { type: 'silent', result: '' };
@@ -380,7 +381,7 @@ export class MenuActions {
       } as Message);
 
       if (!response?.success || !response.dataUrl) {
-        this.flowCallbacks?.onToast('截图失败');
+        this.flowCallbacks?.onToast(t('screenshot.failed'));
         return;
       }
 
@@ -407,11 +408,11 @@ export class MenuActions {
           },
         });
       } else {
-        this.flowCallbacks?.onToast('无法显示截图面板');
+        this.flowCallbacks?.onToast(t('screenshot.cannotShowPanel'));
       }
 
     } catch (error) {
-      this.flowCallbacks?.onToast(`截图失败: ${error}`);
+      this.flowCallbacks?.onToast(t('screenshot.failedWithError', { error: String(error) }));
     }
   }
 
@@ -458,9 +459,9 @@ export class MenuActions {
         type: 'DOWNLOAD_IMAGE',
         payload: { dataUrl: this.currentScreenshotDataUrl, filename },
       } as Message);
-      this.flowCallbacks?.onToast('截图已保存');
+      this.flowCallbacks?.onToast(t('screenshot.saved'));
     } catch (error) {
-      this.flowCallbacks?.onToast(`保存失败: ${error}`);
+      this.flowCallbacks?.onToast(t('screenshot.saveFailed', { error: String(error) }));
     }
   }
 
@@ -471,9 +472,9 @@ export class MenuActions {
       await navigator.clipboard.write([
         new ClipboardItem({ [blob.type]: blob }),
       ]);
-      this.flowCallbacks?.onToast('已复制到剪贴板');
+      this.flowCallbacks?.onToast(t('validate.copiedToClipboard'));
     } catch (error) {
-      this.flowCallbacks?.onToast(`复制失败: ${error}`);
+      this.flowCallbacks?.onToast(t('screenshot.copyFailed', { error: String(error) }));
     }
   }
 
@@ -501,7 +502,7 @@ export class MenuActions {
     if (response.success && response.result) {
       this.commandPalette.updateScreenshotResult(response.result);
     } else {
-      this.commandPalette.updateScreenshotResult(response.error || 'AI 请求失败');
+      this.commandPalette.updateScreenshotResult(response.error || t('validate.aiRequestFailed'));
     }
   }
 
@@ -529,7 +530,7 @@ export class MenuActions {
     if (response.success && response.result) {
       this.commandPalette.updateScreenshotResult(response.result);
     } else {
-      this.commandPalette.updateScreenshotResult(response.error || 'AI 请求失败');
+      this.commandPalette.updateScreenshotResult(response.error || t('validate.aiRequestFailed'));
     }
   }
 
@@ -539,28 +540,28 @@ export class MenuActions {
     const screenshotConfig = this.config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
 
     if (!screenshotConfig.enableImageGen) {
-      this.commandPalette.updateScreenshotResult('请先在设置中启用 AI 生图功能');
+      this.commandPalette.updateScreenshotResult(t('screenshot.enableImageGen'));
       return;
     }
 
     if (screenshotConfig.imageGenProvider === 'openai') {
       if (!this.config.apiKey) {
-        this.commandPalette.updateScreenshotResult('使用 OpenAI 生图需要配置 API Key');
+        this.commandPalette.updateScreenshotResult(t('screenshot.openaiNeedsApiKey'));
         return;
       }
     } else if (screenshotConfig.imageGenProvider === 'custom') {
       if (!screenshotConfig.customImageGenUrl) {
-        this.commandPalette.updateScreenshotResult('请配置自定义生图 API 地址');
+        this.commandPalette.updateScreenshotResult(t('screenshot.configureCustomUrl'));
         return;
       }
     }
 
-    this.commandPalette.updateScreenshotResult('正在生成图片...', true);
+    this.commandPalette.updateScreenshotResult(t('screenshot.generatingImage'), true);
 
     // First describe the current image to get context
     const describeResponse = await callVisionAI(
       this.currentScreenshotDataUrl,
-      '用简洁的英文描述这张图片的主要内容和风格特征，不超过100词。',
+      t('screenshot.describeImageBrieflyPrompt'),
       this.config
     );
 
@@ -574,7 +575,7 @@ export class MenuActions {
     if (response.success && response.imageUrl) {
       this.commandPalette.updateScreenshotGeneratedImage(response.imageUrl);
     } else {
-      this.commandPalette.updateScreenshotResult(response.error || '图像生成失败');
+      this.commandPalette.updateScreenshotResult(response.error || t('screenshot.imageGenerationFailed'));
     }
   }
 

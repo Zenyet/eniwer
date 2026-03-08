@@ -1,6 +1,7 @@
 // Translation handler supporting multiple providers
 
 import { TranslationProvider } from '../types';
+import { t } from '../i18n';
 
 interface TranslateResult {
   success: boolean;
@@ -68,7 +69,7 @@ export async function freeTranslate(
       return deeplxTranslate(text, targetLang, sourceLang, customUrlOrKey);
     case 'custom':
       if (!customUrlOrKey) {
-        return { success: false, error: '未配置自定义翻译地址' };
+        return { success: false, error: t('translate.customUrlNotConfigured') };
       }
       return customTranslate(text, targetLang, sourceLang, customUrlOrKey);
     default:
@@ -104,9 +105,9 @@ async function googleTranslate(
 
     if (!response.ok) {
       if (response.status === 429) {
-        return { success: false, error: '翻译请求过于频繁，请稍后再试' };
+        return { success: false, error: t('translate.rateLimited') };
       }
-      return { success: false, error: `翻译服务错误: ${response.status}` };
+      return { success: false, error: t('translate.serviceError', { status: String(response.status) }) };
     }
 
     const data = await response.json();
@@ -123,9 +124,9 @@ async function googleTranslate(
       }
     }
 
-    return { success: false, error: '无法解析翻译结果' };
+    return { success: false, error: t('translate.cannotParseResult') };
   } catch (error) {
-    return { success: false, error: `Google 翻译失败: ${error}` };
+    return { success: false, error: t('translate.googleFailed', { error: String(error) }) };
   }
 }
 
@@ -155,9 +156,9 @@ async function microsoftTranslate(
 
     if (!response.ok) {
       if (response.status === 429) {
-        return { success: false, error: '翻译请求过于频繁，请稍后再试' };
+        return { success: false, error: t('translate.rateLimited') };
       }
-      return { success: false, error: `微软翻译错误: ${response.status}` };
+      return { success: false, error: t('translate.microsoftError', { status: String(response.status) }) };
     }
 
     const data = await response.json();
@@ -170,9 +171,9 @@ async function microsoftTranslate(
       };
     }
 
-    return { success: false, error: '无法解析翻译结果' };
+    return { success: false, error: t('translate.cannotParseResult') };
   } catch (error) {
-    return { success: false, error: `微软翻译失败: ${error}` };
+    return { success: false, error: t('translate.microsoftFailed', { error: String(error) }) };
   }
 }
 
@@ -187,7 +188,7 @@ async function deeplxTranslate(
   apiKey?: string
 ): Promise<TranslateResult> {
   if (!apiKey) {
-    return { success: false, error: '请配置 DeepLX API Key' };
+    return { success: false, error: t('translate.configureDeeplxApiKey') };
   }
 
   // DeepL language codes
@@ -220,7 +221,7 @@ async function deeplxTranslate(
     });
 
     if (!response.ok) {
-      return { success: false, error: `DeepLX 翻译错误: ${response.status}` };
+      return { success: false, error: t('translate.deeplxError', { status: String(response.status) }) };
     }
 
     const data = await response.json();
@@ -229,9 +230,9 @@ async function deeplxTranslate(
       return { success: true, result: data.data, provider: 'deeplx' };
     }
 
-    return { success: false, error: data.message || '无法解析翻译结果' };
+    return { success: false, error: data.message || t('translate.cannotParseResult') };
   } catch (error) {
-    return { success: false, error: `DeepLX 翻译失败: ${error}` };
+    return { success: false, error: t('translate.deeplxFailed', { error: String(error) }) };
   }
 }
 
@@ -258,7 +259,7 @@ async function customTranslate(
     });
 
     if (!response.ok) {
-      return { success: false, error: `自定义翻译错误: ${response.status}` };
+      return { success: false, error: t('translate.customError', { status: String(response.status) }) };
     }
 
     const data = await response.json();
@@ -268,9 +269,9 @@ async function customTranslate(
       return { success: true, result, provider: 'custom' };
     }
 
-    return { success: false, error: '无法解析翻译结果' };
+    return { success: false, error: t('translate.cannotParseResult') };
   } catch (error) {
-    return { success: false, error: `自定义翻译失败: ${error}` };
+    return { success: false, error: t('translate.customFailed', { error: String(error) }) };
   }
 }
 

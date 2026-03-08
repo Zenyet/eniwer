@@ -1,6 +1,7 @@
 // AI Result View - displays AI response results
 import { AIResultData, AIResultCallbacks } from '../types';
 import { escapeHtml, formatAIContent, getLoadingHTML, getSourceInfoHTML, getTranslateLanguageSelectHTML } from '../utils';
+import { t } from '../../../i18n';
 
 function getThinkingHTML(thinking: string | undefined): string {
   if (!thinking) return '';
@@ -12,7 +13,7 @@ function getThinkingHTML(thinking: string | undefined): string {
           <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
           <line x1="12" y1="17" x2="12.01" y2="17"></line>
         </svg>
-        <span>思考过程</span>
+        <span>${t('aiResult.thinkingProcess')}</span>
         <svg class="glass-thinking-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -34,18 +35,18 @@ export function getAIResultViewHTML(
   return `
     <div class="glass-header glass-draggable">
       <div class="glass-header-left">
-        <button class="glass-back-btn" title="返回">
+        <button class="glass-back-btn" title="${t('common.back')}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
         </button>
         <div class="glass-title-icon">${data.iconHtml || ''}</div>
-        <span class="glass-title">${escapeHtml(data.title)}</span>
+        <span class="glass-title">${escapeHtml(t(data.title))}</span>
       </div>
       <div class="glass-header-right">
         ${isTranslate ? getTranslateLanguageSelectHTML(data.translateTargetLanguage || 'zh-CN') : ''}
         ${isTranslate && data.originalText ? `
-          <button class="glass-btn glass-btn-compare" title="对比原文">
+          <button class="glass-btn glass-btn-compare" title="${t('aiResult.compareOriginal')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
               <line x1="12" y1="3" x2="12" y2="21"></line>
@@ -53,7 +54,7 @@ export function getAIResultViewHTML(
           </button>
         ` : ''}
         ${isPageAction ? `
-          <button class="glass-btn glass-btn-refresh" title="重新生成">
+          <button class="glass-btn glass-btn-refresh" title="${t('aiResult.regenerate')}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
@@ -61,18 +62,18 @@ export function getAIResultViewHTML(
             </svg>
           </button>
         ` : ''}
-        <button class="glass-btn glass-btn-stop" title="停止" style="display: ${data.isLoading ? 'flex' : 'none'}">
+        <button class="glass-btn glass-btn-stop" title="${t('common.stop')}" style="display: ${data.isLoading ? 'flex' : 'none'}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
           </svg>
         </button>
-        <button class="glass-btn glass-btn-copy" title="复制">
+        <button class="glass-btn glass-btn-copy" title="${t('common.copy')}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
           </svg>
         </button>
-        <button class="glass-minimize-btn" title="最小化">
+        <button class="glass-minimize-btn" title="${t('common.minimize')}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
@@ -134,12 +135,12 @@ export function updateAIResultContent(
       contentEl.innerHTML = `
         <div class="glass-compare-view">
           <div class="glass-compare-item">
-            <div class="glass-compare-label">原文</div>
+            <div class="glass-compare-label">${t('aiResult.originalText')}</div>
             <div class="glass-compare-content">${formatAIContent(data.originalText)}</div>
           </div>
           <div class="glass-compare-divider"></div>
           <div class="glass-compare-item">
-            <div class="glass-compare-label">译文</div>
+            <div class="glass-compare-label">${t('aiResult.translatedText')}</div>
             <div class="glass-compare-content">${data.isLoading && !data.content ? getLoadingHTML() : formatAIContent(data.content)}</div>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { Annotation, ANNOTATION_COLORS } from '../../../types/annotation';
 import { SavedTask } from '../../../utils/taskStorage';
 import { icons } from '../../../icons';
 import { escapeHtml } from '../utils';
+import { t } from '../../../i18n';
 
 // Knowledge item - unified type for annotations and saved AI results
 export interface KnowledgeItem {
@@ -81,13 +82,13 @@ export function getKnowledgeViewHTML(
     <div class="glass-search glass-draggable">
       <div class="glass-command-tag" data-action="knowledge">
         <span class="glass-command-tag-icon">${icons.library}</span>
-        <span class="glass-command-tag-label">知识库</span>
+        <span class="glass-command-tag-label">${t('menu.knowledge')}</span>
         <button class="glass-command-tag-close">&times;</button>
       </div>
       <input
         type="text"
         class="glass-input"
-        placeholder="搜索知识库..."
+        placeholder="${t('knowledge.searchPlaceholder')}"
         autocomplete="off"
         spellcheck="false"
       />
@@ -95,9 +96,9 @@ export function getKnowledgeViewHTML(
     </div>
     <div class="glass-divider"></div>
     <div class="glass-knowledge-filter">
-      <button class="glass-filter-btn ${state.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
-      <button class="glass-filter-btn ${state.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">批注</button>
-      <button class="glass-filter-btn ${state.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">AI 结果</button>
+      <button class="glass-filter-btn ${state.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">${t('knowledge.all')}</button>
+      <button class="glass-filter-btn ${state.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">${t('knowledge.annotationsOnly')}</button>
+      <button class="glass-filter-btn ${state.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">${t('knowledge.aiResultsOnly')}</button>
     </div>
     <div class="glass-body">
       <div class="glass-knowledge-content">
@@ -107,9 +108,9 @@ export function getKnowledgeViewHTML(
     <div class="glass-footer">
       <div class="glass-footer-content">
         <div class="glass-knowledge-footer-info">
-          ${getFilteredCount()} 条记录
+          ${t('knowledge.count', { count: getFilteredCount() })}
         </div>
-        <button class="glass-footer-btn glass-btn-export-knowledge" title="导出">
+        <button class="glass-footer-btn glass-btn-export-knowledge" title="${t('common.export')}">
           ${icons.download}
         </button>
       </div>
@@ -160,9 +161,9 @@ export function groupKnowledgeByDate(items: KnowledgeItem[]): Record<string, Kno
     let label: string;
 
     if (date === today) {
-      label = '今天';
+      label = t('time.today');
     } else if (date === yesterday) {
-      label = '昨天';
+      label = t('time.yesterday');
     } else {
       label = new Date(item.createdAt).toLocaleDateString('zh-CN', {
         month: 'long',
@@ -193,10 +194,10 @@ export function getKnowledgeContentHTML(
       <div class="glass-knowledge-empty">
         <div class="glass-knowledge-empty-icon">${icons.library}</div>
         <div class="glass-knowledge-empty-text">
-          ${searchQuery ? '没有找到匹配的记录' : '知识库为空'}
+          ${searchQuery ? t('knowledge.noMatchingRecords') : t('knowledge.empty')}
         </div>
         <div class="glass-knowledge-empty-hint">
-          ${searchQuery ? '试试其他关键词' : '批注和 AI 结果会自动保存到这里'}
+          ${searchQuery ? t('knowledge.tryOtherKeywords') : t('knowledge.autoSaveHint')}
         </div>
       </div>
     `;
@@ -225,7 +226,7 @@ export function getKnowledgeItemHTML(item: KnowledgeItem, icons: Record<string, 
   try { domain = new URL(item.url).hostname; } catch {}
 
   const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
-  const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
+  const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
   const colorStyle = item.color ? `border-left: 3px solid ${ANNOTATION_COLORS[item.color as keyof typeof ANNOTATION_COLORS]?.border || '#fbbf24'}` : '';
 
   const truncatedContent = item.content.length > 120
@@ -252,29 +253,31 @@ export function getKnowledgeItemHTML(item: KnowledgeItem, icons: Record<string, 
       <div class="glass-knowledge-entry-meta">
         <span class="glass-knowledge-entry-page" title="${escapeHtml(item.pageTitle)}">${escapeHtml(item.pageTitle || domain)}</span>
       </div>
-      <button class="glass-knowledge-entry-delete" data-id="${item.id}" title="删除">&times;</button>
+      <button class="glass-knowledge-entry-delete" data-id="${item.id}" title="${t('common.delete')}">&times;</button>
     </div>
   `;
 }
 
 export function getActionTypeLabel(actionType?: string): string {
   const labels: Record<string, string> = {
-    translate: '翻译',
-    summarize: '总结',
-    explain: '解释',
-    rewrite: '改写',
-    summarizePage: '页面总结',
-    codeExplain: '代码解释',
+    translate: t('action.translate'),
+    summarize: t('action.summarize'),
+    explain: t('action.explain'),
+    rewrite: t('action.rewrite'),
+    summarizePage: t('action.summarizePage'),
+    codeExplain: t('action.codeExplain'),
+    contextChat: t('action.contextChat'),
+    quickAsk: t('action.quickAsk'),
   };
-  return labels[actionType || ''] || 'AI 结果';
+  return labels[actionType || ''] || t('knowledge.aiResultDefault');
 }
 
 export function getAIResultTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    translate: '翻译',
-    explain: '解释',
-    summarize: '总结',
-    rewrite: '改写',
+    translate: t('action.translate'),
+    explain: t('action.explain'),
+    summarize: t('action.summarize'),
+    rewrite: t('action.rewrite'),
   };
   return labels[type] || type;
 }
@@ -284,7 +287,7 @@ export function exportKnowledgeToJSON(items: KnowledgeItem[]): string {
 }
 
 export function exportKnowledgeToMarkdown(items: KnowledgeItem[]): string {
-  let markdown = '# 知识库导出\n\n';
+  let markdown = `# ${t('knowledge.exportTitle')}\n\n`;
 
   const groups = groupKnowledgeByDate(items);
 
@@ -292,19 +295,19 @@ export function exportKnowledgeToMarkdown(items: KnowledgeItem[]): string {
     markdown += `## ${date}\n\n`;
 
     for (const item of groupItems) {
-      const typeLabel = item.type === 'annotation' ? '批注' : getActionTypeLabel(item.actionType);
+      const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
       markdown += `### ${typeLabel}\n\n`;
       markdown += `> ${item.content}\n\n`;
 
       if (item.note) {
-        markdown += `**笔记:** ${item.note}\n\n`;
+        markdown += `**${t('knowledge.note')}:** ${item.note}\n\n`;
       }
 
       if (item.aiResult) {
         markdown += `**AI ${getAIResultTypeLabel(item.aiResult.type)}:** ${item.aiResult.content}\n\n`;
       }
 
-      markdown += `*来源: [${item.pageTitle || item.url}](${item.url})*\n\n`;
+      markdown += `*${t('knowledge.source')}: [${item.pageTitle || item.url}](${item.url})*\n\n`;
       markdown += '---\n\n';
     }
   }

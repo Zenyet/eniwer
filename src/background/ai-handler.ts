@@ -1,5 +1,6 @@
 // AI API handler - runs in background script only
 import { MenuConfig, ScreenshotConfig } from '../types';
+import { t } from '../i18n';
 
 // Provider configurations
 interface ProviderConfig {
@@ -80,13 +81,13 @@ export async function callAI(
 
   // Validate API key requirement
   if (!config.apiKey) {
-    return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
+    return { success: false, error: t('ai.configureApiKey', { provider: provider.toUpperCase() }) };
   }
 
   // For custom provider, validate URL and model
   if (provider === 'custom') {
     if (!config.customApiUrl || !config.customModel) {
-      return { success: false, error: '请配置自定义 API URL 和模型名称' };
+      return { success: false, error: t('ai.configureCustomApiUrlAndModel') };
     }
   }
 
@@ -103,9 +104,9 @@ export async function callAI(
     }
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
-      return { success: false, error: '请求已取消' };
+      return { success: false, error: t('ai.requestCancelled') };
     }
-    return { success: false, error: `请求失败: ${error}` };
+    return { success: false, error: t('ai.requestFailed', { error: String(error) }) };
   }
 }
 
@@ -224,7 +225,7 @@ async function callOpenAICompatibleAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   // OpenAI thinking models don't support streaming
@@ -234,7 +235,7 @@ async function callOpenAICompatibleAPI(
     if (result) {
       return { success: true, result };
     }
-    return { success: false, error: 'AI 无响应' };
+    return { success: false, error: t('ai.noResponse') };
   }
 
   if (useStreaming && onChunk) {
@@ -256,7 +257,7 @@ async function callOpenAICompatibleAPI(
     return { success: true, result };
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 async function processOpenAIStream(
@@ -267,7 +268,7 @@ async function processOpenAIStream(
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
-    return { success: false, error: '无法读取流' };
+    return { success: false, error: t('ai.cannotReadStream') };
   }
 
   const decoder = new TextDecoder();
@@ -279,7 +280,7 @@ async function processOpenAIStream(
       // Check if aborted
       if (signal?.aborted) {
         reader.cancel();
-        return { success: false, error: '请求已取消' };
+        return { success: false, error: t('ai.requestCancelled') };
       }
 
       const { done, value } = await reader.read();
@@ -319,7 +320,7 @@ async function processOpenAIStream(
     if (fullText) {
       return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
-    return { success: false, error: 'AI 无响应' };
+    return { success: false, error: t('ai.noResponse') };
   } finally {
     reader.releaseLock();
   }
@@ -369,7 +370,7 @@ async function callAnthropicAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   if (useStreaming && onChunk) {
@@ -399,7 +400,7 @@ async function callAnthropicAPI(
     }
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 async function processAnthropicStream(
@@ -410,7 +411,7 @@ async function processAnthropicStream(
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
-    return { success: false, error: '无法读取流' };
+    return { success: false, error: t('ai.cannotReadStream') };
   }
 
   const decoder = new TextDecoder();
@@ -423,7 +424,7 @@ async function processAnthropicStream(
       // Check if aborted
       if (signal?.aborted) {
         reader.cancel();
-        return { success: false, error: '请求已取消' };
+        return { success: false, error: t('ai.requestCancelled') };
       }
 
       const { done, value } = await reader.read();
@@ -465,7 +466,7 @@ async function processAnthropicStream(
     if (fullText) {
       return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
-    return { success: false, error: 'AI 无响应' };
+    return { success: false, error: t('ai.noResponse') };
   } finally {
     reader.releaseLock();
   }
@@ -511,7 +512,7 @@ async function callGeminiAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   if (useStreaming && onChunk) {
@@ -542,7 +543,7 @@ async function callGeminiAPI(
     }
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 async function processGeminiStream(
@@ -553,7 +554,7 @@ async function processGeminiStream(
 ): Promise<AIResponse> {
   const reader = response.body?.getReader();
   if (!reader) {
-    return { success: false, error: '无法读取流' };
+    return { success: false, error: t('ai.cannotReadStream') };
   }
 
   const decoder = new TextDecoder();
@@ -565,7 +566,7 @@ async function processGeminiStream(
       // Check if aborted
       if (signal?.aborted) {
         reader.cancel();
-        return { success: false, error: '请求已取消' };
+        return { success: false, error: t('ai.requestCancelled') };
       }
 
       const { done, value } = await reader.read();
@@ -606,7 +607,7 @@ async function processGeminiStream(
     if (fullText) {
       return { success: true, result: fullText, thinking: thinkingText || undefined };
     }
-    return { success: false, error: 'AI 无响应' };
+    return { success: false, error: t('ai.noResponse') };
   } finally {
     reader.releaseLock();
   }
@@ -625,7 +626,7 @@ export async function callVisionAI(
 
   // Validate API key requirement
   if (!config.apiKey) {
-    return { success: false, error: `请配置 ${provider.toUpperCase()} API Key` };
+    return { success: false, error: t('ai.configureApiKey', { provider: provider.toUpperCase() }) };
   }
 
   try {
@@ -640,9 +641,9 @@ export async function callVisionAI(
     }
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
-      return { success: false, error: '请求已取消' };
+      return { success: false, error: t('ai.requestCancelled') };
     }
-    return { success: false, error: `请求失败: ${error}` };
+    return { success: false, error: t('ai.requestFailed', { error: String(error) }) };
   }
 }
 
@@ -708,7 +709,7 @@ async function callOpenAIVisionAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   if (useStreaming && onChunk) {
@@ -722,7 +723,7 @@ async function callOpenAIVisionAPI(
     return { success: true, result };
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 // Anthropic Vision API
@@ -739,7 +740,7 @@ async function callAnthropicVisionAPI(
   // Extract base64 data and media type from data URL
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) {
-    return { success: false, error: '无效的图片数据格式' };
+    return { success: false, error: t('ai.invalidImageDataFormat') };
   }
   const [, mediaType, base64Data] = match;
 
@@ -776,7 +777,7 @@ async function callAnthropicVisionAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   if (useStreaming && onChunk) {
@@ -790,7 +791,7 @@ async function callAnthropicVisionAPI(
     return { success: true, result };
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 // Gemini Vision API
@@ -810,7 +811,7 @@ async function callGeminiVisionAPI(
   // Extract base64 data and media type from data URL
   const match = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) {
-    return { success: false, error: '无效的图片数据格式' };
+    return { success: false, error: t('ai.invalidImageDataFormat') };
   }
   const [, mimeType, base64Data] = match;
 
@@ -843,7 +844,7 @@ async function callGeminiVisionAPI(
 
   if (!response.ok) {
     const error = await response.text();
-    return { success: false, error: `API 错误: ${error}` };
+    return { success: false, error: t('ai.apiError', { error }) };
   }
 
   if (useStreaming && onChunk) {
@@ -857,7 +858,7 @@ async function callGeminiVisionAPI(
     return { success: true, result };
   }
 
-  return { success: false, error: 'AI 无响应' };
+  return { success: false, error: t('ai.noResponse') };
 }
 
 // Image generation API
@@ -874,7 +875,7 @@ export async function generateImage(
     return await callCustomImageGeneration(prompt, screenshotConfig);
   }
 
-  return { success: false, error: '请配置图像生成服务' };
+  return { success: false, error: t('ai.configureImageGenService') };
 }
 
 // OpenAI DALL-E image generation
@@ -884,7 +885,7 @@ async function callOpenAIImageGeneration(
   screenshotConfig: ScreenshotConfig
 ): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
   if (!config.apiKey) {
-    return { success: false, error: '请配置 OpenAI API Key' };
+    return { success: false, error: t('ai.configureOpenaiApiKey') };
   }
 
   try {
@@ -905,7 +906,7 @@ async function callOpenAIImageGeneration(
 
     if (!response.ok) {
       const error = await response.text();
-      return { success: false, error: `API 错误: ${error}` };
+      return { success: false, error: t('ai.apiError', { error }) };
     }
 
     const data = await response.json();
@@ -915,9 +916,9 @@ async function callOpenAIImageGeneration(
       return { success: true, imageUrl };
     }
 
-    return { success: false, error: '图像生成失败' };
+    return { success: false, error: t('ai.imageGenerationFailed') };
   } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
+    return { success: false, error: t('ai.requestFailed', { error: String(error) }) };
   }
 }
 
@@ -927,7 +928,7 @@ async function callCustomImageGeneration(
   screenshotConfig: ScreenshotConfig
 ): Promise<{ success: boolean; imageUrl?: string; error?: string }> {
   if (!screenshotConfig.customImageGenUrl) {
-    return { success: false, error: '请配置自定义图像生成 API URL' };
+    return { success: false, error: t('ai.configureCustomImageGenUrl') };
   }
 
   try {
@@ -944,7 +945,7 @@ async function callCustomImageGeneration(
 
     if (!response.ok) {
       const error = await response.text();
-      return { success: false, error: `API 错误: ${error}` };
+      return { success: false, error: t('ai.apiError', { error }) };
     }
 
     const data = await response.json();
@@ -955,9 +956,9 @@ async function callCustomImageGeneration(
       return { success: true, imageUrl };
     }
 
-    return { success: false, error: '图像生成失败' };
+    return { success: false, error: t('ai.imageGenerationFailed') };
   } catch (error) {
-    return { success: false, error: `请求失败: ${error}` };
+    return { success: false, error: t('ai.requestFailed', { error: String(error) }) };
   }
 }
 
@@ -1012,20 +1013,9 @@ export function getSummarizePagePrompt(outputLang: string = 'auto'): string {
 }
 
 export function getDescribeImagePrompt(): string {
-  return `请详细描述这张图片的内容，包括：
-1. 主要元素和对象
-2. 场景和环境
-3. 颜色和视觉特征
-4. 任何文字或标识
-5. 整体氛围和主题
-
-请用中文回答。`;
+  return t('ai.describeImagePrompt');
 }
 
 export function getAskImagePrompt(question: string): string {
-  return `请根据这张图片回答以下问题：
-
-${question}
-
-请用中文回答，尽量详细和准确。`;
+  return t('ai.askImagePrompt', { question });
 }

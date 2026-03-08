@@ -2,6 +2,7 @@
 import { SyncData, BackupFileInfo, BrowseSession, SyncOptions, DEFAULT_SYNC_OPTIONS, DEFAULT_GLOBAL_MENU, DEFAULT_SELECTION_MENU, DEFAULT_CONFIG } from '../types';
 import { refreshTokenIfNeeded, refreshTokenInteractive } from './auth-handler';
 import { getStorageData } from '../utils/storage';
+import { t } from '../i18n';
 
 const SYNC_FILE_NAME = 'eniwer-sync.json';
 const SYNC_VERSION = 1;
@@ -340,7 +341,7 @@ export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{
     ? await refreshTokenIfNeeded()
     : await refreshTokenInteractive();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('sync.notLoggedInOrExpired') };
   }
 
   try {
@@ -360,7 +361,7 @@ export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{
       console.log('Synced to cloud successfully');
       return { success: true };
     } else {
-      return { success: false, error: `写入云端失败: ${writeResult.error}` };
+      return { success: false, error: t('sync.writeToCloudFailed', { error: writeResult.error || '' }) };
     }
   } catch (error) {
     console.error('Sync to cloud error:', error);
@@ -372,7 +373,7 @@ export async function syncToCloud(options?: { isAutoSync?: boolean }): Promise<{
 export async function syncFromCloud(): Promise<{ success: boolean; data?: SyncData; error?: string }> {
   const token = await refreshTokenInteractive();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('sync.notLoggedInOrExpired') };
   }
 
   try {
@@ -386,12 +387,12 @@ export async function syncFromCloud(): Promise<{ success: boolean; data?: SyncDa
     // Read sync data
     const remoteData = await readSyncFile(token, existingFile.id);
     if (!remoteData) {
-      return { success: false, error: '读取云端数据失败' };
+      return { success: false, error: t('sync.readCloudDataFailed') };
     }
 
     // Check version compatibility
     if (remoteData.version > SYNC_VERSION) {
-      return { success: false, error: '云端数据版本较新，请更新扩展' };
+      return { success: false, error: t('sync.cloudDataNewerVersion') };
     }
 
     // Always apply remote data when user explicitly downloads
@@ -439,7 +440,7 @@ export function setupAutoSync(): void {
 export async function listBackups(): Promise<{ success: boolean; backups?: BackupFileInfo[]; error?: string }> {
   const token = await refreshTokenIfNeeded();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('sync.notLoggedInOrExpired') };
   }
 
   try {
@@ -461,13 +462,13 @@ export async function listBackups(): Promise<{ success: boolean; backups?: Backu
 export async function restoreBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
   const token = await refreshTokenInteractive();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('sync.notLoggedInOrExpired') };
   }
 
   try {
     const data = await readSyncFile(token, fileId);
     if (!data) {
-      return { success: false, error: '读取备份失败' };
+      return { success: false, error: t('sync.readBackupFailed') };
     }
 
     await applyRemoteSyncData(data);
@@ -483,7 +484,7 @@ export async function restoreBackup(fileId: string): Promise<{ success: boolean;
 export async function deleteBackup(fileId: string): Promise<{ success: boolean; error?: string }> {
   const token = await refreshTokenInteractive();
   if (!token) {
-    return { success: false, error: '未登录或授权已过期' };
+    return { success: false, error: t('sync.notLoggedInOrExpired') };
   }
 
   try {
@@ -491,7 +492,7 @@ export async function deleteBackup(fileId: string): Promise<{ success: boolean; 
     if (ok) {
       return { success: true };
     }
-    return { success: false, error: '删除备份失败' };
+    return { success: false, error: t('sync.deleteBackupFailed') };
   } catch (error) {
     console.error('Delete backup error:', error);
     return { success: false, error: String(error) };

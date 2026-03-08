@@ -85,6 +85,7 @@ export interface MenuConfig {
   knowledge?: KnowledgeConfig;
   syncOptions?: SyncOptions;
   autoSaveTask?: boolean;
+  uiLanguage?: string;
 }
 
 export interface StorageData {
@@ -138,24 +139,25 @@ export const DEFAULT_CONFIG: MenuConfig = {
 };
 
 export const DEFAULT_SELECTION_MENU: MenuItem[] = [
-  { id: 'translate', icon: icons.translate, label: '翻译', action: 'translate', enabled: true, order: 0 },
-  { id: 'summarize', icon: icons.summarize, label: '总结', action: 'summarize', enabled: true, order: 1 },
-  { id: 'explain', icon: icons.explain, label: '解释', action: 'explain', enabled: true, order: 2 },
-  { id: 'rewrite', icon: icons.rewrite, label: '改写', action: 'rewrite', enabled: true, order: 3 },
-  { id: 'search', icon: icons.search, label: '搜索', action: 'search', enabled: true, order: 4 },
-  { id: 'copy', icon: icons.copy, label: '复制', action: 'copy', enabled: true, order: 5 },
-  { id: 'sendToAI', icon: icons.sendToAI, label: '发送到 AI', action: 'sendToAI', enabled: true, order: 6 },
-  { id: 'codeExplain', icon: icons.codeExplain, label: '代码解释', action: 'codeExplain', enabled: true, order: 7 },
+  { id: 'translate', icon: icons.translate, label: 'menu.translate', action: 'translate', enabled: true, order: 0 },
+  { id: 'summarize', icon: icons.summarize, label: 'menu.summarize', action: 'summarize', enabled: true, order: 1 },
+  { id: 'explain', icon: icons.explain, label: 'menu.explain', action: 'explain', enabled: true, order: 2 },
+  { id: 'rewrite', icon: icons.rewrite, label: 'menu.rewrite', action: 'rewrite', enabled: true, order: 3 },
+  { id: 'search', icon: icons.search, label: 'menu.search', action: 'search', enabled: true, order: 4 },
+  { id: 'copy', icon: icons.copy, label: 'menu.copy', action: 'copy', enabled: true, order: 5 },
+  { id: 'sendToAI', icon: icons.sendToAI, label: 'menu.sendToAI', action: 'sendToAI', enabled: true, order: 6 },
+  { id: 'codeExplain', icon: icons.codeExplain, label: 'menu.codeExplain', action: 'codeExplain', enabled: true, order: 7 },
 ];
 
 export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
-  { id: 'contextChat', icon: icons.messageCircle, label: '上下文追问', action: 'contextChat', enabled: true, order: 0 },
-  { id: 'summarizePage', icon: icons.summarizePage, label: '总结页面', action: 'summarizePage', enabled: true, order: 1 },
-  { id: 'knowledge', icon: icons.library, label: '知识库', action: 'knowledge', enabled: true, order: 2 },
-  { id: 'annotations', icon: icons.highlighter, label: '批注', action: 'annotations', enabled: true, order: 3 },
-  { id: 'browseTrail', icon: icons.history, label: '浏览轨迹', action: 'browseTrail', enabled: true, order: 4 },
-  { id: 'screenshot', icon: icons.screenshot, label: '截图', action: 'screenshot', enabled: true, order: 5 },
-  { id: 'settings', icon: icons.settings, label: '设置', action: 'settings', enabled: true, order: 6 },
+  { id: 'contextChat', icon: icons.contextChat, label: 'menu.contextChat', action: 'contextChat', enabled: true, order: 0 },
+  { id: 'translateInput', icon: icons.translate, label: 'menu.translateInput', action: 'translateInput', enabled: true, order: 1 },
+  { id: 'summarizePage', icon: icons.summarizePage, label: 'menu.summarizePage', action: 'summarizePage', enabled: true, order: 2 },
+  { id: 'knowledge', icon: icons.library, label: 'menu.knowledge', action: 'knowledge', enabled: true, order: 3 },
+  { id: 'annotations', icon: icons.highlighter, label: 'menu.annotations', action: 'annotations', enabled: true, order: 4 },
+  { id: 'browseTrail', icon: icons.history, label: 'menu.browseTrail', action: 'browseTrail', enabled: true, order: 5 },
+  { id: 'screenshot', icon: icons.screenshot, label: 'menu.screenshot', action: 'screenshot', enabled: true, order: 6 },
+  { id: 'settings', icon: icons.settings, label: 'menu.settings', action: 'settings', enabled: true, order: 7 },
 ];
 
 export type MessageType =

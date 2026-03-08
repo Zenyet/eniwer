@@ -16,26 +16,35 @@
     <div class="flex flex-col gap-4">
       <!-- Shortcut Section -->
       <div class="flex flex-col gap-2">
-        <div class="text-xs text-gray-500 dark:text-white/50">快捷键</div>
+        <div class="text-xs text-gray-500 dark:text-white/50" data-i18n="popup.shortcutLabel">快捷键</div>
         <div class="flex items-center gap-2">
           <div class="shortcut-display" id="shortcutDisplay">
             <!-- 动态填充快捷键 -->
           </div>
-          <button class="record-btn" id="recordShortcutBtn" title="录制快捷键">
+          <button class="record-btn" id="recordShortcutBtn" data-i18n-title="popup.recordShortcutTitle" title="录制快捷键">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <circle cx="12" cy="12" r="3" fill="currentColor"/>
             </svg>
           </button>
         </div>
-        <div class="text-xs text-gray-400 dark:text-white/40" id="shortcutHint">点击录制按钮设置新快捷键</div>
+        <div class="text-xs text-gray-400 dark:text-white/40" id="shortcutHint" data-i18n="popup.clickToRecord">点击录制按钮设置新快捷键</div>
       </div>
 
-      <div class="flex gap-2">
-        <button class="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-sm text-gray-900 dark:text-white cursor-pointer bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/10 transition-all duration-150 hover:bg-blue-500/10 dark:hover:bg-blue-500/30 hover:border-blue-500/30 dark:hover:border-blue-500/50" id="openMenu">
-          打开菜单
-        </button>
+      <!-- Language Section -->
+      <div class="flex flex-col gap-2">
+        <div class="text-xs text-gray-500 dark:text-white/50" data-i18n="settings.uiLanguage">界面语言</div>
+        <select id="uiLangSelect" class="gap-1.5 p-2.5 w-full rounded-lg text-sm text-gray-900 dark:text-white bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/10">
+          <option value="zh-CN">简体中文</option>
+          <option value="en">English</option>
+        </select>
       </div>
+
+      <!-- <div class="flex gap-2">
+        <button class="flex-1 flex items-center justify-center gap-1.5 p-2.5 rounded-lg text-sm text-gray-900 dark:text-white cursor-pointer bg-gray-100 border border-gray-200 dark:bg-white/10 dark:border-white/10 transition-all duration-150 hover:bg-blue-500/10 dark:hover:bg-blue-500/30 hover:border-blue-500/30 dark:hover:border-blue-500/50" id="openMenu">
+          <span data-i18n="popup.openMenu">打开菜单</span>
+        </button>
+      </div> -->
     </div>
 
     <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-200 dark:border-white/10">

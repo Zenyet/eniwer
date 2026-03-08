@@ -1,6 +1,7 @@
 // Browse Trail View - displays browsing history
 import { BrowseSession } from '../../../types';
 import { escapeHtml } from '../utils';
+import { t } from '../../../i18n';
 
 // Re-export TrailEntry type for convenience
 export type { BrowseSession } from '../../../types';
@@ -36,13 +37,13 @@ export function getBrowseTrailViewHTML(
     <div class="glass-search glass-draggable">
       <div class="glass-command-tag" data-action="browseTrail">
         <span class="glass-command-tag-icon">${icons.history}</span>
-        <span class="glass-command-tag-label">浏览轨迹</span>
+        <span class="glass-command-tag-label">${t('menu.browseTrail')}</span>
         <button class="glass-command-tag-close">&times;</button>
       </div>
       <input
         type="text"
         class="glass-input"
-        placeholder="搜索历史记录..."
+        placeholder="${t('trail.searchPlaceholder')}"
         autocomplete="off"
         spellcheck="false"
       />
@@ -56,8 +57,8 @@ export function getBrowseTrailViewHTML(
     </div>
     <div class="glass-footer">
       <div class="glass-trail-footer-actions">
-        <button class="glass-btn glass-btn-trail-clear">清空历史</button>
-        <button class="glass-btn glass-btn-trail-export">导出</button>
+        <button class="glass-btn glass-btn-trail-clear">${t('trail.clearHistory')}</button>
+        <button class="glass-btn glass-btn-trail-export">${t('common.export')}</button>
       </div>
       <div class="glass-brand">
         <span class="glass-logo">${icons.logo}</span>
@@ -92,10 +93,10 @@ export function getBrowseTrailContentHTML(
       <div class="glass-trail-empty">
         <div class="glass-trail-empty-icon">${icons.history}</div>
         <div class="glass-trail-empty-text">
-          ${query ? '没有找到匹配的记录' : '还没有浏览记录'}
+          ${query ? t('trail.noMatchFound') : t('trail.noHistory')}
         </div>
         <div class="glass-trail-empty-hint">
-          ${query ? '试试其他关键词' : '浏览网页时会自动记录'}
+          ${query ? t('trail.tryOtherKeywords') : t('trail.autoRecordHint')}
         </div>
       </div>
     `;
@@ -123,13 +124,13 @@ export function getBrowseTrailContentHTML(
           return `
             <div class="glass-trail-entry" data-url="${escapeHtml(entry.url)}">
               <div class="glass-trail-entry-info">
-                <div class="glass-trail-entry-title">${escapeHtml(entry.title || '无标题')}</div>
+                <div class="glass-trail-entry-title">${escapeHtml(entry.title || t('trail.noTitle'))}</div>
                 <div class="glass-trail-entry-meta">
                   <span class="glass-trail-entry-domain">${escapeHtml(domain)}</span>
                   <span class="glass-trail-entry-time">${time}</span>
                 </div>
               </div>
-              <button class="glass-trail-entry-delete" data-id="${entry.id}" title="删除">&times;</button>
+              <button class="glass-trail-entry-delete" data-id="${entry.id}" title="${t('common.delete')}">&times;</button>
             </div>
           `;
         }).join('')}
@@ -140,7 +141,7 @@ export function getBrowseTrailContentHTML(
   const loadMoreHTML = hasMore ? `
     <div class="glass-trail-load-more">
       <button class="glass-btn glass-btn-load-more">
-        加载更多 (${filtered.length - state.displayCount} 条)
+        ${t('trail.loadMore', { count: String(filtered.length - state.displayCount) })}
       </button>
     </div>
   ` : '';
@@ -158,9 +159,9 @@ function groupTrailByDate(entries: TrailEntry[]): Record<string, TrailEntry[]> {
     let label: string;
 
     if (date === today) {
-      label = '今天';
+      label = t('time.today');
     } else if (date === yesterday) {
-      label = '昨天';
+      label = t('time.yesterday');
     } else {
       label = new Date(entry.visitedAt).toLocaleDateString('zh-CN', {
         month: 'long',
@@ -226,7 +227,7 @@ export function bindBrowseTrailEvents(
   // Footer actions
   const clearBtn = shadowRoot.querySelector('.glass-btn-trail-clear');
   clearBtn?.addEventListener('click', async () => {
-    if (confirm('确定要清空所有浏览记录吗？')) {
+    if (confirm(t('trail.confirmClear'))) {
       await callbacks.onClear();
     }
   });

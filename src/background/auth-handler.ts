@@ -1,6 +1,7 @@
 // Google OAuth authentication handler
 // Supports chrome.identity.getAuthToken (Chrome) with launchWebAuthFlow fallback (Edge, Brave, Arc, etc.)
 import { GoogleUser, AuthState } from '../types';
+import { t } from '../i18n';
 
 const AUTH_STATE_KEY = 'thecircle_auth_state';
 const SYNC_ENABLED_KEY = 'thecircle_sync_enabled';
@@ -244,12 +245,12 @@ export async function googleLogin(): Promise<{ success: boolean; user?: GoogleUs
   try {
     const token = await getToken(true);
     if (!token) {
-      return { success: false, error: '无法获取授权令牌' };
+      return { success: false, error: t('auth.cannotGetAuthToken') };
     }
 
     const user = await fetchUserInfo(token);
     if (!user) {
-      return { success: false, error: '无法获取用户信息' };
+      return { success: false, error: t('auth.cannotGetUserInfo') };
     }
 
     await chrome.storage.local.set({
@@ -263,9 +264,9 @@ export async function googleLogin(): Promise<{ success: boolean; user?: GoogleUs
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (errorMessage.includes('canceled') || errorMessage.includes('cancelled')) {
-      return { success: false, error: '登录已取消' };
+      return { success: false, error: t('auth.loginCancelled') };
     }
-    return { success: false, error: `登录失败: ${errorMessage}` };
+    return { success: false, error: t('auth.loginFailed', { error: errorMessage }) };
   }
 }
 

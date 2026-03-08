@@ -1,9 +1,23 @@
 import './styles.css';
 import { DEFAULT_CONFIG } from '../types';
 import { icons } from '../icons';
+import { initI18n, setLocale, t } from '../i18n';
 
 // Popup script
 document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize i18n
+  await initI18n();
+
+  // Apply translations to data-i18n elements
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (key) el.setAttribute('title', t(key));
+  });
+
   // Inject icons
   const logoHeader = document.getElementById('app-logo-header');
   if (logoHeader) logoHeader.innerHTML = icons.logo;
@@ -29,6 +43,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   updateShortcutDisplay(currentShortcut);
 
+  // Language selector
+  const uiLangSelect = document.getElementById('uiLangSelect') as HTMLSelectElement;
+  if (uiLangSelect) {
+    uiLangSelect.value = config.uiLanguage || 'zh-CN';
+    uiLangSelect.addEventListener('change', async () => {
+      const newLang = uiLangSelect.value;
+      setLocale(newLang);
+      const stored = await chrome.storage.local.get('thecircle_data');
+      const d = stored.thecircle_data || {};
+      d.config = { ...DEFAULT_CONFIG, ...d.config, uiLanguage: newLang };
+      await chrome.storage.local.set({ thecircle_data: d });
+      // Re-apply translations
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) el.textContent = t(key);
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (key) el.setAttribute('title', t(key));
+      });
+    });
+  }
+
   // Shortcut recording
   recordShortcutBtn?.addEventListener('click', () => {
     if (isRecording) {
@@ -45,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     recordShortcutBtn!.classList.add('recording');
     shortcutDisplayEl!.classList.add('recording');
     if (shortcutHintEl) {
-      shortcutHintEl.textContent = '按组合键或连按两次同一键... (ESC 取消)';
+      shortcutHintEl.textContent = t('popup.recordingHint');
     }
     document.addEventListener('keydown', handleShortcutKeyDown);
   }
@@ -56,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     lastKey = '';
     recordShortcutBtn!.classList.remove('recording');
     shortcutDisplayEl!.classList.remove('recording');
-    if (shortcutHintEl) shortcutHintEl.textContent = '点击录制按钮设置新快捷键';
+    if (shortcutHintEl) shortcutHintEl.textContent = t('popup.clickToRecord');
     document.removeEventListener('keydown', handleShortcutKeyDown);
   }
 
@@ -107,7 +144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     lastKeyTime = now;
     lastKey = key;
     if (shortcutHintEl) {
-      shortcutHintEl.textContent = `再按一次 ${getKeyName(key)} 或按组合键...`;
+      shortcutHintEl.textContent = t('popup.pressAgainOrCombo', { key: getKeyName(key) });
     }
   }
 
@@ -130,9 +167,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     data.config = { ...currentConfig, shortcut };
     await chrome.storage.local.set({ thecircle_data: data });
     if (shortcutHintEl) {
-      shortcutHintEl.textContent = '快捷键已保存';
+      shortcutHintEl.textContent = t('popup.shortcutSaved');
       setTimeout(() => {
-        if (shortcutHintEl) shortcutHintEl.textContent = '点击录制按钮设置新快捷键';
+        if (shortcutHintEl) shortcutHintEl.textContent = t('popup.clickToRecord');
       }, 2000);
     }
   }
@@ -180,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.close();
         } catch (injectError) {
           console.error('Failed to inject:', injectError);
-          alert('无法在此页面使用。可能是浏览器限制的页面。');
+          alert(t('popup.cannotUseOnPage'));
         }
       }
     }
@@ -211,7 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.close();
         } catch (injectError) {
           console.error('Failed to inject:', injectError);
-          alert('无法在此页面使用。可能是浏览器限制的页面。');
+          alert(t('popup.cannotUseOnPage'));
         }
       }
     }

@@ -2,6 +2,7 @@
 import { Annotation, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { escapeHtml } from '../utils';
+import { t } from '../../../i18n';
 
 export interface AnnotationsState {
   annotationsList: Annotation[];
@@ -27,13 +28,13 @@ export function getAnnotationsViewHTML(
     <div class="glass-search glass-draggable">
       <div class="glass-command-tag" data-action="annotations">
         <span class="glass-command-tag-icon">${icons.highlighter}</span>
-        <span class="glass-command-tag-label">批注</span>
+        <span class="glass-command-tag-label">${t('annotations.title')}</span>
         <button class="glass-command-tag-close">&times;</button>
       </div>
       <input
         type="text"
         class="glass-input"
-        placeholder="搜索批注..."
+        placeholder="${t('annotations.searchPlaceholder')}"
         autocomplete="off"
         spellcheck="false"
       />
@@ -41,8 +42,8 @@ export function getAnnotationsViewHTML(
     </div>
     <div class="glass-divider"></div>
     <div class="glass-knowledge-filter">
-      <button class="glass-filter-btn ${state.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">全部</button>
-      <button class="glass-filter-btn ${state.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">当前页面</button>
+      <button class="glass-filter-btn ${state.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">${t('annotations.all')}</button>
+      <button class="glass-filter-btn ${state.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">${t('annotations.currentPage')}</button>
     </div>
     <div class="glass-body">
       <div class="glass-knowledge-content">
@@ -51,7 +52,7 @@ export function getAnnotationsViewHTML(
     </div>
     <div class="glass-footer">
       <div class="glass-knowledge-footer-info">
-        ${getFilteredCount()} 条批注
+        ${t('annotations.count', { count: getFilteredCount() })}
       </div>
       <div class="glass-brand">
         <span class="glass-logo">${icons.logo}</span>
@@ -108,9 +109,9 @@ export function groupAnnotationsByDate(annotations: Annotation[]): Record<string
     let label: string;
 
     if (date === today) {
-      label = '今天';
+      label = t('annotations.today');
     } else if (date === yesterday) {
-      label = '昨天';
+      label = t('annotations.yesterday');
     } else {
       label = new Date(annotation.createdAt).toLocaleDateString('zh-CN', {
         month: 'long',
@@ -142,10 +143,10 @@ export function getAnnotationsContentHTML(
       <div class="glass-knowledge-empty">
         <div class="glass-knowledge-empty-icon">${icons.highlighter}</div>
         <div class="glass-knowledge-empty-text">
-          ${searchQuery ? '没有找到匹配的批注' : (filter === 'current' ? '当前页面没有批注' : '还没有批注')}
+          ${searchQuery ? t('annotations.emptySearch') : (filter === 'current' ? t('annotations.emptyCurrentPage') : t('annotations.empty'))}
         </div>
         <div class="glass-knowledge-empty-hint">
-          ${searchQuery ? '试试其他关键词' : '选择文本后点击高亮按钮添加批注'}
+          ${searchQuery ? t('annotations.emptySearchHint') : t('annotations.emptyHint')}
         </div>
       </div>
     `;
@@ -185,7 +186,7 @@ export function getAnnotationEntryHTML(annotation: Annotation, icons: Record<str
       <div class="glass-knowledge-entry-header">
         <span class="glass-knowledge-entry-type">
           <span class="glass-knowledge-entry-type-icon">${icons.highlighter}</span>
-          批注
+          ${t('annotations.title')}
         </span>
         <span class="glass-knowledge-entry-time">${time}</span>
       </div>
@@ -200,7 +201,7 @@ export function getAnnotationEntryHTML(annotation: Annotation, icons: Record<str
       <div class="glass-knowledge-entry-meta">
         <span class="glass-knowledge-entry-page" title="${escapeHtml(annotation.pageTitle)}">${escapeHtml(annotation.pageTitle || domain)}</span>
       </div>
-      <button class="glass-knowledge-entry-delete" data-id="${annotation.id}" title="删除">&times;</button>
+      <button class="glass-knowledge-entry-delete" data-id="${annotation.id}" title="${t('common.delete')}">&times;</button>
     </div>
   `;
 }
@@ -208,10 +209,10 @@ export function getAnnotationEntryHTML(annotation: Annotation, icons: Record<str
 // Local helper function (not exported to avoid conflict with KnowledgeView)
 function getAIResultTypeLabelLocal(type: string): string {
   const labels: Record<string, string> = {
-    translate: '翻译',
-    explain: '解释',
-    summarize: '总结',
-    rewrite: '改写',
+    translate: t('annotations.aiType.translate'),
+    explain: t('annotations.aiType.explain'),
+    summarize: t('annotations.aiType.summarize'),
+    rewrite: t('annotations.aiType.rewrite'),
   };
   return labels[type] || type;
 }

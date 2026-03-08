@@ -2,6 +2,41 @@ import { StorageData, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MEN
 
 const STORAGE_KEY = 'thecircle_data';
 
+// Legacy Chinese labels -> i18n keys migration map
+const LEGACY_LABEL_MAP: Record<string, string> = {
+  '翻译': 'menu.translate',
+  '总结': 'menu.summarize',
+  '解释': 'menu.explain',
+  '改写': 'menu.rewrite',
+  '搜索': 'menu.search',
+  '复制': 'menu.copy',
+  '发送到 AI': 'menu.sendToAI',
+  '代码解释': 'menu.codeExplain',
+  '上下文追问': 'menu.contextChat',
+  '总结页面': 'menu.summarizePage',
+  '知识库': 'menu.knowledge',
+  '批注': 'menu.annotations',
+  '浏览轨迹': 'menu.browseTrail',
+  '截图': 'menu.screenshot',
+  '设置': 'menu.settings',
+};
+
+/**
+ * Migrate legacy Chinese labels to i18n keys
+ */
+function migrateMenuLabels(items: MenuItem[]): { items: MenuItem[]; changed: boolean } {
+  let changed = false;
+  const migrated = items.map(item => {
+    const newLabel = LEGACY_LABEL_MAP[item.label];
+    if (newLabel) {
+      changed = true;
+      return { ...item, label: newLabel };
+    }
+    return item;
+  });
+  return { items: migrated, changed };
+}
+
 // Merge new default menu items into existing items (preserves user customizations)
 function mergeMenuItems(existing: MenuItem[], defaults: MenuItem[]): MenuItem[] {
   const existingIds = new Set(existing.map(item => item.id));
@@ -35,15 +70,21 @@ export async function getStorageData(): Promise<StorageData> {
     const mergedGlobalMenu = mergeMenuItems(globalItems, DEFAULT_GLOBAL_MENU);
     const mergedSelectionMenu = mergeMenuItems(selectionItems, DEFAULT_SELECTION_MENU);
 
-    // Always update arrays (handles missing fields + new items)
-    data.globalMenuItems = mergedGlobalMenu;
-    data.selectionMenuItems = mergedSelectionMenu;
+    // Migrate legacy Chinese labels to i18n keys
+    const globalMigration = migrateMenuLabels(mergedGlobalMenu);
+    const selectionMigration = migrateMenuLabels(mergedSelectionMenu);
 
-    // Save if arrays were missing or new items added
+    // Always update arrays (handles missing fields + new items)
+    data.globalMenuItems = globalMigration.items;
+    data.selectionMenuItems = selectionMigration.items;
+
+    // Save if arrays were missing, new items added, or labels migrated
     if (mergedGlobalMenu.length !== globalItems.length ||
         mergedSelectionMenu.length !== selectionItems.length ||
         !result[STORAGE_KEY].globalMenuItems ||
-        !result[STORAGE_KEY].selectionMenuItems) {
+        !result[STORAGE_KEY].selectionMenuItems ||
+        globalMigration.changed ||
+        selectionMigration.changed) {
       await chrome.storage.local.set({ [STORAGE_KEY]: data });
     }
 

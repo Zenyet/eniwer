@@ -1,5 +1,5 @@
 // Settings View - handles settings configuration
-import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions } from '../../../types';
+import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions, DEFAULT_YOUTUBE_SUBTITLE_CONFIG } from '../../../types';
 import { PRESET_COLORS, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { saveConfig, saveGlobalMenuItems } from '../../../utils/storage';
@@ -289,6 +289,63 @@ export function getSettingsViewHTML(
             <input type="text" class="glass-input" id="translation-custom-url" value="${config.translation?.customUrl || ''}" placeholder="http://localhost:1188/translate">
           </div>
           <span class="glass-form-hint" id="translation-hint">${getTranslationHint(config.translation?.provider || 'ai')}</span>
+        </div>
+
+        <!-- YouTube 字幕翻译 -->
+        <div class="glass-settings-section">
+          <div class="glass-settings-section-title">${t('settings.youtubeSubtitleSection')}</div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">${t('settings.youtubeSubtitleEnabled')}</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="yt-subtitle-enabled" ${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+            <span class="glass-form-hint">${t('settings.youtubeSubtitleHint')}</span>
+          </div>
+          <div id="yt-subtitle-settings"${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? '' : ' style="display: none"'}>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.youtubeSubtitleSourceLang')}</label>
+              <select class="glass-select" id="yt-subtitle-source-lang">
+                <option value="auto"${(config.youtubeSubtitle?.sourceLanguage || 'auto') === 'auto' ? ' selected' : ''}>${t('settings.youtubeSubtitleAutoDetect')}</option>
+                <option value="en"${config.youtubeSubtitle?.sourceLanguage === 'en' ? ' selected' : ''}>English</option>
+                <option value="zh-CN"${config.youtubeSubtitle?.sourceLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
+                <option value="zh-TW"${config.youtubeSubtitle?.sourceLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
+                <option value="ja"${config.youtubeSubtitle?.sourceLanguage === 'ja' ? ' selected' : ''}>日本語</option>
+                <option value="ko"${config.youtubeSubtitle?.sourceLanguage === 'ko' ? ' selected' : ''}>한국어</option>
+                <option value="es"${config.youtubeSubtitle?.sourceLanguage === 'es' ? ' selected' : ''}>Español</option>
+                <option value="fr"${config.youtubeSubtitle?.sourceLanguage === 'fr' ? ' selected' : ''}>Français</option>
+                <option value="de"${config.youtubeSubtitle?.sourceLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
+              </select>
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.youtubeSubtitleTargetLang')}</label>
+              <select class="glass-select" id="yt-subtitle-target-lang">
+                <option value="zh-CN"${(config.youtubeSubtitle?.targetLanguage || 'zh-CN') === 'zh-CN' ? ' selected' : ''}>简体中文</option>
+                <option value="zh-TW"${config.youtubeSubtitle?.targetLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
+                <option value="en"${config.youtubeSubtitle?.targetLanguage === 'en' ? ' selected' : ''}>English</option>
+                <option value="ja"${config.youtubeSubtitle?.targetLanguage === 'ja' ? ' selected' : ''}>日本語</option>
+                <option value="ko"${config.youtubeSubtitle?.targetLanguage === 'ko' ? ' selected' : ''}>한국어</option>
+                <option value="es"${config.youtubeSubtitle?.targetLanguage === 'es' ? ' selected' : ''}>Español</option>
+                <option value="fr"${config.youtubeSubtitle?.targetLanguage === 'fr' ? ' selected' : ''}>Français</option>
+                <option value="de"${config.youtubeSubtitle?.targetLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
+              </select>
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.youtubeSubtitleFontSize')}</label>
+              <select class="glass-select" id="yt-subtitle-font-size">
+                <option value="small"${(config.youtubeSubtitle?.fontSize || 'medium') === 'small' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontSmall')}</option>
+                <option value="medium"${(config.youtubeSubtitle?.fontSize || 'medium') === 'medium' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontMedium')}</option>
+                <option value="large"${(config.youtubeSubtitle?.fontSize || 'medium') === 'large' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontLarge')}</option>
+              </select>
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.youtubeSubtitleDisplayMode')}</label>
+              <select class="glass-select" id="yt-subtitle-display-mode">
+                <option value="bilingual"${(config.youtubeSubtitle?.displayMode || 'bilingual') === 'bilingual' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeBilingual')}</option>
+                <option value="translated"${config.youtubeSubtitle?.displayMode === 'translated' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeTranslated')}</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <!-- 外观 -->

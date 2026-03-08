@@ -3,6 +3,7 @@ import { MenuActions } from './MenuActions';
 import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { TrailRecorder } from './BrowseTrailPanel';
 import { AnnotationSystem } from './annotation';
+import { YouTubeSubtitleManager } from './youtube';
 import { AnnotationColor, AnnotationAIResult, AIResultType } from '../types/annotation';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
@@ -22,6 +23,7 @@ class TheCircle {
   private selectionPopover: SelectionPopover;
   private trailRecorder: TrailRecorder;
   private annotationSystem: AnnotationSystem;
+  private youtubeSubtitleManager: YouTubeSubtitleManager;
   private selectionMenuItems: MenuItem[] = DEFAULT_SELECTION_MENU;
   private globalMenuItems: MenuItem[] = DEFAULT_GLOBAL_MENU;
   private config: MenuConfig = DEFAULT_CONFIG;
@@ -38,6 +40,7 @@ class TheCircle {
     this.selectionPopover = new SelectionPopover();
     this.trailRecorder = new TrailRecorder();
     this.annotationSystem = new AnnotationSystem();
+    this.youtubeSubtitleManager = new YouTubeSubtitleManager(DEFAULT_CONFIG);
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
       onToast: (message) => this.showToast(message),
@@ -75,6 +78,10 @@ class TheCircle {
     // Initialize annotation system (restore highlights)
     await this.annotationSystem.init();
 
+    // Initialize YouTube subtitle manager if on YouTube
+    this.youtubeSubtitleManager.updateConfig(this.config);
+    this.youtubeSubtitleManager.init();
+
   }
 
   private async loadConfig(): Promise<void> {
@@ -106,6 +113,7 @@ class TheCircle {
           this.menuActions.setConfig(this.config);
           this.commandPalette.setConfig(this.config);
           this.applyTheme(this.config.theme);
+          this.youtubeSubtitleManager.updateConfig(this.config);
         }
       }
       // Listen for saved tasks changes to enable cross-tab sync

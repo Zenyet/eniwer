@@ -473,4 +473,23 @@ export const zhCN: Record<string, string> = {
   'model.kimiThinking': 'Kimi K2 (思考)',
   'model.glm45v': 'GLM-4.5V (视觉)',
   'model.glm46v': 'GLM-4.6V (视觉)',
+
+  // === YouTube Subtitle ===
+  'settings.youtubeSubtitleSection': 'YouTube 字幕翻译',
+  'settings.youtubeSubtitleEnabled': '启用字幕翻译',
+  'settings.youtubeSubtitleSourceLang': '源语言',
+  'settings.youtubeSubtitleTargetLang': '目标语言',
+  'settings.youtubeSubtitleFontSize': '字体大小',
+  'settings.youtubeSubtitleDisplayMode': '显示模式',
+  'settings.youtubeSubtitleAutoDetect': '自动检测',
+  'settings.youtubeSubtitleFontSmall': '小',
+  'settings.youtubeSubtitleFontMedium': '中',
+  'settings.youtubeSubtitleFontLarge': '大',
+  'settings.youtubeSubtitleModeBilingual': '双语',
+  'settings.youtubeSubtitleModeTranslated': '仅译文',
+  'settings.youtubeSubtitleHint': '在 YouTube 视频上叠加显示翻译字幕',
+  'youtube.noSubtitlesAvailable': '无可用字幕',
+  'youtube.translating': '翻译字幕中...',
+  'youtube.subtitleError': '字幕加载失败',
+  'youtube.toggleSubtitle': '双语字幕',
 };

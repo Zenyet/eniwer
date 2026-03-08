@@ -2589,6 +2589,46 @@ export class CommandPalette {
       markChanged();
     });
 
+    // ===== YouTube subtitle settings =====
+    const ytSubtitleConfig = tempConfig.youtubeSubtitle || { enabled: false, sourceLanguage: 'auto', targetLanguage: 'zh-CN', fontSize: 'medium' as const, displayMode: 'bilingual' as const };
+
+    const ytSubtitleEnabled = this.shadowRoot.querySelector('#yt-subtitle-enabled') as HTMLInputElement;
+    const ytSubtitleSettings = this.shadowRoot.querySelector('#yt-subtitle-settings') as HTMLElement;
+    ytSubtitleEnabled?.addEventListener('change', () => {
+      ytSubtitleConfig.enabled = ytSubtitleEnabled.checked;
+      tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      if (ytSubtitleSettings) ytSubtitleSettings.style.display = ytSubtitleEnabled.checked ? 'block' : 'none';
+      markChanged();
+    });
+
+    const ytSourceLang = this.shadowRoot.querySelector('#yt-subtitle-source-lang') as HTMLSelectElement;
+    ytSourceLang?.addEventListener('change', () => {
+      ytSubtitleConfig.sourceLanguage = ytSourceLang.value;
+      tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      markChanged();
+    });
+
+    const ytTargetLang = this.shadowRoot.querySelector('#yt-subtitle-target-lang') as HTMLSelectElement;
+    ytTargetLang?.addEventListener('change', () => {
+      ytSubtitleConfig.targetLanguage = ytTargetLang.value;
+      tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      markChanged();
+    });
+
+    const ytFontSize = this.shadowRoot.querySelector('#yt-subtitle-font-size') as HTMLSelectElement;
+    ytFontSize?.addEventListener('change', () => {
+      ytSubtitleConfig.fontSize = ytFontSize.value as 'small' | 'medium' | 'large';
+      tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      markChanged();
+    });
+
+    const ytDisplayMode = this.shadowRoot.querySelector('#yt-subtitle-display-mode') as HTMLSelectElement;
+    ytDisplayMode?.addEventListener('change', () => {
+      ytSubtitleConfig.displayMode = ytDisplayMode.value as 'bilingual' | 'translated';
+      tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      markChanged();
+    });
+
     // ===== Storage usage =====
     this.loadStorageUsage();
     const storageRefreshBtn = this.shadowRoot.querySelector('#storage-refresh-btn');

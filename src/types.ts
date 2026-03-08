@@ -86,6 +86,7 @@ export interface MenuConfig {
   syncOptions?: SyncOptions;
   autoSaveTask?: boolean;
   uiLanguage?: string;
+  youtubeSubtitle?: YouTubeSubtitleConfig;
 }
 
 export interface StorageData {
@@ -181,6 +182,9 @@ export type MessageType =
   | 'SYNC_FROM_CLOUD'
   | 'EXPORT_TO_DRIVE'
   | 'FREE_TRANSLATE'
+  | 'FETCH_URL'
+  | 'FETCH_YOUTUBE_CAPTIONS'
+  | 'EXTRACT_YT_PLAYER_DATA'
   | 'SET_SYNC_ENABLED'
   | 'LIST_BACKUPS'
   | 'RESTORE_BACKUP'
@@ -307,6 +311,23 @@ export const DEFAULT_IMAGE_SEARCH_CONFIG: ImageSearchConfig = {
   yandex: true,
   bing: true,
   tineye: true,
+};
+
+// YouTube subtitle config
+export interface YouTubeSubtitleConfig {
+  enabled: boolean;
+  sourceLanguage: 'auto' | string;       // 'auto' auto-detect, or language code
+  targetLanguage: string;                 // translation target language
+  fontSize: 'small' | 'medium' | 'large';
+  displayMode: 'bilingual' | 'translated'; // bilingual or translated only
+}
+
+export const DEFAULT_YOUTUBE_SUBTITLE_CONFIG: YouTubeSubtitleConfig = {
+  enabled: false,
+  sourceLanguage: 'auto',
+  targetLanguage: 'zh-CN',
+  fontSize: 'medium',
+  displayMode: 'bilingual',
 };
 
 // Sync data structure

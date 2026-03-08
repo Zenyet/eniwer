@@ -475,4 +475,23 @@ export const en: Record<keyof typeof zhCN, string> = {
   'model.kimiThinking': 'Kimi K2 (Thinking)',
   'model.glm45v': 'GLM-4.5V (Vision)',
   'model.glm46v': 'GLM-4.6V (Vision)',
+
+  // === YouTube Subtitle ===
+  'settings.youtubeSubtitleSection': 'YouTube Subtitle Translation',
+  'settings.youtubeSubtitleEnabled': 'Enable Subtitle Translation',
+  'settings.youtubeSubtitleSourceLang': 'Source Language',
+  'settings.youtubeSubtitleTargetLang': 'Target Language',
+  'settings.youtubeSubtitleFontSize': 'Font Size',
+  'settings.youtubeSubtitleDisplayMode': 'Display Mode',
+  'settings.youtubeSubtitleAutoDetect': 'Auto Detect',
+  'settings.youtubeSubtitleFontSmall': 'Small',
+  'settings.youtubeSubtitleFontMedium': 'Medium',
+  'settings.youtubeSubtitleFontLarge': 'Large',
+  'settings.youtubeSubtitleModeBilingual': 'Bilingual',
+  'settings.youtubeSubtitleModeTranslated': 'Translated Only',
+  'settings.youtubeSubtitleHint': 'Overlay translated subtitles on YouTube videos',
+  'youtube.noSubtitlesAvailable': 'No subtitles available',
+  'youtube.translating': 'Translating subtitles...',
+  'youtube.subtitleError': 'Failed to load subtitles',
+  'youtube.toggleSubtitle': 'Bilingual Subtitles',
 };

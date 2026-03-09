@@ -1,5 +1,6 @@
 import {
   Message,
+  MenuConfig,
   AIRequestPayload,
   AIVisionRequestPayload,
   AIImageGenRequestPayload,
@@ -17,6 +18,7 @@ import {
 } from './ai-handler';
 import { googleLogin, googleLogout, getAuthStatus, setSyncEnabled } from './auth-handler';
 import { freeTranslate, shouldUseFreeTranslate } from './free-translate-handler';
+import { handleTTSSpeak, handleTTSEdge } from './tts-handler';
 import { syncToCloud, syncFromCloud, setupAutoSync, listBackups, restoreBackup, deleteBackup } from './sync-handler';
 import { exportToGoogleDocs } from './drive-export-handler';
 import { initI18n, setLocale, t } from '../i18n';
@@ -132,6 +134,12 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 
     case 'EXTRACT_YT_PLAYER_DATA':
       return handleExtractYtPlayerData(sender);
+
+    case 'TTS_SPEAK':
+      return handleTTSSpeak(message.payload as { text: string; config: MenuConfig });
+
+    case 'TTS_EDGE':
+      return handleTTSEdge(message.payload as { text: string; voice: string; rate: number });
 
     default:
       return { success: false, error: 'Unknown message type' };

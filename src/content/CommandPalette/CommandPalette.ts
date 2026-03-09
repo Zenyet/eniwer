@@ -1,6 +1,6 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState, AnnotationConfig, KnowledgeConfig } from '../../types';
+import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_TTS_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState, AnnotationConfig, KnowledgeConfig } from '../../types';
 import { icons } from '../../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../../utils/storage';
 import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../../utils/taskStorage';
@@ -2626,6 +2626,87 @@ export class CommandPalette {
     ytDisplayMode?.addEventListener('change', () => {
       ytSubtitleConfig.displayMode = ytDisplayMode.value as 'bilingual' | 'translated';
       tempConfig.youtubeSubtitle = ytSubtitleConfig;
+      markChanged();
+    });
+
+    // ===== TTS settings =====
+    const ttsConfig = tempConfig.youtubeSubtitleTTS || { ...DEFAULT_TTS_CONFIG };
+
+    const ttsEnabled = this.shadowRoot.querySelector('#tts-enabled') as HTMLInputElement;
+    const ttsSettings = this.shadowRoot.querySelector('#tts-settings') as HTMLElement;
+    ttsEnabled?.addEventListener('change', () => {
+      ttsConfig.enabled = ttsEnabled.checked;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      if (ttsSettings) ttsSettings.style.display = ttsEnabled.checked ? 'block' : 'none';
+      markChanged();
+    });
+
+    const ttsEngine = this.shadowRoot.querySelector('#tts-engine') as HTMLSelectElement;
+    const ttsCloudSettings = this.shadowRoot.querySelector('#tts-cloud-settings') as HTMLElement;
+    const ttsEdgeSettings = this.shadowRoot.querySelector('#tts-edge-settings') as HTMLElement;
+    ttsEngine?.addEventListener('change', () => {
+      ttsConfig.engine = ttsEngine.value as 'native' | 'cloud' | 'edge';
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      if (ttsCloudSettings) ttsCloudSettings.style.display = ttsConfig.engine === 'cloud' ? 'block' : 'none';
+      if (ttsEdgeSettings) ttsEdgeSettings.style.display = ttsConfig.engine === 'edge' ? 'block' : 'none';
+      markChanged();
+    });
+
+    const ttsCloudProvider = this.shadowRoot.querySelector('#tts-cloud-provider') as HTMLSelectElement;
+    const ttsCustomUrlGroup = this.shadowRoot.querySelector('#tts-custom-url-group') as HTMLElement;
+    ttsCloudProvider?.addEventListener('change', () => {
+      ttsConfig.cloudProvider = ttsCloudProvider.value as 'openai' | 'custom';
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      if (ttsCustomUrlGroup) ttsCustomUrlGroup.style.display = ttsConfig.cloudProvider === 'custom' ? 'flex' : 'none';
+      markChanged();
+    });
+
+    const ttsCloudApiKey = this.shadowRoot.querySelector('#tts-cloud-api-key') as HTMLInputElement;
+    ttsCloudApiKey?.addEventListener('input', () => {
+      ttsConfig.cloudApiKey = ttsCloudApiKey.value;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsCloudApiUrl = this.shadowRoot.querySelector('#tts-cloud-api-url') as HTMLInputElement;
+    ttsCloudApiUrl?.addEventListener('input', () => {
+      ttsConfig.cloudApiUrl = ttsCloudApiUrl.value;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsCloudModel = this.shadowRoot.querySelector('#tts-cloud-model') as HTMLInputElement;
+    ttsCloudModel?.addEventListener('input', () => {
+      ttsConfig.cloudModel = ttsCloudModel.value;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsVoice = this.shadowRoot.querySelector('#tts-voice') as HTMLInputElement;
+    ttsVoice?.addEventListener('input', () => {
+      ttsConfig.voice = ttsVoice.value;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsRate = this.shadowRoot.querySelector('#tts-rate') as HTMLSelectElement;
+    ttsRate?.addEventListener('change', () => {
+      ttsConfig.rate = parseFloat(ttsRate.value);
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsAutoPlay = this.shadowRoot.querySelector('#tts-auto-play') as HTMLInputElement;
+    ttsAutoPlay?.addEventListener('change', () => {
+      ttsConfig.autoPlay = ttsAutoPlay.checked;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
+      markChanged();
+    });
+
+    const ttsMuteOriginal = this.shadowRoot.querySelector('#tts-mute-original') as HTMLInputElement;
+    ttsMuteOriginal?.addEventListener('change', () => {
+      ttsConfig.muteOriginal = ttsMuteOriginal.checked;
+      tempConfig.youtubeSubtitleTTS = ttsConfig;
       markChanged();
     });
 

@@ -1,11 +1,12 @@
 // YouTube Subtitle Manager
 // Coordinates extractor, translator, and overlay lifecycle
 
-import { MenuConfig, YouTubeSubtitleConfig, DEFAULT_YOUTUBE_SUBTITLE_CONFIG } from '../../types';
+import { MenuConfig, YouTubeSubtitleConfig, DEFAULT_YOUTUBE_SUBTITLE_CONFIG, DEFAULT_TTS_CONFIG } from '../../types';
 import { t } from '../../i18n';
 import { YouTubeSubtitleExtractor, SubtitleSegment } from './YouTubeSubtitleExtractor';
 import { YouTubeSubtitleTranslator } from './YouTubeSubtitleTranslator';
 import { YouTubeSubtitleOverlay } from './YouTubeSubtitleOverlay';
+import { YouTubeTTS } from './YouTubeTTS';
 
 const LOG = '[Eniwer YT字幕]';
 
@@ -20,41 +21,59 @@ export class YouTubeSubtitleManager {
   private videoElement: HTMLVideoElement | null = null;
   private seekedHandler: (() => void) | null = null;
   private timeUpdateHandler: (() => void) | null = null;
+  private tts: YouTubeTTS;
+  private ttsEnabled = false;
+  private lastSpokenSegIndex = -1;
 
   constructor(config: MenuConfig) {
     this.subtitleConfig = config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
     this.extractor = new YouTubeSubtitleExtractor();
     this.translator = new YouTubeSubtitleTranslator(config);
     this.overlay = new YouTubeSubtitleOverlay(this.subtitleConfig);
+    this.tts = new YouTubeTTS(
+      config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG,
+      config,
+    );
   }
 
   init(): void {
     if (this.initialized) return;
-    if (!YouTubeSubtitleExtractor.isYouTubePage()) return;
-    if (!this.subtitleConfig.enabled) return;
+    if (!this.isYouTubeHost()) return;
 
     console.log(LOG, 'Manager init');
     this.initialized = true;
     this.extractor.init();
 
     this.extractor.setOnVideoChange((videoId) => {
-      this.handleVideoChange(videoId);
+      // Late-check: re-enable if config says enabled (handles SPA navigation to /watch)
+      if (this.subtitleConfig.enabled) {
+        this.handleVideoChange(videoId);
+      }
     });
 
-    const videoId = YouTubeSubtitleExtractor.getVideoId();
-    if (videoId) {
-      this.handleVideoChange(videoId);
+    // Only start processing immediately if already on a /watch page
+    if (this.subtitleConfig.enabled && YouTubeSubtitleExtractor.isYouTubePage()) {
+      const videoId = YouTubeSubtitleExtractor.getVideoId();
+      if (videoId) {
+        this.handleVideoChange(videoId);
+      }
     }
+  }
+
+  private isYouTubeHost(): boolean {
+    return window.location.hostname === 'www.youtube.com';
   }
 
   destroy(): void {
     this.activeVideoChangeId++;
     this.translator.abort();
+    this.tts.stop();
+    this.ttsEnabled = false;
+    this.lastSpokenSegIndex = -1;
     this.removeVideoListeners();
-    this.extractor.destroy();
     this.overlay.unmount();
-    this.initialized = false;
     this.currentVideoId = null;
+    // Note: do NOT destroy extractor or reset initialized — keep yt-navigate-finish listener alive
   }
 
   updateConfig(config: MenuConfig): void {
@@ -63,11 +82,27 @@ export class YouTubeSubtitleManager {
 
     this.translator.updateConfig(config);
     this.overlay.updateConfig(this.subtitleConfig);
+    this.tts.updateConfig(
+      config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG,
+      config,
+    );
+
+    if (!this.isYouTubeHost()) return;
+
+    // Ensure init is called (registers yt-navigate-finish listener)
+    if (!this.initialized) {
+      this.init();
+      return;
+    }
 
     if (!YouTubeSubtitleExtractor.isYouTubePage()) return;
 
     if (!oldEnabled && this.subtitleConfig.enabled) {
-      this.init();
+      // Already initialized (listener registered), just start processing
+      const videoId = YouTubeSubtitleExtractor.getVideoId();
+      if (videoId) {
+        this.handleVideoChange(videoId);
+      }
     } else if (oldEnabled && !this.subtitleConfig.enabled) {
       this.destroy();
     } else if (this.subtitleConfig.enabled && this.currentVideoId) {
@@ -198,6 +233,22 @@ export class YouTubeSubtitleManager {
     this.overlay.setSegments(this.translator.getSegments());
     this.overlay.setStatus('');
 
+    // Set up TTS button callback
+    this.overlay.setTTSCallback((enabled) => {
+      this.ttsEnabled = enabled;
+      if (!enabled) {
+        this.tts.stop();
+      }
+      this.overlay.updateTTSState(enabled);
+    });
+
+    // Auto-enable TTS if autoPlay is configured
+    const ttsConf = this.tts.getConfig();
+    if (ttsConf.autoPlay && ttsConf.enabled) {
+      this.ttsEnabled = true;
+      this.overlay.updateTTSState(true);
+    }
+
     // Attach video event listeners for time tracking
     this.attachVideoListeners(changeId);
 
@@ -213,12 +264,27 @@ export class YouTubeSubtitleManager {
 
     this.timeUpdateHandler = () => {
       if (changeId !== this.activeVideoChangeId) return;
-      this.translator.updateCurrentTime(video.currentTime * 1000);
+      const currentTimeMs = video.currentTime * 1000;
+      this.translator.updateCurrentTime(currentTimeMs);
+
+      // TTS scheduling: only trigger when not already playing
+      if (this.ttsEnabled && !this.tts.isPlaying()) {
+        const segIndex = this.overlay.getCurrentSegmentIndex(currentTimeMs);
+        if (segIndex >= 0 && segIndex !== this.lastSpokenSegIndex) {
+          const seg = this.overlay.getSegment(segIndex);
+          if (seg?.translatedText) {
+            this.lastSpokenSegIndex = segIndex;
+            this.tts.speak(seg.translatedText).catch(() => {});
+          }
+        }
+      }
     };
 
     this.seekedHandler = () => {
       if (changeId !== this.activeVideoChangeId) return;
       this.translator.updateCurrentTime(video.currentTime * 1000);
+      this.tts.stop();
+      this.lastSpokenSegIndex = -1;
     };
 
     video.addEventListener('timeupdate', this.timeUpdateHandler);

@@ -1,5 +1,5 @@
 // Settings View - handles settings configuration
-import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions, DEFAULT_YOUTUBE_SUBTITLE_CONFIG } from '../../../types';
+import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions, DEFAULT_YOUTUBE_SUBTITLE_CONFIG, DEFAULT_TTS_CONFIG } from '../../../types';
 import { PRESET_COLORS, getAnnotationColorConfig } from '../../../types/annotation';
 import { icons } from '../../../icons';
 import { saveConfig, saveGlobalMenuItems } from '../../../utils/storage';
@@ -344,6 +344,84 @@ export function getSettingsViewHTML(
                 <option value="bilingual"${(config.youtubeSubtitle?.displayMode || 'bilingual') === 'bilingual' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeBilingual')}</option>
                 <option value="translated"${config.youtubeSubtitle?.displayMode === 'translated' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeTranslated')}</option>
               </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 字幕朗读 TTS -->
+        <div class="glass-settings-section">
+          <div class="glass-settings-section-title">${t('settings.ttsSection')}</div>
+          <div class="glass-form-group glass-form-toggle">
+            <label class="glass-form-label">${t('settings.ttsEnabled')}</label>
+            <label class="glass-toggle">
+              <input type="checkbox" id="tts-enabled" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? 'checked' : ''}>
+              <span class="glass-toggle-slider"></span>
+            </label>
+            <span class="glass-form-hint">${t('settings.ttsHint')}</span>
+          </div>
+          <div id="tts-settings"${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? '' : ' style="display: none"'}>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.ttsEngine')}</label>
+              <select class="glass-select" id="tts-engine">
+                <option value="native"${(config.youtubeSubtitleTTS?.engine || 'native') === 'native' ? ' selected' : ''}>${t('settings.ttsEngineNative')}</option>
+                <option value="edge"${config.youtubeSubtitleTTS?.engine === 'edge' ? ' selected' : ''}>${t('settings.ttsEngineEdge')}</option>
+                <option value="cloud"${config.youtubeSubtitleTTS?.engine === 'cloud' ? ' selected' : ''}>${t('settings.ttsEngineCloud')}</option>
+              </select>
+            </div>
+            <div id="tts-edge-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'edge' ? 'block' : 'none'}">
+              <span class="glass-form-hint">${t('settings.ttsEdgeVoiceHint')}</span>
+            </div>
+            <div id="tts-cloud-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'cloud' ? 'block' : 'none'}">
+              <div class="glass-form-group">
+                <label class="glass-form-label">${t('settings.ttsCloudProvider')}</label>
+                <select class="glass-select" id="tts-cloud-provider">
+                  <option value="openai"${(config.youtubeSubtitleTTS?.cloudProvider || 'openai') === 'openai' ? ' selected' : ''}>OpenAI</option>
+                  <option value="custom"${config.youtubeSubtitleTTS?.cloudProvider === 'custom' ? ' selected' : ''}>${t('settings.custom')}</option>
+                </select>
+              </div>
+              <div class="glass-form-group">
+                <label class="glass-form-label">${t('settings.ttsCloudApiKey')}</label>
+                <input type="text" class="glass-input" id="tts-cloud-api-key" value="${config.youtubeSubtitleTTS?.cloudApiKey || ''}" placeholder="${t('settings.ttsCloudApiKeyPlaceholder')}">
+              </div>
+              <div class="glass-form-group" id="tts-custom-url-group" style="display: ${config.youtubeSubtitleTTS?.cloudProvider === 'custom' ? 'flex' : 'none'}">
+                <label class="glass-form-label">${t('settings.ttsCloudApiUrl')}</label>
+                <input type="text" class="glass-input" id="tts-cloud-api-url" value="${config.youtubeSubtitleTTS?.cloudApiUrl || ''}" placeholder="${t('settings.ttsCloudApiUrlPlaceholder')}">
+              </div>
+              <div class="glass-form-group">
+                <label class="glass-form-label">${t('settings.ttsCloudModel')}</label>
+                <input type="text" class="glass-input" id="tts-cloud-model" value="${config.youtubeSubtitleTTS?.cloudModel || 'tts-1'}" placeholder="tts-1">
+              </div>
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.ttsVoice')}</label>
+              <input type="text" class="glass-input" id="tts-voice" value="${config.youtubeSubtitleTTS?.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">
+            </div>
+            <div class="glass-form-group">
+              <label class="glass-form-label">${t('settings.ttsRate')}</label>
+              <select class="glass-select" id="tts-rate">
+                <option value="0.5"${(config.youtubeSubtitleTTS?.rate || 1) === 0.5 ? ' selected' : ''}>0.5x</option>
+                <option value="0.75"${(config.youtubeSubtitleTTS?.rate || 1) === 0.75 ? ' selected' : ''}>0.75x</option>
+                <option value="1"${(config.youtubeSubtitleTTS?.rate || 1) === 1 ? ' selected' : ''}>1.0x</option>
+                <option value="1.25"${(config.youtubeSubtitleTTS?.rate || 1) === 1.25 ? ' selected' : ''}>1.25x</option>
+                <option value="1.5"${(config.youtubeSubtitleTTS?.rate || 1) === 1.5 ? ' selected' : ''}>1.5x</option>
+                <option value="2"${(config.youtubeSubtitleTTS?.rate || 1) === 2 ? ' selected' : ''}>2.0x</option>
+              </select>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">${t('settings.ttsAutoPlay')}</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="tts-auto-play" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).autoPlay ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+              <span class="glass-form-hint">${t('settings.ttsAutoPlayHint')}</span>
+            </div>
+            <div class="glass-form-group glass-form-toggle">
+              <label class="glass-form-label">${t('settings.ttsMuteOriginal')}</label>
+              <label class="glass-toggle">
+                <input type="checkbox" id="tts-mute-original" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).muteOriginal ? 'checked' : ''}>
+                <span class="glass-toggle-slider"></span>
+              </label>
+              <span class="glass-form-hint">${t('settings.ttsMuteOriginalHint')}</span>
             </div>
           </div>
         </div>

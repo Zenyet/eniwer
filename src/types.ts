@@ -87,6 +87,7 @@ export interface MenuConfig {
   autoSaveTask?: boolean;
   uiLanguage?: string;
   youtubeSubtitle?: YouTubeSubtitleConfig;
+  youtubeSubtitleTTS?: TTSConfig;
 }
 
 export interface StorageData {
@@ -188,7 +189,9 @@ export type MessageType =
   | 'SET_SYNC_ENABLED'
   | 'LIST_BACKUPS'
   | 'RESTORE_BACKUP'
-  | 'DELETE_BACKUP';
+  | 'DELETE_BACKUP'
+  | 'TTS_SPEAK'
+  | 'TTS_EDGE';
 
 export interface Message {
   type: MessageType;
@@ -311,6 +314,31 @@ export const DEFAULT_IMAGE_SEARCH_CONFIG: ImageSearchConfig = {
   yandex: true,
   bing: true,
   tineye: true,
+};
+
+// TTS config
+export interface TTSConfig {
+  enabled: boolean;
+  engine: 'native' | 'cloud' | 'edge';
+  cloudProvider: 'openai' | 'custom';
+  cloudApiKey?: string;
+  cloudApiUrl?: string;
+  cloudModel?: string;
+  voice: string;
+  rate: number;
+  autoPlay: boolean;
+  muteOriginal: boolean;
+}
+
+export const DEFAULT_TTS_CONFIG: TTSConfig = {
+  enabled: false,
+  engine: 'native',
+  cloudProvider: 'openai',
+  cloudModel: 'tts-1',
+  voice: '',
+  rate: 1.0,
+  autoPlay: false,
+  muteOriginal: false,
 };
 
 // YouTube subtitle config

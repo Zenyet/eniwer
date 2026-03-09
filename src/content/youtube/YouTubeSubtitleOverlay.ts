@@ -10,12 +10,15 @@ const PREFIX = 'eniwer-yt-subtitle';
 export class YouTubeSubtitleOverlay {
   private overlay: HTMLElement | null = null;
   private toggleBtn: HTMLElement | null = null;
+  private ttsBtn: HTMLElement | null = null;
   private segments: TranslatedSegment[] = [];
   private config: YouTubeSubtitleConfig;
   private timeUpdateHandler: (() => void) | null = null;
   private video: HTMLVideoElement | null = null;
   private visible = true;
   private statusText = '';
+  private ttsActive = false;
+  private onTTSToggle: ((enabled: boolean) => void) | null = null;
 
   constructor(config?: YouTubeSubtitleConfig) {
     this.config = config || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
@@ -33,6 +36,25 @@ export class YouTubeSubtitleOverlay {
   setStatus(text: string): void {
     this.statusText = text;
     this.updateDisplay(-1); // force show status
+  }
+
+  setTTSCallback(cb: (enabled: boolean) => void): void {
+    this.onTTSToggle = cb;
+  }
+
+  updateTTSState(active: boolean): void {
+    this.ttsActive = active;
+    if (this.ttsBtn) {
+      this.ttsBtn.style.opacity = active ? '1' : '0.5';
+    }
+  }
+
+  getCurrentSegmentIndex(timeMs: number): number {
+    return this.findSegmentIndex(timeMs);
+  }
+
+  getSegment(index: number): TranslatedSegment | null {
+    return this.segments[index] || null;
   }
 
   mount(): boolean {
@@ -53,6 +75,11 @@ export class YouTubeSubtitleOverlay {
     // Create toggle button in player controls
     if (!this.toggleBtn) {
       this.createToggleButton(player);
+    }
+
+    // Create TTS button in player controls
+    if (!this.ttsBtn) {
+      this.createTTSButton(player);
     }
 
     // Listen for timeupdate
@@ -79,8 +106,14 @@ export class YouTubeSubtitleOverlay {
       this.toggleBtn = null;
     }
 
+    if (this.ttsBtn) {
+      this.ttsBtn.remove();
+      this.ttsBtn = null;
+    }
+
     this.segments = [];
     this.statusText = '';
+    this.ttsActive = false;
   }
 
   private createToggleButton(player: HTMLElement): void {
@@ -120,6 +153,47 @@ export class YouTubeSubtitleOverlay {
 
     // Insert before the first child of right controls
     rightControls.insertBefore(this.toggleBtn, rightControls.firstChild);
+  }
+
+  private createTTSButton(player: HTMLElement): void {
+    const rightControls = player.querySelector('.ytp-right-controls');
+    if (!rightControls) return;
+
+    this.ttsBtn = document.createElement('button');
+    this.ttsBtn.className = `ytp-button ${PREFIX}-tts`;
+    this.ttsBtn.title = t('youtube.ttsToggle');
+    this.ttsBtn.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+      <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+    </svg>`;
+
+    Object.assign(this.ttsBtn.style, {
+      opacity: this.ttsActive ? '1' : '0.5',
+      cursor: 'pointer',
+      width: '48px',
+      height: '48px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      border: 'none',
+      background: 'none',
+      padding: '0',
+    });
+
+    this.ttsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.ttsActive = !this.ttsActive;
+      if (this.ttsBtn) {
+        this.ttsBtn.style.opacity = this.ttsActive ? '1' : '0.5';
+      }
+      this.onTTSToggle?.(this.ttsActive);
+    });
+
+    // Insert after the toggle button (second position)
+    if (this.toggleBtn && this.toggleBtn.nextSibling) {
+      rightControls.insertBefore(this.ttsBtn, this.toggleBtn.nextSibling);
+    } else {
+      rightControls.insertBefore(this.ttsBtn, rightControls.firstChild);
+    }
   }
 
   private applyOverlayStyles(): void {

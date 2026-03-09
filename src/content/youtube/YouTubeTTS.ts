@@ -8,6 +8,7 @@ export class YouTubeTTS {
   private currentUtterance: SpeechSynthesisUtterance | null = null;
   private audioCache = new Map<string, string>();
   private videoMutedByUs = false;
+  private segDurationMs = 0;
 
   constructor(config: TTSConfig, menuConfig: MenuConfig) {
     this.config = config;
@@ -19,10 +20,12 @@ export class YouTubeTTS {
     this.menuConfig = menuConfig;
   }
 
-  async speak(text: string): Promise<void> {
+  async speak(text: string, durationMs?: number): Promise<void> {
     if (!text.trim()) return;
 
+    console.log('[TTS] speak() called, engine:', this.config.engine, 'text:', text.slice(0, 50), 'durationMs:', durationMs);
     this.playing = true;
+    this.segDurationMs = durationMs || 0;
     this.applyMute(true);
     try {
       if (this.config.engine === 'cloud') {
@@ -32,6 +35,8 @@ export class YouTubeTTS {
       } else {
         await this.speakNative(text);
       }
+    } catch (e) {
+      console.error('[TTS] speak() error:', e);
     } finally {
       this.playing = false;
       this.applyMute(false);
@@ -147,6 +152,7 @@ export class YouTubeTTS {
   private async speakEdge(text: string): Promise<void> {
     const dataUrl = await this.fetchOrCacheAudio(text, async () => {
       const voice = this.config.voice || 'zh-CN-XiaoxiaoNeural';
+      console.log('[TTS] speakEdge sending message:', { voice, rate: this.config.rate || 1.0 });
       const response = await chrome.runtime.sendMessage({
         type: 'TTS_EDGE',
         payload: {
@@ -156,6 +162,8 @@ export class YouTubeTTS {
         },
       });
 
+      console.log('[TTS] speakEdge response:', { success: response?.success, error: response?.error, hasAudio: !!response?.audioBase64, audioLen: response?.audioBase64?.length });
+
       if (!response.success || !response.audioBase64) {
         throw new Error(response.error || 'Edge TTS failed');
       }
@@ -163,6 +171,7 @@ export class YouTubeTTS {
       return `data:audio/mp3;base64,${response.audioBase64}`;
     });
 
+    console.log('[TTS] Playing audio, dataUrl length:', dataUrl.length);
     await this.playAudioUrl(dataUrl);
   }
 
@@ -180,21 +189,49 @@ export class YouTubeTTS {
     return new Promise((resolve, reject) => {
       const audio = new Audio(dataUrl);
       this.currentAudio = audio;
-      audio.playbackRate = this.config.rate || 1.0;
+      const baseRate = this.config.rate || 1.0;
+
+      // Adjust playback rate based on segment duration
+      const adjustRate = () => {
+        if (this.segDurationMs > 0 && audio.duration && isFinite(audio.duration)) {
+          const audioDurationMs = audio.duration * 1000;
+          // Audio duration at base rate
+          const effectiveDurationMs = audioDurationMs / baseRate;
+          if (effectiveDurationMs > this.segDurationMs) {
+            // Audio is longer than subtitle segment — speed up to fit
+            const neededRate = audioDurationMs / this.segDurationMs;
+            const cappedRate = Math.min(neededRate, 2.5);
+            audio.playbackRate = cappedRate;
+            console.log('[TTS] Duration-aware rate:', cappedRate.toFixed(2),
+              `(audio ${Math.round(audioDurationMs)}ms, seg ${this.segDurationMs}ms)`);
+            return;
+          }
+        }
+        audio.playbackRate = baseRate;
+      };
+
+      audio.onloadedmetadata = () => adjustRate();
 
       audio.onended = () => {
+        console.log('[TTS] Audio playback ended');
         this.currentAudio = null;
         this.playing = false;
         resolve();
       };
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('[TTS] Audio playback error:', e);
         this.currentAudio = null;
         this.playing = false;
         reject(new Error('Audio playback error'));
       };
 
-      audio.play().catch((e) => {
+      audio.play().then(() => {
+        console.log('[TTS] Audio play() started successfully');
+        // Fallback: if metadata was already loaded before we attached the handler
+        adjustRate();
+      }).catch((e) => {
+        console.error('[TTS] Audio play() rejected:', e);
         this.currentAudio = null;
         this.playing = false;
         reject(e);

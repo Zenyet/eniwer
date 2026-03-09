@@ -211,27 +211,32 @@ export class YouTubeSubtitleManager {
       return;
     }
 
-    // Step 5: Start sliding-window translation from current playback position
-    console.log(LOG, '步骤5: 翻译', segments.length, '条字幕 (滑动窗口模式)');
+    // Step 5: Translate all subtitles in one shot
+    console.log(LOG, '步骤5: 翻译', segments.length, '条字幕 (一次性模式)');
 
-    // Get current playback time
-    const video = document.querySelector('.html5-video-player video') as HTMLVideoElement | null;
-    const currentTimeMs = video ? video.currentTime * 1000 : 0;
+    // Set overlay segments immediately (with empty translations) so overlay can show originals
+    this.overlay.setStatus(t('youtube.translating'));
 
     this.translator.translateWindow(
       segments,
       videoId,
       this.subtitleConfig.targetLanguage,
-      currentTimeMs,
       (_index, _translated) => {
         if (changeId !== this.activeVideoChangeId) return;
         this.overlay.setSegments(this.translator.getSegments());
       },
+      (translated, total) => {
+        if (changeId !== this.activeVideoChangeId) return;
+        if (translated < total) {
+          this.overlay.setStatus(`${t('youtube.translating')} ${translated}/${total}`);
+        } else {
+          this.overlay.setStatus('');
+        }
+      },
     );
 
-    // Set overlay segments immediately (with empty translations) so overlay can show originals
+    // Show segments right away so overlay can display originals while translating
     this.overlay.setSegments(this.translator.getSegments());
-    this.overlay.setStatus('');
 
     // Set up TTS button callback
     this.overlay.setTTSCallback((enabled) => {
@@ -252,7 +257,7 @@ export class YouTubeSubtitleManager {
     // Attach video event listeners for time tracking
     this.attachVideoListeners(changeId);
 
-    console.log(LOG, '=== 翻译循环已启动 ===');
+    console.log(LOG, '=== 翻译已启动 ===');
   }
 
   private attachVideoListeners(changeId: number): void {
@@ -265,7 +270,6 @@ export class YouTubeSubtitleManager {
     this.timeUpdateHandler = () => {
       if (changeId !== this.activeVideoChangeId) return;
       const currentTimeMs = video.currentTime * 1000;
-      this.translator.updateCurrentTime(currentTimeMs);
 
       // TTS scheduling: only trigger when not already playing
       if (this.ttsEnabled && !this.tts.isPlaying()) {
@@ -274,7 +278,7 @@ export class YouTubeSubtitleManager {
           const seg = this.overlay.getSegment(segIndex);
           if (seg?.translatedText) {
             this.lastSpokenSegIndex = segIndex;
-            this.tts.speak(seg.translatedText).catch(() => {});
+            this.tts.speak(seg.translatedText, seg.durationMs).catch(() => {});
           }
         }
       }
@@ -282,7 +286,6 @@ export class YouTubeSubtitleManager {
 
     this.seekedHandler = () => {
       if (changeId !== this.activeVideoChangeId) return;
-      this.translator.updateCurrentTime(video.currentTime * 1000);
       this.tts.stop();
       this.lastSpokenSegIndex = -1;
     };

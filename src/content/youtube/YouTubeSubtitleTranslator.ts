@@ -1,5 +1,5 @@
 // YouTube Subtitle Translator
-// Sliding-window translation: prioritizes subtitles near the current playback position
+// One-shot translation: translates all subtitles in a single pass (chunked if >200 segments)
 
 import { MenuConfig } from '../../types';
 import { resolveLanguageName } from '../../utils/ai';
@@ -9,27 +9,20 @@ export interface TranslatedSegment extends SubtitleSegment {
   translatedText: string;
 }
 
-// Window parameters (milliseconds)
-const BUFFER_BEHIND = 5_000;
-const BUFFER_AHEAD = 60_000;
-const PREFETCH_AHEAD = 120_000;
-const LOOP_INTERVAL = 500;
-
 const MAX_RETRIES = 2;
+const CHUNK_SIZE = 200;
 
 export class YouTubeSubtitleTranslator {
   private cache: Map<string, string> = new Map();
   private config: MenuConfig;
   private aborted = false;
 
-  // Sliding-window state
   private segments: TranslatedSegment[] = [];
   private videoId = '';
   private targetLang = '';
-  private currentTimeMs = 0;
-  private loopTimer: ReturnType<typeof setTimeout> | null = null;
-  private translatingBatch = false;
+  private translating = false;
   private onSegmentReady?: (index: number, translated: string) => void;
+  private onProgress?: (translated: number, total: number) => void;
   /** Track how many times each segment index has failed translation */
   private retryCount: Map<number, number> = new Map();
 
@@ -47,43 +40,25 @@ export class YouTubeSubtitleTranslator {
 
   abort(): void {
     this.aborted = true;
-    if (this.loopTimer !== null) {
-      clearTimeout(this.loopTimer);
-      this.loopTimer = null;
-    }
   }
 
   isTranslating(): boolean {
-    return this.loopTimer !== null || this.translatingBatch;
-  }
-
-  /** Called by manager whenever playback position changes or user seeks */
-  updateCurrentTime(timeMs: number): void {
-    const jumped = Math.abs(timeMs - this.currentTimeMs) > 3000;
-    this.currentTimeMs = timeMs;
-
-    // On seek: restart the translation loop immediately to prioritize new position
-    if (jumped && !this.translatingBatch) {
-      if (this.loopTimer !== null) {
-        clearTimeout(this.loopTimer);
-        this.loopTimer = null;
-      }
-      this.runTranslationLoop();
-    }
+    return this.translating;
   }
 
   /**
-   * Start sliding-window translation.
-   * Stores segments internally and begins a loop that translates around currentTimeMs.
+   * Translate all segments in one shot.
+   * For AI provider: sends all segments at once (chunked if >CHUNK_SIZE).
+   * For free providers: translates one-by-one as before.
    */
-  translateWindow(
+  async translateWindow(
     segments: SubtitleSegment[],
     videoId: string,
     targetLang: string,
-    currentTimeMs: number,
     onSegmentReady?: (index: number, translated: string) => void,
-  ): void {
-    this.abort(); // stop any previous loop
+    onProgress?: (translated: number, total: number) => void,
+  ): Promise<void> {
+    this.abort(); // stop any previous work
 
     this.segments = segments.map(seg => ({
       ...seg,
@@ -91,21 +66,124 @@ export class YouTubeSubtitleTranslator {
     }));
     this.videoId = videoId;
     this.targetLang = targetLang;
-    this.currentTimeMs = currentTimeMs;
     this.aborted = false;
+    this.translating = true;
     this.onSegmentReady = onSegmentReady;
+    this.onProgress = onProgress;
     this.retryCount.clear();
 
     // Restore from cache
+    let cachedCount = 0;
     for (let i = 0; i < this.segments.length; i++) {
       const cacheKey = `${videoId}:${i}:${this.segments[i].text}`;
       const cached = this.cache.get(cacheKey);
       if (cached) {
         this.segments[i].translatedText = cached;
+        cachedCount++;
       }
     }
 
-    this.runTranslationLoop();
+    // Collect untranslated indices
+    const untranslated = this.segments
+      .map((seg, i) => (!seg.translatedText ? i : -1))
+      .filter(i => i >= 0);
+
+    if (untranslated.length === 0) {
+      this.translating = false;
+      this.onProgress?.(this.segments.length, this.segments.length);
+      return;
+    }
+
+    const total = untranslated.length;
+    let translated = 0;
+    this.onProgress?.(cachedCount, this.segments.length);
+
+    try {
+      const translationProvider = this.config.translation?.provider || 'ai';
+
+      if (translationProvider !== 'ai') {
+        // Free translation: one by one
+        for (const idx of untranslated) {
+          if (this.aborted) break;
+          const texts = [this.segments[idx].text];
+          try {
+            const results = await this.translateViaFreeService(texts, targetLang, translationProvider);
+            if (results[0]) {
+              this.segments[idx].translatedText = results[0];
+              const cacheKey = `${videoId}:${idx}:${this.segments[idx].text}`;
+              this.cache.set(cacheKey, results[0]);
+              this.onSegmentReady?.(idx, results[0]);
+            }
+          } catch {
+            this.retryCount.set(idx, (this.retryCount.get(idx) || 0) + 1);
+          }
+          translated++;
+          this.onProgress?.(cachedCount + translated, this.segments.length);
+        }
+      } else {
+        // AI translation: chunk if needed
+        for (let chunkStart = 0; chunkStart < untranslated.length; chunkStart += CHUNK_SIZE) {
+          if (this.aborted) break;
+
+          const chunkIndices = untranslated.slice(chunkStart, chunkStart + CHUNK_SIZE);
+          const chunkTexts = chunkIndices.map(i => this.segments[i].text);
+
+          try {
+            const results = await this.translateViaAI(chunkTexts, targetLang);
+
+            for (let j = 0; j < chunkIndices.length; j++) {
+              if (this.aborted) break;
+              const segIndex = chunkIndices[j];
+              const translation = results[j];
+              if (!translation) continue;
+
+              this.segments[segIndex].translatedText = translation;
+              const cacheKey = `${videoId}:${segIndex}:${this.segments[segIndex].text}`;
+              this.cache.set(cacheKey, translation);
+              this.onSegmentReady?.(segIndex, translation);
+            }
+          } catch {
+            for (const idx of chunkIndices) {
+              this.retryCount.set(idx, (this.retryCount.get(idx) || 0) + 1);
+            }
+          }
+
+          translated += chunkIndices.length;
+          this.onProgress?.(cachedCount + translated, this.segments.length);
+        }
+
+        // Retry failed segments (up to MAX_RETRIES)
+        if (!this.aborted) {
+          const failed = untranslated.filter(i =>
+            !this.segments[i].translatedText && (this.retryCount.get(i) || 0) < MAX_RETRIES
+          );
+          if (failed.length > 0) {
+            const failedTexts = failed.map(i => this.segments[i].text);
+            try {
+              const retryResults = await this.translateViaAI(failedTexts, targetLang);
+              for (let j = 0; j < failed.length; j++) {
+                if (this.aborted) break;
+                const segIndex = failed[j];
+                const translation = retryResults[j];
+                if (!translation) {
+                  this.retryCount.set(segIndex, (this.retryCount.get(segIndex) || 0) + 1);
+                  continue;
+                }
+                this.segments[segIndex].translatedText = translation;
+                const cacheKey = `${videoId}:${segIndex}:${this.segments[segIndex].text}`;
+                this.cache.set(cacheKey, translation);
+                this.onSegmentReady?.(segIndex, translation);
+              }
+            } catch {
+              // exhausted retries
+            }
+          }
+        }
+      }
+    } finally {
+      this.translating = false;
+      this.onProgress?.(this.segments.length, this.segments.length);
+    }
   }
 
   /** Returns the internal translated segments array (shared reference). */
@@ -114,141 +192,6 @@ export class YouTubeSubtitleTranslator {
   }
 
   // --------------- internal ---------------
-
-  private async runTranslationLoop(): Promise<void> {
-    if (this.aborted) return;
-
-    // Find next window of untranslated segments
-    const range = this.findWindowRange(this.currentTimeMs);
-    if (range) {
-      await this.translateRange(range.start, range.end);
-    }
-
-    if (this.aborted) return;
-
-    // Check if there is still work to do anywhere
-    const hasUntranslated = this.segments.some((s, i) =>
-      !s.translatedText && (this.retryCount.get(i) || 0) < MAX_RETRIES
-    );
-    if (hasUntranslated) {
-      this.loopTimer = setTimeout(() => this.runTranslationLoop(), LOOP_INTERVAL);
-    } else {
-      this.loopTimer = null;
-    }
-  }
-
-  /**
-   * Finds a range of untranslated segment indices near currentTimeMs.
-   * Priority: BUFFER_BEHIND..BUFFER_AHEAD first, then up to PREFETCH_AHEAD.
-   * Returns null if everything in the window is already translated.
-   */
-  private findWindowRange(timeMs: number): { start: number; end: number } | null {
-    const windowStart = timeMs - BUFFER_BEHIND;
-    const windowEnd = timeMs + PREFETCH_AHEAD;
-
-    // Collect untranslated indices within the window, prioritising near segments
-    const nearEnd = timeMs + BUFFER_AHEAD;
-
-    // First pass: near window (behind 5s ~ ahead 60s)
-    for (let i = 0; i < this.segments.length; i++) {
-      const seg = this.segments[i];
-      if (seg.translatedText || (this.retryCount.get(i) || 0) >= MAX_RETRIES) continue;
-      const segEnd = seg.startMs + seg.durationMs;
-      if (segEnd >= windowStart && seg.startMs <= nearEnd) {
-        // Found first untranslated in near window — build a batch from here
-        return this.buildBatchFrom(i, windowEnd);
-      }
-    }
-
-    // Second pass: prefetch window (60s ~ 120s ahead)
-    for (let i = 0; i < this.segments.length; i++) {
-      const seg = this.segments[i];
-      if (seg.translatedText || (this.retryCount.get(i) || 0) >= MAX_RETRIES) continue;
-      const segEnd = seg.startMs + seg.durationMs;
-      if (segEnd >= nearEnd && seg.startMs <= windowEnd) {
-        return this.buildBatchFrom(i, windowEnd);
-      }
-    }
-
-    // Third pass: anything remaining outside the window (translate rest eventually)
-    for (let i = 0; i < this.segments.length; i++) {
-      if (!this.segments[i].translatedText && (this.retryCount.get(i) || 0) < MAX_RETRIES) {
-        return this.buildBatchFrom(i, Infinity);
-      }
-    }
-
-    return null;
-  }
-
-  private buildBatchFrom(startIdx: number, windowEndMs: number): { start: number; end: number } {
-    const BATCH_SIZE = 20;
-    const MAX_CHARS = 2000;
-    let end = startIdx;
-    let chars = 0;
-    let count = 0;
-
-    while (end < this.segments.length && count < BATCH_SIZE) {
-      const seg = this.segments[end];
-      // skip already translated or retry-exhausted
-      if (seg.translatedText || (this.retryCount.get(end) || 0) >= MAX_RETRIES) { end++; continue; }
-      if (windowEndMs !== Infinity && seg.startMs > windowEndMs) break;
-      chars += seg.text.length;
-      if (chars > MAX_CHARS && count > 0) break;
-      count++;
-      end++;
-    }
-
-    return { start: startIdx, end };
-  }
-
-  private async translateRange(start: number, end: number): Promise<void> {
-    // Collect untranslated items in [start, end)
-    const items: { index: number; text: string }[] = [];
-    for (let i = start; i < end; i++) {
-      if (!this.segments[i].translatedText) {
-        items.push({ index: i, text: this.segments[i].text });
-      }
-    }
-    if (items.length === 0) return;
-
-    this.translatingBatch = true;
-    try {
-      const translations = await this.translateBatch(
-        items.map(it => it.text),
-        this.targetLang,
-      );
-
-      for (let i = 0; i < items.length; i++) {
-        if (this.aborted) break;
-        const translation = translations[i];
-        if (!translation) continue; // skip empty — will be retried
-        const segIndex = items[i].index;
-        this.segments[segIndex].translatedText = translation;
-
-        const cacheKey = `${this.videoId}:${segIndex}:${this.segments[segIndex].text}`;
-        this.cache.set(cacheKey, translation);
-
-        this.onSegmentReady?.(segIndex, translation);
-      }
-    } catch {
-      // Increment retry count for each item so we don't loop forever
-      for (const item of items) {
-        this.retryCount.set(item.index, (this.retryCount.get(item.index) || 0) + 1);
-      }
-    } finally {
-      this.translatingBatch = false;
-    }
-  }
-
-  private async translateBatch(texts: string[], targetLang: string): Promise<string[]> {
-    const translationProvider = this.config.translation?.provider || 'ai';
-
-    if (translationProvider !== 'ai') {
-      return this.translateViaFreeService(texts, targetLang, translationProvider);
-    }
-
-    return this.translateViaAI(texts, targetLang);
-  }
 
   private async translateViaFreeService(
     texts: string[],

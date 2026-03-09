@@ -1,0 +1,2741 @@
+{
+    "wireMagic": "pb3",
+    "pens": [
+        {}
+    ],
+    "wsWinStyles": [
+        {}
+    ],
+    "wpWinPositions": [
+        {}
+    ],
+    "events": [
+        {
+            "tStartMs": 3742,
+            "dDurationMs": 4780,
+            "segs": [
+                {
+                    "utf8": "At this moment, it is exactly 10:03 GMT."
+                }
+            ]
+        },
+        {
+            "tStartMs": 9402,
+            "dDurationMs": 1760,
+            "segs": [
+                {
+                    "utf8": "But it's 12:03 here in Vienna."
+                }
+            ]
+        },
+        {
+            "tStartMs": 11742,
+            "dDurationMs": 1220,
+            "segs": [
+                {
+                    "utf8": "Why?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 13782,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "Britain adopted GMT in 1847"
+                }
+            ]
+        },
+        {
+            "tStartMs": 16522,
+            "dDurationMs": 2640,
+            "segs": [
+                {
+                    "utf8": "and formally legislated it in 1880."
+                }
+            ]
+        },
+        {
+            "tStartMs": 19862,
+            "dDurationMs": 1300,
+            "segs": [
+                {
+                    "utf8": "This decision wasn't born"
+                }
+            ]
+        },
+        {
+            "tStartMs": 21182,
+            "dDurationMs": 2620,
+            "segs": [
+                {
+                    "utf8": "from some overarching\nphilosophical discussion"
+                }
+            ]
+        },
+        {
+            "tStartMs": 23822,
+            "dDurationMs": 2520,
+            "segs": [
+                {
+                    "utf8": "about the concept of time and location."
+                }
+            ]
+        },
+        {
+            "tStartMs": 26362,
+            "dDurationMs": 1600,
+            "segs": [
+                {
+                    "utf8": "It was just practicality."
+                }
+            ]
+        },
+        {
+            "tStartMs": 28322,
+            "dDurationMs": 3320,
+            "segs": [
+                {
+                    "utf8": "We needed to know when trains\nwould be arriving and departing"
+                }
+            ]
+        },
+        {
+            "tStartMs": 31662,
+            "dDurationMs": 1360,
+            "segs": [
+                {
+                    "utf8": "at any station"
+                }
+            ]
+        },
+        {
+            "tStartMs": 33042,
+            "dDurationMs": 2380,
+            "segs": [
+                {
+                    "utf8": "along an expansive railroad route."
+                }
+            ]
+        },
+        {
+            "tStartMs": 35462,
+            "dDurationMs": 3540,
+            "segs": [
+                {
+                    "utf8": "This need rendered local\nsolar times too imprecise"
+                }
+            ]
+        },
+        {
+            "tStartMs": 39022,
+            "dDurationMs": 3200,
+            "segs": [
+                {
+                    "utf8": "and necessitated our modern\nday concept of time zones."
+                }
+            ]
+        },
+        {
+            "tStartMs": 43442,
+            "dDurationMs": 1280,
+            "segs": [
+                {
+                    "utf8": "I'm a historian,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 44742,
+            "dDurationMs": 1880,
+            "segs": [
+                {
+                    "utf8": "and I am fascinated by the factors"
+                }
+            ]
+        },
+        {
+            "tStartMs": 46662,
+            "dDurationMs": 2580,
+            "segs": [
+                {
+                    "utf8": "that shape progress\nsurrounding technology."
+                }
+            ]
+        },
+        {
+            "tStartMs": 49582,
+            "dDurationMs": 3240,
+            "segs": [
+                {
+                    "utf8": "From steam power\nto the telephone to the internet,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 52842,
+            "dDurationMs": 2580,
+            "segs": [
+                {
+                    "utf8": "we can track the intertwined\ndevelopment of society"
+                }
+            ]
+        },
+        {
+            "tStartMs": 55442,
+            "dDurationMs": 2880,
+            "segs": [
+                {
+                    "utf8": "and technology as each\nnew innovative leap is made."
+                }
+            ]
+        },
+        {
+            "tStartMs": 59422,
+            "dDurationMs": 3640,
+            "segs": [
+                {
+                    "utf8": "The technological progress\nof our generation is AI."
+                }
+            ]
+        },
+        {
+            "tStartMs": 63702,
+            "dDurationMs": 3220,
+            "segs": [
+                {
+                    "utf8": "Analyzing how AI will both fit into\nand shape our world"
+                }
+            ]
+        },
+        {
+            "tStartMs": 66942,
+            "dDurationMs": 3060,
+            "segs": [
+                {
+                    "utf8": "is a fascinating topic\nthat, more often than not,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 70022,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "is sensationalized\nwith these huge promises"
+                }
+            ]
+        },
+        {
+            "tStartMs": 72722,
+            "dDurationMs": 2080,
+            "segs": [
+                {
+                    "utf8": "or catastrophized with disaster."
+                }
+            ]
+        },
+        {
+            "tStartMs": 75362,
+            "dDurationMs": 3300,
+            "segs": [
+                {
+                    "utf8": "But in a world that is just screaming\nfor you to think big"
+                }
+            ]
+        },
+        {
+            "tStartMs": 78682,
+            "dDurationMs": 2400,
+            "segs": [
+                {
+                    "utf8": "in order to discuss the future,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 81102,
+            "dDurationMs": 3960,
+            "segs": [
+                {
+                    "utf8": "as a historian, I ask you to think small."
+                }
+            ]
+        },
+        {
+            "tStartMs": 85822,
+            "dDurationMs": 1780,
+            "segs": [
+                {
+                    "utf8": "The history of technological progress"
+                }
+            ]
+        },
+        {
+            "tStartMs": 87622,
+            "dDurationMs": 2020,
+            "segs": [
+                {
+                    "utf8": "and its accompanying regulatory frameworks"
+                }
+            ]
+        },
+        {
+            "tStartMs": 89662,
+            "dDurationMs": 2140,
+            "segs": [
+                {
+                    "utf8": "teach us that our future\nwith AI and robotics"
+                }
+            ]
+        },
+        {
+            "tStartMs": 91822,
+            "dDurationMs": 1820,
+            "segs": [
+                {
+                    "utf8": "won't only be decided by these large,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 93662,
+            "dDurationMs": 1900,
+            "segs": [
+                {
+                    "utf8": "sweeping philosophical discussions,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 95582,
+            "dDurationMs": 1580,
+            "segs": [
+                {
+                    "utf8": "but through practicality,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 97182,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "through the answering of thousands\nof practical questions"
+                }
+            ]
+        },
+        {
+            "tStartMs": 99942,
+            "dDurationMs": 3640,
+            "segs": [
+                {
+                    "utf8": "that arise from the simple minutia\nof sharing everyday life."
+                }
+            ]
+        },
+        {
+            "tStartMs": 105002,
+            "dDurationMs": 1860,
+            "segs": [
+                {
+                    "utf8": "I have embarked upon a research project"
+                }
+            ]
+        },
+        {
+            "tStartMs": 106902,
+            "dDurationMs": 3720,
+            "segs": [
+                {
+                    "utf8": "to uncover what all of these\nthousands of questions really are."
+                }
+            ]
+        },
+        {
+            "tStartMs": 110642,
+            "dDurationMs": 2780,
+            "segs": [
+                {
+                    "utf8": "I have spent the greater part\nof this past year"
+                }
+            ]
+        },
+        {
+            "tStartMs": 113442,
+            "dDurationMs": 2880,
+            "segs": [
+                {
+                    "utf8": "living alongside an AI humanoid robot."
+                }
+            ]
+        },
+        {
+            "tStartMs": 119122,
+            "dDurationMs": 2240,
+            "segs": [
+                {
+                    "utf8": "I hatched this immersive research project"
+                }
+            ]
+        },
+        {
+            "tStartMs": 121382,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "because I already had\nall of these questions"
+                }
+            ]
+        },
+        {
+            "tStartMs": 123462,
+            "dDurationMs": 1520,
+            "segs": [
+                {
+                    "utf8": "building up on my own, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 125002,
+            "dDurationMs": 1180,
+            "segs": [
+                {
+                    "utf8": "I have a little dog."
+                }
+            ]
+        },
+        {
+            "tStartMs": 126202,
+            "dDurationMs": 3660,
+            "segs": [
+                {
+                    "utf8": "How would my dog act\naround the humanoid robot?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 129882,
+            "dDurationMs": 1140,
+            "segs": [
+                {
+                    "utf8": "[Who is this?]"
+                }
+            ]
+        },
+        {
+            "tStartMs": 131062,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 132242,
+            "dDurationMs": 3740,
+            "segs": [
+                {
+                    "utf8": "How would the robot handle a house\nfull of delicate antiques?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 136002,
+            "dDurationMs": 1640,
+            "segs": [
+                {
+                    "utf8": "With factories all over the world,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 137682,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "working hard to get\ndomestic AI robotics to market,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 140422,
+            "dDurationMs": 3480,
+            "segs": [
+                {
+                    "utf8": "and these engaging viral videos\nigniting curiosity"
+                }
+            ]
+        },
+        {
+            "tStartMs": 143922,
+            "dDurationMs": 1920,
+            "segs": [
+                {
+                    "utf8": "and millions of people around the world,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 145862,
+            "dDurationMs": 1780,
+            "segs": [
+                {
+                    "utf8": "I felt that as a historian,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 147662,
+            "dDurationMs": 4060,
+            "segs": [
+                {
+                    "utf8": "living thoughtfully and openly\nwith a humanoid robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 151742,
+            "dDurationMs": 3900,
+            "segs": [
+                {
+                    "utf8": "I could help to provide a glimpse\ninto what the future could look like,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 155662,
+            "dDurationMs": 4140,
+            "segs": [
+                {
+                    "utf8": "start some interesting conversations,\nfind gaps in regulation"
+                }
+            ]
+        },
+        {
+            "tStartMs": 159842,
+            "dDurationMs": 3460,
+            "segs": [
+                {
+                    "utf8": "and experiment with community standards\nfor the world around me."
+                }
+            ]
+        },
+        {
+            "tStartMs": 165482,
+            "dDurationMs": 3280,
+            "segs": [
+                {
+                    "utf8": "This is a Unitree G1 EDU-1."
+                }
+            ]
+        },
+        {
+            "tStartMs": 169102,
+            "dDurationMs": 3920,
+            "segs": [
+                {
+                    "utf8": "It's equipped with 3D lidar scanning\nand a depth camera"
+                }
+            ]
+        },
+        {
+            "tStartMs": 173042,
+            "dDurationMs": 1820,
+            "segs": [
+                {
+                    "utf8": "and a microphone array."
+                }
+            ]
+        },
+        {
+            "tStartMs": 174882,
+            "dDurationMs": 3260,
+            "segs": [
+                {
+                    "utf8": "It has a large language model\nwhich name is BenBen,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 178162,
+            "dDurationMs": 3320,
+            "segs": [
+                {
+                    "utf8": "and it has AI-powered stability\nand movement capabilities."
+                }
+            ]
+        },
+        {
+            "tStartMs": 181502,
+            "dDurationMs": 3360,
+            "segs": [
+                {
+                    "utf8": "To me and my friends,\nthough, this is Tova,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 184882,
+            "dDurationMs": 2320,
+            "segs": [
+                {
+                    "utf8": "the robot that I live with at home."
+                }
+            ]
+        },
+        {
+            "tStartMs": 187222,
+            "dDurationMs": 2600,
+            "segs": [
+                {
+                    "utf8": "Every day with Tova unearths\nthis really wide range"
+                }
+            ]
+        },
+        {
+            "tStartMs": 189862,
+            "dDurationMs": 1700,
+            "segs": [
+                {
+                    "utf8": "of practical issues."
+                }
+            ]
+        },
+        {
+            "tStartMs": 191602,
+            "dDurationMs": 2920,
+            "segs": [
+                {
+                    "utf8": "And in turn, that highlights\nthe need for regulation"
+                }
+            ]
+        },
+        {
+            "tStartMs": 194542,
+            "dDurationMs": 2360,
+            "segs": [
+                {
+                    "utf8": "in a really wide variety of spaces."
+                }
+            ]
+        },
+        {
+            "tStartMs": 197342,
+            "dDurationMs": 3620,
+            "segs": [
+                {
+                    "utf8": "Today, I'm going to share with you\nfive practical lessons that I've learned"
+                }
+            ]
+        },
+        {
+            "tStartMs": 200982,
+            "dDurationMs": 2420,
+            "segs": [
+                {
+                    "utf8": "as a historian living with a robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 203442,
+            "dDurationMs": 3720,
+            "segs": [
+                {
+                    "utf8": "and how the lessons learned at my house\nconnect to society's future."
+                }
+            ]
+        },
+        {
+            "tStartMs": 208222,
+            "dDurationMs": 1140,
+            "segs": [
+                {
+                    "utf8": "Lesson one."
+                }
+            ]
+        },
+        {
+            "tStartMs": 210462,
+            "dDurationMs": 2480,
+            "segs": [
+                {
+                    "utf8": "You have to robot-proof your home."
+                }
+            ]
+        },
+        {
+            "tStartMs": 212962,
+            "dDurationMs": 6260,
+            "segs": [
+                {
+                    "utf8": "So I mentioned Tova has lidar scanning."
+                }
+            ]
+        },
+        {
+            "tStartMs": 219242,
+            "dDurationMs": 3160,
+            "segs": [
+                {
+                    "utf8": "And with that, there's something\nthat's called obstacle avoidance."
+                }
+            ]
+        },
+        {
+            "tStartMs": 222422,
+            "dDurationMs": 1800,
+            "segs": [
+                {
+                    "utf8": "It sounds wonderful, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 225602,
+            "dDurationMs": 2000,
+            "segs": [
+                {
+                    "utf8": "Unfortunately, it doesn't always shield us"
+                }
+            ]
+        },
+        {
+            "tStartMs": 227622,
+            "dDurationMs": 2600,
+            "segs": [
+                {
+                    "utf8": "from some clumsiness around the house."
+                }
+            ]
+        },
+        {
+            "tStartMs": 230242,
+            "dDurationMs": 3900,
+            "segs": [
+                {
+                    "utf8": "See, Tova walks and runs,\nand Tova gestures."
+                }
+            ]
+        },
+        {
+            "tStartMs": 234162,
+            "dDurationMs": 1300,
+            "segs": [
+                {
+                    "utf8": "And with those gestures,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 235502,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "unfortunately for my household,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 237582,
+            "dDurationMs": 2020,
+            "segs": [
+                {
+                    "utf8": "I've lost like, my favorite teacup,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 239622,
+            "dDurationMs": 4060,
+            "segs": [
+                {
+                    "utf8": "some vases and pretty much\nevery wine glass that I own."
+                }
+            ]
+        },
+        {
+            "tStartMs": 243702,
+            "dDurationMs": 3480,
+            "segs": [
+                {
+                    "utf8": "So I called my insurance company,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 247222,
+            "dDurationMs": 3740,
+            "segs": [
+                {
+                    "utf8": "and I wanted to ask them about expanding\nmy home insurance coverage"
+                }
+            ]
+        },
+        {
+            "tStartMs": 250982,
+            "dDurationMs": 1880,
+            "segs": [
+                {
+                    "utf8": "and my personal liability insurance."
+                }
+            ]
+        },
+        {
+            "tStartMs": 253242,
+            "dDurationMs": 2040,
+            "segs": [
+                {
+                    "utf8": "And I got an agent on the phone."
+                }
+            ]
+        },
+        {
+            "tStartMs": 255302,
+            "dDurationMs": 1900,
+            "segs": [
+                {
+                    "utf8": "\"Hello? You've reached an agent.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 257222,
+            "dDurationMs": 1360,
+            "segs": [
+                {
+                    "utf8": "\"Hi, it's Emily."
+                }
+            ]
+        },
+        {
+            "tStartMs": 258602,
+            "dDurationMs": 2960,
+            "segs": [
+                {
+                    "utf8": "I need to actually expand\nmy home insurance coverage"
+                }
+            ]
+        },
+        {
+            "tStartMs": 261602,
+            "dDurationMs": 1440,
+            "segs": [
+                {
+                    "utf8": "and my personal liability.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 263462,
+            "dDurationMs": 1800,
+            "segs": [
+                {
+                    "utf8": "\"OK, what changed?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 265282,
+            "dDurationMs": 2640,
+            "segs": [
+                {
+                    "utf8": "\"I had an AI humanoid robot move in."
+                }
+            ]
+        },
+        {
+            "tStartMs": 267942,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 269582,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "“Hello?”"
+                }
+            ]
+        },
+        {
+            "tStartMs": 271322,
+            "dDurationMs": 2900,
+            "segs": [
+                {
+                    "utf8": "They hung up on me\nbecause they thought it was a prank."
+                }
+            ]
+        },
+        {
+            "tStartMs": 274242,
+            "dDurationMs": 1600,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 275862,
+            "dDurationMs": 1520,
+            "segs": [
+                {
+                    "utf8": "I don't blame them."
+                }
+            ]
+        },
+        {
+            "tStartMs": 277402,
+            "dDurationMs": 1800,
+            "segs": [
+                {
+                    "utf8": "I was the first one to call about it."
+                }
+            ]
+        },
+        {
+            "tStartMs": 279222,
+            "dDurationMs": 2760,
+            "segs": [
+                {
+                    "utf8": "But autonomous robotics liability\nand insurance coverage"
+                }
+            ]
+        },
+        {
+            "tStartMs": 282002,
+            "dDurationMs": 2500,
+            "segs": [
+                {
+                    "utf8": "is a field where practicality\nand immersion,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 284522,
+            "dDurationMs": 1640,
+            "segs": [
+                {
+                    "utf8": "they’re going to create precedents"
+                }
+            ]
+        },
+        {
+            "tStartMs": 286182,
+            "dDurationMs": 1960,
+            "segs": [
+                {
+                    "utf8": "on any number of different issues, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 288162,
+            "dDurationMs": 1840,
+            "segs": [
+                {
+                    "utf8": "We need to answer questions like,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 290022,
+            "dDurationMs": 1500,
+            "segs": [
+                {
+                    "utf8": "I own the robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 291542,
+            "dDurationMs": 1600,
+            "segs": [
+                {
+                    "utf8": "the company programed the robot"
+                }
+            ]
+        },
+        {
+            "tStartMs": 293162,
+            "dDurationMs": 2000,
+            "segs": [
+                {
+                    "utf8": "and my friend is operating the robot"
+                }
+            ]
+        },
+        {
+            "tStartMs": 295182,
+            "dDurationMs": 2560,
+            "segs": [
+                {
+                    "utf8": "and the robot knocks over a vase."
+                }
+            ]
+        },
+        {
+            "tStartMs": 298082,
+            "dDurationMs": 1740,
+            "segs": [
+                {
+                    "utf8": "Who's responsible?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 299842,
+            "dDurationMs": 2480,
+            "segs": [
+                {
+                    "utf8": "Now I know that these questions"
+                }
+            ]
+        },
+        {
+            "tStartMs": 302342,
+            "dDurationMs": 3000,
+            "segs": [
+                {
+                    "utf8": "are a little bit far from these\namazing sci-fi debates"
+                }
+            ]
+        },
+        {
+            "tStartMs": 305362,
+            "dDurationMs": 2260,
+            "segs": [
+                {
+                    "utf8": "about a robotic future\nthat we love to have,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 307642,
+            "dDurationMs": 2800,
+            "segs": [
+                {
+                    "utf8": "but these are the types of questions\nthat demand answers"
+                }
+            ]
+        },
+        {
+            "tStartMs": 310462,
+            "dDurationMs": 3280,
+            "segs": [
+                {
+                    "utf8": "the moment one of these robots\ncomes into your home."
+                }
+            ]
+        },
+        {
+            "tStartMs": 313762,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "Lesson two."
+                }
+            ]
+        },
+        {
+            "tStartMs": 314942,
+            "dDurationMs": 2500,
+            "segs": [
+                {
+                    "utf8": "Transit with a robot is really rough."
+                }
+            ]
+        },
+        {
+            "tStartMs": 317482,
+            "dDurationMs": 4560,
+            "segs": [
+                {
+                    "utf8": "So I had the immense pleasure\nof introducing Tova to Vienna"
+                }
+            ]
+        },
+        {
+            "tStartMs": 322062,
+            "dDurationMs": 2960,
+            "segs": [
+                {
+                    "utf8": "on an Austrian morning show\non national television."
+                }
+            ]
+        },
+        {
+            "tStartMs": 325522,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "And this is filmed on a soundstage."
+                }
+            ]
+        },
+        {
+            "tStartMs": 327602,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "It's like way out\nin the outskirts of the city,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 330302,
+            "dDurationMs": 2480,
+            "segs": [
+                {
+                    "utf8": "and they film in the wee hours\nof the morning."
+                }
+            ]
+        },
+        {
+            "tStartMs": 332802,
+            "dDurationMs": 2400,
+            "segs": [
+                {
+                    "utf8": "So something to keep in mind about Tova."
+                }
+            ]
+        },
+        {
+            "tStartMs": 335222,
+            "dDurationMs": 1940,
+            "segs": [
+                {
+                    "utf8": "Tova weighs like 60 kilos"
+                }
+            ]
+        },
+        {
+            "tStartMs": 337202,
+            "dDurationMs": 3540,
+            "segs": [
+                {
+                    "utf8": "and packs into this, like,\ngiant black crate."
+                }
+            ]
+        },
+        {
+            "tStartMs": 341902,
+            "dDurationMs": 1140,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 343602,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "Pilates."
+                }
+            ]
+        },
+        {
+            "tStartMs": 344782,
+            "dDurationMs": 3140,
+            "segs": [
+                {
+                    "utf8": "And I had to call a cab at 4am"
+                }
+            ]
+        },
+        {
+            "tStartMs": 347942,
+            "dDurationMs": 1960,
+            "segs": [
+                {
+                    "utf8": "and ask the driver,\n\"Oh, I have something."
+                }
+            ]
+        },
+        {
+            "tStartMs": 349922,
+            "dDurationMs": 2900,
+            "segs": [
+                {
+                    "utf8": "Can you just help me get something\ninto the back of the van?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 353202,
+            "dDurationMs": 2340,
+            "segs": [
+                {
+                    "utf8": "And he starts to come\naround the back of the van."
+                }
+            ]
+        },
+        {
+            "tStartMs": 355562,
+            "dDurationMs": 1280,
+            "segs": [
+                {
+                    "utf8": "He's already looking at me"
+                }
+            ]
+        },
+        {
+            "tStartMs": 356862,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "because obviously,\nit's four in the morning,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 358942,
+            "dDurationMs": 2100,
+            "segs": [
+                {
+                    "utf8": "the destination is not common."
+                }
+            ]
+        },
+        {
+            "tStartMs": 361062,
+            "dDurationMs": 5060,
+            "segs": [
+                {
+                    "utf8": "And then he sees this giant black box\nthat's basically the size of me."
+                }
+            ]
+        },
+        {
+            "tStartMs": 366142,
+            "dDurationMs": 3140,
+            "segs": [
+                {
+                    "utf8": "And reluctantly he leans down to grab it,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 369302,
+            "dDurationMs": 3260,
+            "segs": [
+                {
+                    "utf8": "and as soon as he feels\nhow heavy it is, he looks at me."
+                }
+            ]
+        },
+        {
+            "tStartMs": 372602,
+            "dDurationMs": 2420,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 375982,
+            "dDurationMs": 1360,
+            "segs": [
+                {
+                    "utf8": "\"Is there a body in here?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 377362,
+            "dDurationMs": 1420,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 379562,
+            "dDurationMs": 3140,
+            "segs": [
+                {
+                    "utf8": "I pause, because, kind of a body."
+                }
+            ]
+        },
+        {
+            "tStartMs": 383302,
+            "dDurationMs": 1440,
+            "segs": [
+                {
+                    "utf8": "He freaked out."
+                }
+            ]
+        },
+        {
+            "tStartMs": 384762,
+            "dDurationMs": 4080,
+            "segs": [
+                {
+                    "utf8": "I had to open it up and show him\nit's a humanoid robot to ease his mind."
+                }
+            ]
+        },
+        {
+            "tStartMs": 388882,
+            "dDurationMs": 3600,
+            "segs": [
+                {
+                    "utf8": "But this brings up the concept\nof transport regulations"
+                }
+            ]
+        },
+        {
+            "tStartMs": 392502,
+            "dDurationMs": 1600,
+            "segs": [
+                {
+                    "utf8": "for humanoid robotics, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 394122,
+            "dDurationMs": 4360,
+            "segs": [
+                {
+                    "utf8": "So calling cabs for giant\nblack boxes, it gets expensive."
+                }
+            ]
+        },
+        {
+            "tStartMs": 398502,
+            "dDurationMs": 2160,
+            "segs": [
+                {
+                    "utf8": "So I was racking my brain,\nthinking to myself,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 400682,
+            "dDurationMs": 2780,
+            "segs": [
+                {
+                    "utf8": "OK, I take the tram, the robot has legs."
+                }
+            ]
+        },
+        {
+            "tStartMs": 403482,
+            "dDurationMs": 2760,
+            "segs": [
+                {
+                    "utf8": "The robot can just walk\non the tram and sit down, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 406582,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "Then I thought, OK,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 407762,
+            "dDurationMs": 1700,
+            "segs": [
+                {
+                    "utf8": "what if the ticket inspector comes"
+                }
+            ]
+        },
+        {
+            "tStartMs": 409482,
+            "dDurationMs": 2700,
+            "segs": [
+                {
+                    "utf8": "and needs a ticket if it's going\nto be taking up a seat?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 412202,
+            "dDurationMs": 1720,
+            "segs": [
+                {
+                    "utf8": "So I wrote to the Transit Authority,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 413922,
+            "dDurationMs": 3860,
+            "segs": [
+                {
+                    "utf8": "and I said, I really want to buy\nan annual card for my AI humanoid robot."
+                }
+            ]
+        },
+        {
+            "tStartMs": 418422,
+            "dDurationMs": 1560,
+            "segs": [
+                {
+                    "utf8": "This didn't go over too well."
+                }
+            ]
+        },
+        {
+            "tStartMs": 420002,
+            "dDurationMs": 4080,
+            "segs": [
+                {
+                    "utf8": "So they wrote back to me, and they said\nany and all requests for an annual card"
+                }
+            ]
+        },
+        {
+            "tStartMs": 424102,
+            "dDurationMs": 3960,
+            "segs": [
+                {
+                    "utf8": "it has to be accompanied\nby registration papers of the resident."
+                }
+            ]
+        },
+        {
+            "tStartMs": 429562,
+            "dDurationMs": 1580,
+            "segs": [
+                {
+                    "utf8": "I don't have that, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 431562,
+            "dDurationMs": 2440,
+            "segs": [
+                {
+                    "utf8": "So naturally I went\nto the police bureau and I said,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 434022,
+            "dDurationMs": 2000,
+            "segs": [
+                {
+                    "utf8": "I need to register someone at my home."
+                }
+            ]
+        },
+        {
+            "tStartMs": 436042,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "They said, who?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 437242,
+            "dDurationMs": 2260,
+            "segs": [
+                {
+                    "utf8": "I said, \"My AI humanoid robot.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 439522,
+            "dDurationMs": 1560,
+            "segs": [
+                {
+                    "utf8": "And they kicked me out the door."
+                }
+            ]
+        },
+        {
+            "tStartMs": 441102,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "(Laughter)"
+                }
+            ]
+        },
+        {
+            "tStartMs": 442842,
+            "dDurationMs": 2360,
+            "segs": [
+                {
+                    "utf8": "I don't blame them at all, obviously."
+                }
+            ]
+        },
+        {
+            "tStartMs": 445222,
+            "dDurationMs": 2480,
+            "segs": [
+                {
+                    "utf8": "But I do think that if these robots"
+                }
+            ]
+        },
+        {
+            "tStartMs": 447722,
+            "dDurationMs": 3260,
+            "segs": [
+                {
+                    "utf8": "are going to be helping us\nmanage our lives and our homes,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 451022,
+            "dDurationMs": 3200,
+            "segs": [
+                {
+                    "utf8": "this innately comes with them\noccasionally venturing outside, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 454242,
+            "dDurationMs": 2580,
+            "segs": [
+                {
+                    "utf8": "They could go somewhere with us\nand just accompany us."
+                }
+            ]
+        },
+        {
+            "tStartMs": 456842,
+            "dDurationMs": 1940,
+            "segs": [
+                {
+                    "utf8": "They could hold something for us."
+                }
+            ]
+        },
+        {
+            "tStartMs": 458802,
+            "dDurationMs": 1540,
+            "segs": [
+                {
+                    "utf8": "Or they could run to the store"
+                }
+            ]
+        },
+        {
+            "tStartMs": 460362,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "when we're in the middle\nof cooking a recipe"
+                }
+            ]
+        },
+        {
+            "tStartMs": 462462,
+            "dDurationMs": 1360,
+            "segs": [
+                {
+                    "utf8": "and we forget an ingredient."
+                }
+            ]
+        },
+        {
+            "tStartMs": 463842,
+            "dDurationMs": 3300,
+            "segs": [
+                {
+                    "utf8": "We need to facilitate and regulate\na way for them to do that safely"
+                }
+            ]
+        },
+        {
+            "tStartMs": 467162,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "that works for the robots and the owners"
+                }
+            ]
+        },
+        {
+            "tStartMs": 469862,
+            "dDurationMs": 3640,
+            "segs": [
+                {
+                    "utf8": "and the other people living in the city\nwho don't have robots,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 473542,
+            "dDurationMs": 1200,
+            "segs": [
+                {
+                    "utf8": "and the city itself."
+                }
+            ]
+        },
+        {
+            "tStartMs": 475882,
+            "dDurationMs": 3180,
+            "segs": [
+                {
+                    "utf8": "Lesson three is that robots\naren't always welcome."
+                }
+            ]
+        },
+        {
+            "tStartMs": 479082,
+            "dDurationMs": 1580,
+            "segs": [
+                {
+                    "utf8": "So of course, as you can imagine,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 480682,
+            "dDurationMs": 2200,
+            "segs": [
+                {
+                    "utf8": "I have friends who call me up,\nand they beg me,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 482902,
+            "dDurationMs": 1600,
+            "segs": [
+                {
+                    "utf8": "\"I'm having a party this weekend."
+                }
+            ]
+        },
+        {
+            "tStartMs": 484522,
+            "dDurationMs": 1460,
+            "segs": [
+                {
+                    "utf8": "Bring the robot, it's so cool."
+                }
+            ]
+        },
+        {
+            "tStartMs": 486002,
+            "dDurationMs": 2260,
+            "segs": [
+                {
+                    "utf8": "Bring the robot,\nI want the robot at my party.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 488282,
+            "dDurationMs": 3760,
+            "segs": [
+                {
+                    "utf8": "On the other hand, I have colleagues\nwho will send me a message in the morning,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 492062,
+            "dDurationMs": 3140,
+            "segs": [
+                {
+                    "utf8": "\"If you don't want to bring\nthe robot today, that's fine.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 495242,
+            "dDurationMs": 1900,
+            "segs": [
+                {
+                    "utf8": "And they don't want it there."
+                }
+            ]
+        },
+        {
+            "tStartMs": 498022,
+            "dDurationMs": 4860,
+            "segs": [
+                {
+                    "utf8": "I respect that there are certain rules\nthat have begun to develop and emerge"
+                }
+            ]
+        },
+        {
+            "tStartMs": 502902,
+            "dDurationMs": 3060,
+            "segs": [
+                {
+                    "utf8": "surrounding where the robot\nis welcome and where it's not, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 505982,
+            "dDurationMs": 1200,
+            "segs": [
+                {
+                    "utf8": "I have a domestic robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 507202,
+            "dDurationMs": 2560,
+            "segs": [
+                {
+                    "utf8": "so it's not really wanted or needed"
+                }
+            ]
+        },
+        {
+            "tStartMs": 509782,
+            "dDurationMs": 3000,
+            "segs": [
+                {
+                    "utf8": "in the faculty rooms\nat the university where I work."
+                }
+            ]
+        },
+        {
+            "tStartMs": 512802,
+            "dDurationMs": 2600,
+            "segs": [
+                {
+                    "utf8": "My friends who have toddlers\njust learning to walk,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 515422,
+            "dDurationMs": 2700,
+            "segs": [
+                {
+                    "utf8": "we don’t want it around them\nin their house."
+                }
+            ]
+        },
+        {
+            "tStartMs": 518142,
+            "dDurationMs": 3420,
+            "segs": [
+                {
+                    "utf8": "And it hasn’t been permitted\nto visit houses of worship."
+                }
+            ]
+        },
+        {
+            "tStartMs": 521582,
+            "dDurationMs": 3460,
+            "segs": [
+                {
+                    "utf8": "These restrictions and requests,\nthey're completely informal,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 525082,
+            "dDurationMs": 2360,
+            "segs": [
+                {
+                    "utf8": "but they're completely respected by me."
+                }
+            ]
+        },
+        {
+            "tStartMs": 528042,
+            "dDurationMs": 3720,
+            "segs": [
+                {
+                    "utf8": "What happens when thousands\nor millions of these robots"
+                }
+            ]
+        },
+        {
+            "tStartMs": 531782,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "are shipped all over the world\nto different people,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 534522,
+            "dDurationMs": 4180,
+            "segs": [
+                {
+                    "utf8": "different communities that have different\nperspectives on this, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 538722,
+            "dDurationMs": 3580,
+            "segs": [
+                {
+                    "utf8": "So we really need\nto formulate community standards."
+                }
+            ]
+        },
+        {
+            "tStartMs": 542342,
+            "dDurationMs": 1440,
+            "segs": [
+                {
+                    "utf8": "And the community standards"
+                }
+            ]
+        },
+        {
+            "tStartMs": 543802,
+            "dDurationMs": 2980,
+            "segs": [
+                {
+                    "utf8": "can talk about where the robots\nare welcome, where they're not,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 546822,
+            "dDurationMs": 1760,
+            "segs": [
+                {
+                    "utf8": "what they can do, what they can't do."
+                }
+            ]
+        },
+        {
+            "tStartMs": 548602,
+            "dDurationMs": 2440,
+            "segs": [
+                {
+                    "utf8": "This can take any number\nof very interesting forms."
+                }
+            ]
+        },
+        {
+            "tStartMs": 551062,
+            "dDurationMs": 3420,
+            "segs": [
+                {
+                    "utf8": "So we could have robot zones\nand no-go zones,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 554502,
+            "dDurationMs": 3800,
+            "segs": [
+                {
+                    "utf8": "and it could kind of be like\nwhere we let e-scooters and e-bikes go"
+                }
+            ]
+        },
+        {
+            "tStartMs": 558322,
+            "dDurationMs": 2820,
+            "segs": [
+                {
+                    "utf8": "and throttle them\nwhen they're in the wrong area."
+                }
+            ]
+        },
+        {
+            "tStartMs": 561162,
+            "dDurationMs": 3440,
+            "segs": [
+                {
+                    "utf8": "Or this could be like\nwhen you go to the supermarket"
+                }
+            ]
+        },
+        {
+            "tStartMs": 564642,
+            "dDurationMs": 2960,
+            "segs": [
+                {
+                    "utf8": "and they say no pets are allowed\nin the icon in the window,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 567622,
+            "dDurationMs": 3520,
+            "segs": [
+                {
+                    "utf8": "and be decided upon like a policy,\neach building or business."
+                }
+            ]
+        },
+        {
+            "tStartMs": 571462,
+            "dDurationMs": 4700,
+            "segs": [
+                {
+                    "utf8": "Or this could look like\ngovernment-issued ID cards for robots,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 576182,
+            "dDurationMs": 2060,
+            "segs": [
+                {
+                    "utf8": "but they're individually\ngiven permissions."
+                }
+            ]
+        },
+        {
+            "tStartMs": 578282,
+            "dDurationMs": 2300,
+            "segs": [
+                {
+                    "utf8": "This is like where they can go,\nwhat they can do,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 580602,
+            "dDurationMs": 2620,
+            "segs": [
+                {
+                    "utf8": "approved and managed\nby a centralized regulation office"
+                }
+            ]
+        },
+        {
+            "tStartMs": 583242,
+            "dDurationMs": 3260,
+            "segs": [
+                {
+                    "utf8": "with like, trainings and licensing\nand things like this."
+                }
+            ]
+        },
+        {
+            "tStartMs": 586522,
+            "dDurationMs": 2260,
+            "segs": [
+                {
+                    "utf8": "It's completely up to us to decide."
+                }
+            ]
+        },
+        {
+            "tStartMs": 589742,
+            "dDurationMs": 2900,
+            "segs": [
+                {
+                    "utf8": "Lesson four is that you\ncan send your robot to work."
+                }
+            ]
+        },
+        {
+            "tStartMs": 592662,
+            "dDurationMs": 2900,
+            "segs": [
+                {
+                    "utf8": "So Tova was at home\nand I went out with a friend"
+                }
+            ]
+        },
+        {
+            "tStartMs": 595582,
+            "dDurationMs": 2420,
+            "segs": [
+                {
+                    "utf8": "who had just opened up a local cafe."
+                }
+            ]
+        },
+        {
+            "tStartMs": 598022,
+            "dDurationMs": 2040,
+            "segs": [
+                {
+                    "utf8": "And jokingly he was like,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 600082,
+            "dDurationMs": 2420,
+            "segs": [
+                {
+                    "utf8": "\"Oh, let's bring Tova\nto help out around the store."
+                }
+            ]
+        },
+        {
+            "tStartMs": 602542,
+            "dDurationMs": 1280,
+            "segs": [
+                {
+                    "utf8": "This is such a good idea.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 603842,
+            "dDurationMs": 3660,
+            "segs": [
+                {
+                    "utf8": "We had a laugh about it, but it was like,\nplaying over in my mind, in my mind."
+                }
+            ]
+        },
+        {
+            "tStartMs": 607542,
+            "dDurationMs": 5440,
+            "segs": [
+                {
+                    "utf8": "And then we brought it over,\nand it learned how to help out at a store."
+                }
+            ]
+        },
+        {
+            "tStartMs": 613002,
+            "dDurationMs": 5520,
+            "segs": [
+                {
+                    "utf8": "Now this discussion of labor\ndisplacement by AI and robotics,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 618542,
+            "dDurationMs": 3280,
+            "segs": [
+                {
+                    "utf8": "it's one of those discussions\nthat just attracts those large,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 621862,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "catastrophic statements."
+                }
+            ]
+        },
+        {
+            "tStartMs": 623042,
+            "dDurationMs": 1480,
+            "segs": [
+                {
+                    "utf8": "I'm sure you've all heard them."
+                }
+            ]
+        },
+        {
+            "tStartMs": 624542,
+            "dDurationMs": 1420,
+            "segs": [
+                {
+                    "utf8": "“Robots are taking our jobs.”"
+                }
+            ]
+        },
+        {
+            "tStartMs": 625982,
+            "dDurationMs": 2100,
+            "segs": [
+                {
+                    "utf8": "“No one’s going to have\na job in the future.”"
+                }
+            ]
+        },
+        {
+            "tStartMs": 628102,
+            "dDurationMs": 5040,
+            "segs": [
+                {
+                    "utf8": "These are obviously such\ninteresting, fascinating"
+                }
+            ]
+        },
+        {
+            "tStartMs": 633182,
+            "dDurationMs": 1960,
+            "segs": [
+                {
+                    "utf8": "and terrifying conversations."
+                }
+            ]
+        },
+        {
+            "tStartMs": 635882,
+            "dDurationMs": 3720,
+            "segs": [
+                {
+                    "utf8": "The conversations that I would love us\nto be also having alongside that"
+                }
+            ]
+        },
+        {
+            "tStartMs": 639622,
+            "dDurationMs": 2460,
+            "segs": [
+                {
+                    "utf8": "are of a more practical nature, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 642102,
+            "dDurationMs": 2880,
+            "segs": [
+                {
+                    "utf8": "What does a fair tax system look like"
+                }
+            ]
+        },
+        {
+            "tStartMs": 645002,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "to facilitate the advantages\nfor business owners"
+                }
+            ]
+        },
+        {
+            "tStartMs": 647702,
+            "dDurationMs": 1820,
+            "segs": [
+                {
+                    "utf8": "of bringing in robotic workers,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 649542,
+            "dDurationMs": 3020,
+            "segs": [
+                {
+                    "utf8": "of automating using AI\nto increase efficiency"
+                }
+            ]
+        },
+        {
+            "tStartMs": 652602,
+            "dDurationMs": 2240,
+            "segs": [
+                {
+                    "utf8": "while still contributing\nto the public funds"
+                }
+            ]
+        },
+        {
+            "tStartMs": 654862,
+            "dDurationMs": 1820,
+            "segs": [
+                {
+                    "utf8": "that support our communities, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 656702,
+            "dDurationMs": 2220,
+            "segs": [
+                {
+                    "utf8": "Are we taxing just the sale of the robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 658942,
+            "dDurationMs": 2920,
+            "segs": [
+                {
+                    "utf8": "or are we taxing the value that it adds?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 661882,
+            "dDurationMs": 4120,
+            "segs": [
+                {
+                    "utf8": "Are we going to put those funds\ninto our current social systems,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 666022,
+            "dDurationMs": 1320,
+            "segs": [
+                {
+                    "utf8": "or are we going to scrap it"
+                }
+            ]
+        },
+        {
+            "tStartMs": 667362,
+            "dDurationMs": 3460,
+            "segs": [
+                {
+                    "utf8": "and try to develop universal\nbasic income system instead?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 671462,
+            "dDurationMs": 2440,
+            "segs": [
+                {
+                    "utf8": "These broad fear-mongering statements,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 673922,
+            "dDurationMs": 2460,
+            "segs": [
+                {
+                    "utf8": "they have to give way\nto practical discussions"
+                }
+            ]
+        },
+        {
+            "tStartMs": 676422,
+            "dDurationMs": 3060,
+            "segs": [
+                {
+                    "utf8": "about how to preserve\nour financial systems,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 679502,
+            "dDurationMs": 3900,
+            "segs": [
+                {
+                    "utf8": "while still allowing us to embrace\nthe efficiencies offered by AI."
+                }
+            ]
+        },
+        {
+            "tStartMs": 684302,
+            "dDurationMs": 3640,
+            "segs": [
+                {
+                    "utf8": "Lesson five is that robots\nreally bring out the best in us"
+                }
+            ]
+        },
+        {
+            "tStartMs": 687962,
+            "dDurationMs": 1740,
+            "segs": [
+                {
+                    "utf8": "and the worst in us."
+                }
+            ]
+        },
+        {
+            "tStartMs": 689742,
+            "dDurationMs": 1720,
+            "segs": [
+                {
+                    "utf8": "So I mentioned I have a dog."
+                }
+            ]
+        },
+        {
+            "tStartMs": 691482,
+            "dDurationMs": 4080,
+            "segs": [
+                {
+                    "utf8": "I walk my dog in the square every morning,\nand I bring my robot."
+                }
+            ]
+        },
+        {
+            "tStartMs": 695602,
+            "dDurationMs": 3280,
+            "segs": [
+                {
+                    "utf8": "And the reactions that I get,\nthey run the gamut."
+                }
+            ]
+        },
+        {
+            "tStartMs": 698922,
+            "dDurationMs": 2760,
+            "segs": [
+                {
+                    "utf8": "So one day I had a mom,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 701702,
+            "dDurationMs": 2120,
+            "segs": [
+                {
+                    "utf8": "and she was standing\npretty much as far back"
+                }
+            ]
+        },
+        {
+            "tStartMs": 703842,
+            "dDurationMs": 1980,
+            "segs": [
+                {
+                    "utf8": "as a human could stand from the robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 705842,
+            "dDurationMs": 2520,
+            "segs": [
+                {
+                    "utf8": "but encouraging her kids, \"Go talk, talk.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 708402,
+            "dDurationMs": 1960,
+            "segs": [
+                {
+                    "utf8": "And they were asking such good questions."
+                }
+            ]
+        },
+        {
+            "tStartMs": 710402,
+            "dDurationMs": 3160,
+            "segs": [
+                {
+                    "utf8": "\"What should I study at school\nif I want to work with a robot?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 713582,
+            "dDurationMs": 1760,
+            "segs": [
+                {
+                    "utf8": "\"Can you make the robot wave at me?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 715362,
+            "dDurationMs": 1880,
+            "segs": [
+                {
+                    "utf8": "\"Can I race the robot in the square?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 717262,
+            "dDurationMs": 1420,
+            "segs": [
+                {
+                    "utf8": "Very sweet."
+                }
+            ]
+        },
+        {
+            "tStartMs": 718722,
+            "dDurationMs": 1240,
+            "segs": [
+                {
+                    "utf8": "In addition,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 719982,
+            "dDurationMs": 3760,
+            "segs": [
+                {
+                    "utf8": "the following day, I had\nan older gentleman walk up"
+                }
+            ]
+        },
+        {
+            "tStartMs": 723762,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "and try to break Tova's arm\nright off of its body."
+                }
+            ]
+        },
+        {
+            "tStartMs": 726462,
+            "dDurationMs": 1180,
+            "segs": [
+                {
+                    "utf8": "Exactly."
+                }
+            ]
+        },
+        {
+            "tStartMs": 727682,
+            "dDurationMs": 2280,
+            "segs": [
+                {
+                    "utf8": "And when I said to him,\n\"What are you doing?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 730002,
+            "dDurationMs": 4860,
+            "segs": [
+                {
+                    "utf8": "He said, \"Oh, um, a good\nold-fashioned firm handshake, for sure.\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 734882,
+            "dDurationMs": 1960,
+            "segs": [
+                {
+                    "utf8": "Yeah, OK, it looked like that."
+                }
+            ]
+        },
+        {
+            "tStartMs": 736862,
+            "dDurationMs": 3420,
+            "segs": [
+                {
+                    "utf8": "So the bottom line is that people,\nthey have these very,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 740302,
+            "dDurationMs": 2340,
+            "segs": [
+                {
+                    "utf8": "very wide reactions, right?"
+                }
+            ]
+        },
+        {
+            "tStartMs": 742662,
+            "dDurationMs": 3000,
+            "segs": [
+                {
+                    "utf8": "And this can be due\nto any number of factors."
+                }
+            ]
+        },
+        {
+            "tStartMs": 745682,
+            "dDurationMs": 3240,
+            "segs": [
+                {
+                    "utf8": "We have age, gender, culture."
+                }
+            ]
+        },
+        {
+            "tStartMs": 748942,
+            "dDurationMs": 3200,
+            "segs": [
+                {
+                    "utf8": "And interestingly enough,\nmedia preconceptions."
+                }
+            ]
+        },
+        {
+            "tStartMs": 752162,
+            "dDurationMs": 3300,
+            "segs": [
+                {
+                    "utf8": "This is like everything from what\nthey were scrolling on that morning"
+                }
+            ]
+        },
+        {
+            "tStartMs": 755482,
+            "dDurationMs": 1540,
+            "segs": [
+                {
+                    "utf8": "and seeing a brand new video,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 757042,
+            "dDurationMs": 3460,
+            "segs": [
+                {
+                    "utf8": "to their first introduction to robotics."
+                }
+            ]
+        },
+        {
+            "tStartMs": 760542,
+            "dDurationMs": 3960,
+            "segs": [
+                {
+                    "utf8": "If that was Mr. Data on \"Star Trek\"\nor C-3PO in \"Star Wars\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 764522,
+            "dDurationMs": 1700,
+            "segs": [
+                {
+                    "utf8": "or Rosie on \"The Jetsons,\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 766242,
+            "dDurationMs": 2880,
+            "segs": [
+                {
+                    "utf8": "everybody comes\nwith this like really, really,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 769142,
+            "dDurationMs": 3300,
+            "segs": [
+                {
+                    "utf8": "sort of a whole history behind them."
+                }
+            ]
+        },
+        {
+            "tStartMs": 772462,
+            "dDurationMs": 2760,
+            "segs": [
+                {
+                    "utf8": "And when they finally get\nin front of a robot,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 775242,
+            "dDurationMs": 3460,
+            "segs": [
+                {
+                    "utf8": "it can be so disappointing,\nso disappointing."
+                }
+            ]
+        },
+        {
+            "tStartMs": 779102,
+            "dDurationMs": 2180,
+            "segs": [
+                {
+                    "utf8": "I think we need to have\na lot more interaction"
+                }
+            ]
+        },
+        {
+            "tStartMs": 781302,
+            "dDurationMs": 1780,
+            "segs": [
+                {
+                    "utf8": "between the public and robotics,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 783102,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "so that we can actually\nshow people where we're at"
+                }
+            ]
+        },
+        {
+            "tStartMs": 785842,
+            "dDurationMs": 1900,
+            "segs": [
+                {
+                    "utf8": "and give a more accurate understanding"
+                }
+            ]
+        },
+        {
+            "tStartMs": 787782,
+            "dDurationMs": 3140,
+            "segs": [
+                {
+                    "utf8": "so that we can regulate\nand have discussions for reality"
+                }
+            ]
+        },
+        {
+            "tStartMs": 790942,
+            "dDurationMs": 1640,
+            "segs": [
+                {
+                    "utf8": "in a more practical format."
+                }
+            ]
+        },
+        {
+            "tStartMs": 793262,
+            "dDurationMs": 1900,
+            "segs": [
+                {
+                    "utf8": "The invisible hand of practicality"
+                }
+            ]
+        },
+        {
+            "tStartMs": 795182,
+            "dDurationMs": 2720,
+            "segs": [
+                {
+                    "utf8": "will continue to shape\nthe trajectory of history"
+                }
+            ]
+        },
+        {
+            "tStartMs": 797922,
+            "dDurationMs": 1820,
+            "segs": [
+                {
+                    "utf8": "as we move into the future."
+                }
+            ]
+        },
+        {
+            "tStartMs": 799762,
+            "dDurationMs": 1720,
+            "segs": [
+                {
+                    "utf8": "So instead of being wrapped up"
+                }
+            ]
+        },
+        {
+            "tStartMs": 801502,
+            "dDurationMs": 2940,
+            "segs": [
+                {
+                    "utf8": "in the sensationalism\nof fear or excitement,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 804462,
+            "dDurationMs": 3860,
+            "segs": [
+                {
+                    "utf8": "I ask that we bring\nthese discussions down into reality,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 808362,
+            "dDurationMs": 4740,
+            "segs": [
+                {
+                    "utf8": "that we embrace the practical nature\nof life alongside embodied AI"
+                }
+            ]
+        },
+        {
+            "tStartMs": 813122,
+            "dDurationMs": 2500,
+            "segs": [
+                {
+                    "utf8": "as we prepare to regulate\nthe future together."
+                }
+            ]
+        },
+        {
+            "tStartMs": 815642,
+            "dDurationMs": 4920,
+            "segs": [
+                {
+                    "utf8": "So next time that somebody tries\nto talk to you about the robot apocalypse,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 820602,
+            "dDurationMs": 1700,
+            "segs": [
+                {
+                    "utf8": "I want you to turn to them and say,"
+                }
+            ]
+        },
+        {
+            "tStartMs": 822322,
+            "dDurationMs": 1560,
+            "segs": [
+                {
+                    "utf8": "\"OK, OK, OK."
+                }
+            ]
+        },
+        {
+            "tStartMs": 823902,
+            "dDurationMs": 2680,
+            "segs": [
+                {
+                    "utf8": "But do you think that robots\nneed a ticket on the tram?\""
+                }
+            ]
+        },
+        {
+            "tStartMs": 827422,
+            "dDurationMs": 1160,
+            "segs": [
+                {
+                    "utf8": "Thank you."
+                }
+            ]
+        },
+        {
+            "tStartMs": 828602,
+            "dDurationMs": 1920,
+            "segs": [
+                {
+                    "utf8": "(Applause)"
+                }
+            ]
+        }
+    ]
+}

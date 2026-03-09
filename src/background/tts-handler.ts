@@ -63,97 +63,12 @@ export async function handleTTSSpeak(payload: {
   }
 }
 
-// ===== Edge TTS (free, Microsoft Translator approach) =====
+// ===== Edge TTS (free, via Bing Speech HTTP endpoint) =====
 
-const TRANSLATOR_SECRET = 'oik6PdDdMnOXemTbwvMn9de/h9lFnfBaCWbGMMZqqoSaQaqUOqjVGm5NqsmjcBI1x+sS9ugjB55HEJWRiFXYFw==';
-const TRANSLATOR_APP_ID = 'MSTranslatorAndroidApp';
-
-let cachedToken: { token: string; region: string; expiresAt: number } | null = null;
-
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
-
-async function hmacSHA256(key: ArrayBuffer, message: string): Promise<ArrayBuffer> {
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
-  );
-  const encoder = new TextEncoder();
-  return crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
-}
-
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToBuffer(b64: string): ArrayBuffer {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-async function getEdgeTTSToken(): Promise<{ token: string; region: string }> {
-  // Return cached token if still valid
-  if (cachedToken && Date.now() < cachedToken.expiresAt) {
-    return { token: cachedToken.token, region: cachedToken.region };
-  }
-
-  const uuid = generateUUID();
-  const urlPath = '/apps/endpoint?api-version=1.0';
-  const encodedPath = encodeURIComponent(urlPath);
-  const date = new Date().toUTCString().toLowerCase();
-  const stringToSign = `${TRANSLATOR_APP_ID}${encodedPath}${date}${uuid}`.toLowerCase();
-
-  const keyBuffer = base64ToBuffer(TRANSLATOR_SECRET);
-  const sigBuffer = await hmacSHA256(keyBuffer, stringToSign);
-  const signature = bufferToBase64(sigBuffer);
-  const authHeader = `${TRANSLATOR_APP_ID}::${signature}::${date}::${uuid}`;
-
-  const response = await fetch(`https://dev.microsofttranslator.com${urlPath}`, {
-    method: 'POST',
-    headers: {
-      'X-MT-Signature': authHeader,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Token request failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const token = data.t as string;
-  const region = data.r as string;
-
-  // Parse JWT to get expiry (basic base64url decode of payload)
-  try {
-    const parts = token.split('.');
-    if (parts.length >= 2) {
-      const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(atob(payloadB64));
-      if (payload.exp) {
-        // Cache with 60s safety margin
-        cachedToken = { token, region, expiresAt: (payload.exp - 60) * 1000 };
-      }
-    }
-  } catch {
-    // If JWT parse fails, cache for 5 minutes
-    cachedToken = { token, region, expiresAt: Date.now() + 5 * 60 * 1000 };
-  }
-
-  return { token, region };
-}
+const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+const SEC_MS_GEC_VERSION = '1-143.0.3650.75';
+const EDGE_TTS_URL = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
+const WIN_EPOCH_DIFF = 11644473600;
 
 function escapeXml(text: string): string {
   return text
@@ -164,21 +79,45 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;');
 }
 
-function buildSSML(text: string, voice: string, rate: number, pitch: number): string {
-  // Rate: 1.0 → 0%, 0.5 → -50%, 2.0 → +100%
-  const ratePercent = Math.round((rate - 1.0) * 100);
-  const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
-  const pitchStr = pitch >= 0 ? `+${pitch}%` : `${pitch}%`;
+/** Generate Sec-MS-GEC DRM token (same algorithm as edge-tts drm.py). */
+async function generateSecMsGec(): Promise<string> {
+  let winTs = Math.floor(Date.now() / 1000) + WIN_EPOCH_DIFF;
+  winTs = winTs - (winTs % 300);
+  const ticks = BigInt(winTs) * BigInt(10_000_000);
+  const toHash = `${ticks}${TRUSTED_CLIENT_TOKEN}`;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(toHash));
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
 
-  return `<speak xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" version="1.0" xml:lang="zh-CN">
-  <voice name="${voice}">
-    <mstts:express-as style="general">
-      <prosody rate="${rateStr}" pitch="${pitchStr}" volume="50">
-        ${escapeXml(text)}
-      </prosody>
-    </mstts:express-as>
-  </voice>
-</speak>`;
+/** Ensure MUID cookie exists for speech.platform.bing.com. */
+async function ensureMuidCookie(): Promise<void> {
+  try {
+    const existing = await chrome.cookies.get({
+      url: 'https://speech.platform.bing.com',
+      name: 'muid',
+    });
+    if (existing) return;
+
+    const muid = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
+    await chrome.cookies.set({
+      url: 'https://speech.platform.bing.com',
+      name: 'muid',
+      value: muid,
+      path: '/',
+      secure: true,
+      sameSite: 'no_restriction',
+      expirationDate: Math.floor(Date.now() / 1000) + 86400 * 365,
+    });
+    console.log('[EdgeTTS] Set MUID cookie:', muid);
+  } catch (e) {
+    console.warn('[EdgeTTS] Failed to set MUID cookie:', e);
+  }
 }
 
 export async function handleTTSEdge(payload: {
@@ -188,39 +127,46 @@ export async function handleTTSEdge(payload: {
 }): Promise<{ success: boolean; audioBase64?: string; error?: string }> {
   const voice = payload.voice || 'zh-CN-XiaoxiaoNeural';
   const rate = payload.rate || 1.0;
+  const ratePercent = Math.round((rate - 1.0) * 100);
+  const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
+
+  console.log('[EdgeTTS] handleTTSEdge called:', { text: payload.text.slice(0, 50), voice, rate });
 
   try {
-    const { token, region } = await getEdgeTTSToken();
+    const [secMsGec] = await Promise.all([generateSecMsGec(), ensureMuidCookie()]);
 
-    const ssml = buildSSML(payload.text, voice, rate, 0);
-    const ttsUrl = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='${voice}'><prosody rate='${rateStr}' pitch='+0Hz' volume='+0%'>${escapeXml(payload.text)}</prosody></voice></speak>`;
 
-    const response = await fetch(ttsUrl, {
+    const url = `${EDGE_TTS_URL}?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
+    console.log('[EdgeTTS] POST', url.slice(0, 80) + '...');
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': token,
         'Content-Type': 'application/ssml+xml',
         'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
       },
       body: ssml,
     });
 
+    console.log('[EdgeTTS] Response status:', response.status);
+
     if (!response.ok) {
-      // Token might be expired, clear cache and let next call retry
-      cachedToken = null;
       const errorText = await response.text().catch(() => '');
+      console.error('[EdgeTTS] Error:', response.status, errorText);
       return { success: false, error: `Edge TTS error: ${response.status} ${errorText}` };
     }
 
     const arrayBuffer = await response.arrayBuffer();
+    console.log('[EdgeTTS] Audio size:', arrayBuffer.byteLength, 'bytes');
+
     if (arrayBuffer.byteLength === 0) {
       return { success: false, error: 'Edge TTS returned empty audio' };
     }
 
-    const audioBase64 = arrayBufferToBase64(arrayBuffer);
-    return { success: true, audioBase64 };
+    return { success: true, audioBase64: arrayBufferToBase64(arrayBuffer) };
   } catch (e) {
-    cachedToken = null;
+    console.error('[EdgeTTS] Exception:', e);
     return { success: false, error: `Edge TTS failed: ${String(e)}` };
   }
 }

@@ -90,13 +90,21 @@ export class YouTubeSubtitleOverlay {
     this.toggleBtn = document.createElement('button');
     this.toggleBtn.className = `ytp-button ${PREFIX}-toggle`;
     this.toggleBtn.title = t('youtube.toggleSubtitle');
-    this.toggleBtn.innerHTML = `<svg height="100%" viewBox="0 0 24 24" width="100%" fill="currentColor">
-      <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm10 0h2v2h-2zm-6-4h8v2h-8z"/>
+    this.toggleBtn.innerHTML = `<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+      <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
     </svg>`;
 
     Object.assign(this.toggleBtn.style, {
       opacity: this.visible ? '1' : '0.5',
       cursor: 'pointer',
+      width: '48px',
+      height: '48px',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      border: 'none',
+      background: 'none',
+      padding: '0',
     });
 
     this.toggleBtn.addEventListener('click', (e) => {
@@ -206,16 +214,23 @@ export class YouTubeSubtitleOverlay {
     }
 
     const seg = this.segments[segIndex];
-    const isBilingual = this.config.displayMode === 'bilingual';
+    const hasTranslation = !!seg.translatedText;
 
+    // Never show raw original text as if it were a translation
+    if (!hasTranslation) {
+      this.overlay.innerHTML = '';
+      return;
+    }
+
+    const isBilingual = this.config.displayMode === 'bilingual';
     if (isBilingual) {
       this.overlay.innerHTML = this.createSubtitleHTML(seg.text, seg.translatedText);
     } else {
-      this.overlay.innerHTML = this.createSubtitleHTML(seg.translatedText || seg.text, '');
+      this.overlay.innerHTML = this.createSubtitleHTML(seg.translatedText, '');
     }
   }
 
-  private createSubtitleHTML(primary: string, secondary: string): string {
+  private createSubtitleHTML(primary: string, secondary: string, opacity = 1): string {
     const fontSize = this.getFontSize();
     const bgStyle = 'background: rgba(0, 0, 0, 0.75); border-radius: 4px; padding: 4px 12px; margin: 2px 0; text-align: center; line-height: 1.4;';
 
@@ -232,7 +247,7 @@ export class YouTubeSubtitleOverlay {
     }
 
     return `
-      <div style="${bgStyle} color: rgba(255, 255, 255, 1); font-size: ${fontSize}px;">
+      <div style="${bgStyle} color: rgba(255, 255, 255, ${opacity}); font-size: ${fontSize}px;">
         ${this.escapeHTML(primary)}
       </div>
     `;

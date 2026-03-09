@@ -964,7 +964,8 @@ async function callCustomImageGeneration(
 
 // Prompt helpers
 export function getTranslatePrompt(targetLang: string): string {
-  return `You are a professional translator. Translate the following text to ${targetLang}. Only output the translation, nothing else.`;
+  const langName = resolveLanguageName(targetLang);
+  return `You are a professional translator. Translate the following text to ${langName}. Only output the translation, nothing else.`;
 }
 
 function resolveLanguageName(lang: string): string {

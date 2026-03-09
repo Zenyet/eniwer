@@ -17,6 +17,9 @@ export class YouTubeSubtitleManager {
   private initialized = false;
   private currentVideoId: string | null = null;
   private activeVideoChangeId = 0;
+  private videoElement: HTMLVideoElement | null = null;
+  private seekedHandler: (() => void) | null = null;
+  private timeUpdateHandler: (() => void) | null = null;
 
   constructor(config: MenuConfig) {
     this.subtitleConfig = config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
@@ -47,6 +50,7 @@ export class YouTubeSubtitleManager {
   destroy(): void {
     this.activeVideoChangeId++;
     this.translator.abort();
+    this.removeVideoListeners();
     this.extractor.destroy();
     this.overlay.unmount();
     this.initialized = false;
@@ -172,20 +176,67 @@ export class YouTubeSubtitleManager {
       return;
     }
 
-    // Step 5: Translate
-    console.log(LOG, '步骤5: 翻译', segments.length, '条字幕');
-    const translated = await this.translator.translateSegments(
-      segments, videoId, this.subtitleConfig.targetLanguage,
-      (progress) => {
+    // Step 5: Start sliding-window translation from current playback position
+    console.log(LOG, '步骤5: 翻译', segments.length, '条字幕 (滑动窗口模式)');
+
+    // Get current playback time
+    const video = document.querySelector('.html5-video-player video') as HTMLVideoElement | null;
+    const currentTimeMs = video ? video.currentTime * 1000 : 0;
+
+    this.translator.translateWindow(
+      segments,
+      videoId,
+      this.subtitleConfig.targetLanguage,
+      currentTimeMs,
+      (_index, _translated) => {
         if (changeId !== this.activeVideoChangeId) return;
-        this.overlay.setSegments(progress);
-      }
+        this.overlay.setSegments(this.translator.getSegments());
+      },
     );
 
-    if (changeId !== this.activeVideoChangeId) return;
-    this.overlay.setSegments(translated);
+    // Set overlay segments immediately (with empty translations) so overlay can show originals
+    this.overlay.setSegments(this.translator.getSegments());
     this.overlay.setStatus('');
-    console.log(LOG, '=== 完成 ===');
+
+    // Attach video event listeners for time tracking
+    this.attachVideoListeners(changeId);
+
+    console.log(LOG, '=== 翻译循环已启动 ===');
+  }
+
+  private attachVideoListeners(changeId: number): void {
+    this.removeVideoListeners();
+    const video = document.querySelector('.html5-video-player video') as HTMLVideoElement | null;
+    if (!video) return;
+
+    this.videoElement = video;
+
+    this.timeUpdateHandler = () => {
+      if (changeId !== this.activeVideoChangeId) return;
+      this.translator.updateCurrentTime(video.currentTime * 1000);
+    };
+
+    this.seekedHandler = () => {
+      if (changeId !== this.activeVideoChangeId) return;
+      this.translator.updateCurrentTime(video.currentTime * 1000);
+    };
+
+    video.addEventListener('timeupdate', this.timeUpdateHandler);
+    video.addEventListener('seeked', this.seekedHandler);
+  }
+
+  private removeVideoListeners(): void {
+    if (this.videoElement) {
+      if (this.timeUpdateHandler) {
+        this.videoElement.removeEventListener('timeupdate', this.timeUpdateHandler);
+      }
+      if (this.seekedHandler) {
+        this.videoElement.removeEventListener('seeked', this.seekedHandler);
+      }
+    }
+    this.videoElement = null;
+    this.timeUpdateHandler = null;
+    this.seekedHandler = null;
   }
 
   private parseJson3(text: string): SubtitleSegment[] {

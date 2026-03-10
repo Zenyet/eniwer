@@ -63,110 +63,76 @@ export async function handleTTSSpeak(payload: {
   }
 }
 
-// ===== Edge TTS (free, via Bing Speech HTTP endpoint) =====
+// ===== Edge TTS (via server-side proxy) =====
+// Browser WebSocket cannot set Origin header required by Edge TTS.
+// Deploy edge-tts-proxy/ to Vercel, then set the URL below.
 
-const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-const SEC_MS_GEC_VERSION = '1-143.0.3650.75';
-const EDGE_TTS_URL = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
-const WIN_EPOCH_DIFF = 11644473600;
-
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-/** Generate Sec-MS-GEC DRM token (same algorithm as edge-tts drm.py). */
-async function generateSecMsGec(): Promise<string> {
-  let winTs = Math.floor(Date.now() / 1000) + WIN_EPOCH_DIFF;
-  winTs = winTs - (winTs % 300);
-  const ticks = BigInt(winTs) * BigInt(10_000_000);
-  const toHash = `${ticks}${TRUSTED_CLIENT_TOKEN}`;
-  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(toHash));
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase();
-}
-
-/** Ensure MUID cookie exists for speech.platform.bing.com. */
-async function ensureMuidCookie(): Promise<void> {
-  try {
-    const existing = await chrome.cookies.get({
-      url: 'https://speech.platform.bing.com',
-      name: 'muid',
-    });
-    if (existing) return;
-
-    const muid = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-      .toUpperCase();
-    await chrome.cookies.set({
-      url: 'https://speech.platform.bing.com',
-      name: 'muid',
-      value: muid,
-      path: '/',
-      secure: true,
-      sameSite: 'no_restriction',
-      expirationDate: Math.floor(Date.now() / 1000) + 86400 * 365,
-    });
-    console.log('[EdgeTTS] Set MUID cookie:', muid);
-  } catch (e) {
-    console.warn('[EdgeTTS] Failed to set MUID cookie:', e);
-  }
-}
+const EDGE_TTS_PROXY = 'https://edge-tts-proxy-one.vercel.app';
 
 export async function handleTTSEdge(payload: {
   text: string;
   voice: string;
   rate: number;
+  durationMs?: number;
 }): Promise<{ success: boolean; audioBase64?: string; error?: string }> {
   const voice = payload.voice || 'zh-CN-XiaoxiaoNeural';
-  const rate = payload.rate || 1.0;
-  const ratePercent = Math.round((rate - 1.0) * 100);
-  const rateStr = ratePercent >= 0 ? `+${ratePercent}%` : `${ratePercent}%`;
 
-  console.log('[EdgeTTS] handleTTSEdge called:', { text: payload.text.slice(0, 50), voice, rate });
+  console.log('[EdgeTTS] proxy request:', { text: payload.text.slice(0, 50), voice, durationMs: payload.durationMs });
 
   try {
-    const [secMsGec] = await Promise.all([generateSecMsGec(), ensureMuidCookie()]);
-
-    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='${voice}'><prosody rate='${rateStr}' pitch='+0Hz' volume='+0%'>${escapeXml(payload.text)}</prosody></voice></speak>`;
-
-    const url = `${EDGE_TTS_URL}?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=${SEC_MS_GEC_VERSION}`;
-    console.log('[EdgeTTS] POST', url.slice(0, 80) + '...');
-
-    const response = await fetch(url, {
+    const response = await fetch(`${EDGE_TTS_PROXY}/api/tts`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/ssml+xml',
-        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
-      },
-      body: ssml,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: payload.text,
+        voice,
+        rate: payload.rate || 1.0,
+        durationMs: payload.durationMs,
+      }),
     });
 
-    console.log('[EdgeTTS] Response status:', response.status);
-
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      console.error('[EdgeTTS] Error:', response.status, errorText);
-      return { success: false, error: `Edge TTS error: ${response.status} ${errorText}` };
+      // Error responses are still JSON
+      const errBody = await response.json().catch(() => ({}));
+      console.error('[EdgeTTS] proxy error:', errBody);
+      return { success: false, error: (errBody as any).error || `Proxy error: ${response.status}` };
     }
 
+    // Response is raw MP3 binary
     const arrayBuffer = await response.arrayBuffer();
-    console.log('[EdgeTTS] Audio size:', arrayBuffer.byteLength, 'bytes');
-
     if (arrayBuffer.byteLength === 0) {
-      return { success: false, error: 'Edge TTS returned empty audio' };
+      return { success: false, error: 'Empty audio from proxy' };
     }
 
+    console.log('[EdgeTTS] proxy success, mp3 bytes:', arrayBuffer.byteLength);
     return { success: true, audioBase64: arrayBufferToBase64(arrayBuffer) };
   } catch (e) {
-    console.error('[EdgeTTS] Exception:', e);
-    return { success: false, error: `Edge TTS failed: ${String(e)}` };
+    console.error('[EdgeTTS] proxy exception:', e);
+    return { success: false, error: `Edge TTS proxy failed: ${String(e)}` };
+  }
+}
+
+// ===== Edge TTS Voice List =====
+
+let voiceListCache: { data: any[]; timestamp: number } | null = null;
+const VOICE_LIST_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+export async function handleEdgeTTSVoiceList(): Promise<{ success: boolean; voices?: any[]; error?: string }> {
+  if (voiceListCache && (Date.now() - voiceListCache.timestamp) < VOICE_LIST_CACHE_TTL) {
+    return { success: true, voices: voiceListCache.data };
+  }
+
+  try {
+    const response = await fetch(`${EDGE_TTS_PROXY}/api/voices`);
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      return { success: false, error: result.error || `Voice list error: ${response.status}` };
+    }
+
+    voiceListCache = { data: result.voices, timestamp: Date.now() };
+    return { success: true, voices: result.voices };
+  } catch (e) {
+    return { success: false, error: `Voice list fetch error: ${String(e)}` };
   }
 }

@@ -18,7 +18,7 @@ import {
 } from './ai-handler';
 import { googleLogin, googleLogout, getAuthStatus, setSyncEnabled } from './auth-handler';
 import { freeTranslate, shouldUseFreeTranslate } from './free-translate-handler';
-import { handleTTSSpeak, handleTTSEdge } from './tts-handler';
+import { handleTTSSpeak, handleTTSEdge, handleEdgeTTSVoiceList } from './tts-handler';
 import { syncToCloud, syncFromCloud, setupAutoSync, listBackups, restoreBackup, deleteBackup } from './sync-handler';
 import { exportToGoogleDocs } from './drive-export-handler';
 import { initI18n, setLocale, t } from '../i18n';
@@ -139,7 +139,10 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
       return handleTTSSpeak(message.payload as { text: string; config: MenuConfig });
 
     case 'TTS_EDGE':
-      return handleTTSEdge(message.payload as { text: string; voice: string; rate: number });
+      return handleTTSEdge(message.payload as { text: string; voice: string; rate: number; durationMs?: number });
+
+    case 'EDGE_VOICE_LIST':
+      return handleEdgeTTSVoiceList();
 
     default:
       return { success: false, error: 'Unknown message type' };

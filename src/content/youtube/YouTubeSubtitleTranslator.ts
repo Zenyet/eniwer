@@ -10,7 +10,8 @@ export interface TranslatedSegment extends SubtitleSegment {
 }
 
 const MAX_RETRIES = 2;
-const CHUNK_SIZE = 200;
+const FIRST_CHUNK_SIZE = 20;  // small first chunk → fast initial display
+const REST_CHUNK_SIZE = 50;   // remaining chunks: balance between concurrency and per-request overhead
 
 export class YouTubeSubtitleTranslator {
   private cache: Map<string, string> = new Map();
@@ -121,11 +122,17 @@ export class YouTubeSubtitleTranslator {
           this.onProgress?.(cachedCount + translated, this.segments.length);
         }
       } else {
-        // AI translation: chunk if needed
-        for (let chunkStart = 0; chunkStart < untranslated.length; chunkStart += CHUNK_SIZE) {
-          if (this.aborted) break;
+        // AI translation: small first chunk for fast display, then larger concurrent chunks
+        const firstChunk = untranslated.slice(0, FIRST_CHUNK_SIZE);
+        const restIndices = untranslated.slice(FIRST_CHUNK_SIZE);
+        const restChunks: number[][] = [];
+        for (let i = 0; i < restIndices.length; i += REST_CHUNK_SIZE) {
+          restChunks.push(restIndices.slice(i, i + REST_CHUNK_SIZE));
+        }
 
-          const chunkIndices = untranslated.slice(chunkStart, chunkStart + CHUNK_SIZE);
+        const translateChunk = async (chunkIndices: number[]) => {
+          if (this.aborted) return;
+
           const chunkTexts = chunkIndices.map(i => this.segments[i].text);
 
           try {
@@ -150,6 +157,14 @@ export class YouTubeSubtitleTranslator {
 
           translated += chunkIndices.length;
           this.onProgress?.(cachedCount + translated, this.segments.length);
+        };
+
+        // 1) Await first small chunk → subtitles visible within seconds
+        await translateChunk(firstChunk);
+
+        // 2) Fire all remaining chunks concurrently
+        if (restChunks.length > 0) {
+          await Promise.all(restChunks.map(translateChunk));
         }
 
         // Retry failed segments (up to MAX_RETRIES)

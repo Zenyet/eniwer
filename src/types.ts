@@ -191,7 +191,8 @@ export type MessageType =
   | 'RESTORE_BACKUP'
   | 'DELETE_BACKUP'
   | 'TTS_SPEAK'
-  | 'TTS_EDGE';
+  | 'TTS_EDGE'
+  | 'EDGE_VOICE_LIST';
 
 export interface Message {
   type: MessageType;

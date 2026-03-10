@@ -518,4 +518,6 @@ export const en: Record<keyof typeof zhCN, string> = {
   'settings.ttsMuteOriginal': 'Mute Original Video',
   'settings.ttsMuteOriginalHint': 'Mute original video audio while reading subtitles',
   'settings.ttsEdgeVoiceHint': 'e.g. zh-CN-XiaoxiaoNeural, en-US-JennyNeural, zh-CN-YunxiNeural',
+  'settings.ttsVoiceLoading': 'Loading voices...',
+  'settings.ttsVoiceLoadError': 'Failed to load voices',
 };

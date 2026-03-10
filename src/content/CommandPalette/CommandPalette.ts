@@ -2644,13 +2644,89 @@ export class CommandPalette {
     const ttsEngine = this.shadowRoot.querySelector('#tts-engine') as HTMLSelectElement;
     const ttsCloudSettings = this.shadowRoot.querySelector('#tts-cloud-settings') as HTMLElement;
     const ttsEdgeSettings = this.shadowRoot.querySelector('#tts-edge-settings') as HTMLElement;
+    const ttsVoiceContainer = this.shadowRoot.querySelector('#tts-voice-container') as HTMLElement;
+
+    const loadEdgeVoices = async () => {
+      if (!ttsVoiceContainer) return;
+      ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoading')}</option></select>`;
+      try {
+        const resp = await chrome.runtime.sendMessage({ type: 'EDGE_VOICE_LIST' });
+        if (resp.success && Array.isArray(resp.voices)) {
+          const voices = resp.voices as { ShortName: string; Locale: string; Gender: string; FriendlyName: string }[];
+          // Group by locale, prioritize common languages
+          const priority = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'zh-TW', 'en-GB', 'fr-FR', 'de-DE', 'es-ES'];
+          const grouped = new Map<string, typeof voices>();
+          for (const v of voices) {
+            const locale = v.Locale || v.ShortName.split('-').slice(0, 2).join('-');
+            if (!grouped.has(locale)) grouped.set(locale, []);
+            grouped.get(locale)!.push(v);
+          }
+          // Sort locales: priority first, then alphabetical
+          const sortedLocales = [...grouped.keys()].sort((a, b) => {
+            const ai = priority.indexOf(a);
+            const bi = priority.indexOf(b);
+            if (ai >= 0 && bi >= 0) return ai - bi;
+            if (ai >= 0) return -1;
+            if (bi >= 0) return 1;
+            return a.localeCompare(b);
+          });
+
+          let html = '<select class="glass-select" id="tts-voice">';
+          for (const locale of sortedLocales) {
+            html += `<optgroup label="${locale}">`;
+            for (const v of grouped.get(locale)!) {
+              const selected = v.ShortName === ttsConfig.voice ? ' selected' : '';
+              html += `<option value="${v.ShortName}"${selected}>${v.ShortName} (${v.Gender})</option>`;
+            }
+            html += '</optgroup>';
+          }
+          html += '</select>';
+          ttsVoiceContainer.innerHTML = html;
+
+          // Bind change event for newly created select
+          const newSelect = ttsVoiceContainer.querySelector('#tts-voice') as HTMLSelectElement;
+          newSelect?.addEventListener('change', () => {
+            ttsConfig.voice = newSelect.value;
+            tempConfig.youtubeSubtitleTTS = ttsConfig;
+            markChanged();
+          });
+        } else {
+          ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
+        }
+      } catch {
+        ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
+      }
+    };
+
+    const switchToTextInput = () => {
+      if (!ttsVoiceContainer) return;
+      ttsVoiceContainer.innerHTML = `<input type="text" class="glass-input" id="tts-voice" value="${ttsConfig.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">`;
+      const newInput = ttsVoiceContainer.querySelector('#tts-voice') as HTMLInputElement;
+      newInput?.addEventListener('input', () => {
+        ttsConfig.voice = newInput.value;
+        tempConfig.youtubeSubtitleTTS = ttsConfig;
+        markChanged();
+      });
+    };
+
     ttsEngine?.addEventListener('change', () => {
       ttsConfig.engine = ttsEngine.value as 'native' | 'cloud' | 'edge';
       tempConfig.youtubeSubtitleTTS = ttsConfig;
       if (ttsCloudSettings) ttsCloudSettings.style.display = ttsConfig.engine === 'cloud' ? 'block' : 'none';
       if (ttsEdgeSettings) ttsEdgeSettings.style.display = ttsConfig.engine === 'edge' ? 'block' : 'none';
+      // Switch voice UI between select (edge) and text input (others)
+      if (ttsConfig.engine === 'edge') {
+        loadEdgeVoices();
+      } else {
+        switchToTextInput();
+      }
       markChanged();
     });
+
+    // Load edge voices on initial render if engine is already edge
+    if (ttsConfig.engine === 'edge') {
+      loadEdgeVoices();
+    }
 
     const ttsCloudProvider = this.shadowRoot.querySelector('#tts-cloud-provider') as HTMLSelectElement;
     const ttsCustomUrlGroup = this.shadowRoot.querySelector('#tts-custom-url-group') as HTMLElement;
@@ -2682,12 +2758,15 @@ export class CommandPalette {
       markChanged();
     });
 
-    const ttsVoice = this.shadowRoot.querySelector('#tts-voice') as HTMLInputElement;
-    ttsVoice?.addEventListener('input', () => {
-      ttsConfig.voice = ttsVoice.value;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
+    // Voice input binding for non-edge engines (edge uses select loaded by loadEdgeVoices)
+    if (ttsConfig.engine !== 'edge') {
+      const ttsVoice = this.shadowRoot.querySelector('#tts-voice') as HTMLInputElement;
+      ttsVoice?.addEventListener('input', () => {
+        ttsConfig.voice = ttsVoice.value;
+        tempConfig.youtubeSubtitleTTS = ttsConfig;
+        markChanged();
+      });
+    }
 
     const ttsRate = this.shadowRoot.querySelector('#tts-rate') as HTMLSelectElement;
     ttsRate?.addEventListener('change', () => {

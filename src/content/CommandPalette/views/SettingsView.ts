@@ -369,7 +369,6 @@ export function getSettingsViewHTML(
               </select>
             </div>
             <div id="tts-edge-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'edge' ? 'block' : 'none'}">
-              <span class="glass-form-hint">${t('settings.ttsEdgeVoiceHint')}</span>
             </div>
             <div id="tts-cloud-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'cloud' ? 'block' : 'none'}">
               <div class="glass-form-group">
@@ -392,9 +391,14 @@ export function getSettingsViewHTML(
                 <input type="text" class="glass-input" id="tts-cloud-model" value="${config.youtubeSubtitleTTS?.cloudModel || 'tts-1'}" placeholder="tts-1">
               </div>
             </div>
-            <div class="glass-form-group">
+            <div class="glass-form-group" id="tts-voice-group">
               <label class="glass-form-label">${t('settings.ttsVoice')}</label>
-              <input type="text" class="glass-input" id="tts-voice" value="${config.youtubeSubtitleTTS?.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">
+              <div id="tts-voice-container">
+                ${(config.youtubeSubtitleTTS?.engine === 'edge')
+                  ? `<select class="glass-select" id="tts-voice"><option value="${config.youtubeSubtitleTTS?.voice || ''}">${config.youtubeSubtitleTTS?.voice || t('settings.ttsVoiceLoading')}</option></select>`
+                  : `<input type="text" class="glass-input" id="tts-voice" value="${config.youtubeSubtitleTTS?.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">`
+                }
+              </div>
             </div>
             <div class="glass-form-group">
               <label class="glass-form-label">${t('settings.ttsRate')}</label>

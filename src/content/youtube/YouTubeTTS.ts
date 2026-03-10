@@ -65,6 +65,44 @@ export class YouTubeTTS {
     return this.config;
   }
 
+  /**
+   * Pre-fetch audio for a segment into cache (fire-and-forget).
+   * Called ahead of time so audio is ready when the segment starts.
+   */
+  prefetch(text: string, durationMs?: number): void {
+    this.prefetchAsync(text, durationMs).catch(() => {});
+  }
+
+  /**
+   * Pre-fetch audio and return a Promise that resolves when cached.
+   * Used by the manager to await initial prefetch before resuming video.
+   */
+  prefetchAsync(text: string, durationMs?: number): Promise<void> {
+    if (!text.trim()) return Promise.resolve();
+    if (this.config.engine !== 'edge') return Promise.resolve();
+
+    const voice = this.config.voice || 'zh-CN-XiaoxiaoNeural';
+    const dm = durationMs || 0;
+    const cacheKey = `edge:${dm}:${text}`;
+    if (this.audioCache.has(cacheKey)) return Promise.resolve();
+
+    console.log('[TTS] prefetch:', text.slice(0, 30));
+    return chrome.runtime.sendMessage({
+      type: 'TTS_EDGE',
+      payload: { text, voice, rate: this.config.rate || 1.0, durationMs: dm || undefined },
+    }).then((response) => {
+      if (response?.success && response.audioBase64) {
+        const binary = atob(response.audioBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        this.audioCache.set(cacheKey, url);
+        console.log('[TTS] prefetch cached:', text.slice(0, 30));
+      }
+    }).catch(() => {});
+  }
+
   private applyMute(speaking: boolean): void {
     if (!this.config.muteOriginal) {
       // If mute was previously set by us, restore
@@ -150,29 +188,42 @@ export class YouTubeTTS {
   }
 
   private async speakEdge(text: string): Promise<void> {
-    const dataUrl = await this.fetchOrCacheAudio(text, async () => {
-      const voice = this.config.voice || 'zh-CN-XiaoxiaoNeural';
-      console.log('[TTS] speakEdge sending message:', { voice, rate: this.config.rate || 1.0 });
+    const voice = this.config.voice || 'zh-CN-XiaoxiaoNeural';
+    const durationMs = this.segDurationMs || undefined;
+
+    // Cache key includes durationMs so different durations don't collide
+    const cacheKey = `edge:${durationMs || 0}:${text}`;
+    const cached = this.audioCache.get(cacheKey);
+    const blobUrl = cached || await (async () => {
+      console.log('[TTS] speakEdge sending message:', { voice, durationMs });
       const response = await chrome.runtime.sendMessage({
         type: 'TTS_EDGE',
         payload: {
           text,
           voice,
           rate: this.config.rate || 1.0,
+          durationMs,
         },
       });
 
-      console.log('[TTS] speakEdge response:', { success: response?.success, error: response?.error, hasAudio: !!response?.audioBase64, audioLen: response?.audioBase64?.length });
+      console.log('[TTS] speakEdge response:', { success: response?.success, error: response?.error, hasAudio: !!response?.audioBase64 });
 
       if (!response.success || !response.audioBase64) {
         throw new Error(response.error || 'Edge TTS failed');
       }
 
-      return `data:audio/mp3;base64,${response.audioBase64}`;
-    });
+      // Convert base64 to Blob URL for efficient playback
+      const binary = atob(response.audioBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      this.audioCache.set(cacheKey, url);
+      return url;
+    })();
 
-    console.log('[TTS] Playing audio, dataUrl length:', dataUrl.length);
-    await this.playAudioUrl(dataUrl);
+    console.log('[TTS] Playing audio blob');
+    await this.playAudioUrl(blobUrl);
   }
 
   private async fetchOrCacheAudio(text: string, fetchFn: () => Promise<string>): Promise<string> {

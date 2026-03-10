@@ -516,4 +516,6 @@ export const zhCN: Record<string, string> = {
   'settings.ttsMuteOriginal': '静音原视频',
   'settings.ttsMuteOriginalHint': '朗读字幕时静音原视频声音',
   'settings.ttsEdgeVoiceHint': '例如: zh-CN-XiaoxiaoNeural, en-US-JennyNeural, zh-CN-YunxiNeural',
+  'settings.ttsVoiceLoading': '加载音色中...',
+  'settings.ttsVoiceLoadError': '加载音色失败',
 };

@@ -118,7 +118,7 @@ export class YouTubeSubtitleOverlay {
     const rightControls = player.querySelector('.ytp-right-controls');
     if (!rightControls) return;
 
-    this.logoBtn = document.createElement('button');
+    this.logoBtn = document.createElement('div');
     this.logoBtn.className = `ytp-button ${PREFIX}-activate`;
     this.logoBtn.title = t('youtube.toggleSubtitle');
     this.logoBtn.innerHTML = icons.logo;
@@ -126,13 +126,11 @@ export class YouTubeSubtitleOverlay {
     Object.assign(this.logoBtn.style, {
       opacity: this.active ? '1' : '0.5',
       cursor: 'pointer',
-      width: '36px',
-      display: 'inline-flex',
+      display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       border: 'none',
       background: 'none',
-      padding: '6px',
     });
 
     this.logoBtn.addEventListener('click', (e) => {

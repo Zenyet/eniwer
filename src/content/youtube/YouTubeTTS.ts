@@ -57,6 +57,16 @@ export class YouTubeTTS {
     this.applyMute(false);
   }
 
+  pause(): void {
+    if (this.currentAudio) this.currentAudio.pause();
+    if (this.currentUtterance) speechSynthesis.pause();
+  }
+
+  resume(): void {
+    if (this.currentAudio && this.playing) this.currentAudio.play();
+    if (this.currentUtterance) speechSynthesis.resume();
+  }
+
   isPlaying(): boolean {
     return this.playing;
   }

@@ -9,6 +9,7 @@ export class YouTubeTTS {
   private audioCache = new Map<string, string>();
   private videoMutedByUs = false;
   private segDurationMs = 0;
+  private offsetMs = 0;
 
   constructor(config: TTSConfig, menuConfig: MenuConfig) {
     this.config = config;
@@ -20,12 +21,13 @@ export class YouTubeTTS {
     this.menuConfig = menuConfig;
   }
 
-  async speak(text: string, durationMs?: number): Promise<void> {
+  async speak(text: string, durationMs?: number, offsetMs?: number): Promise<void> {
     if (!text.trim()) return;
 
-    console.log('[TTS] speak() called, engine:', this.config.engine, 'text:', text.slice(0, 50), 'durationMs:', durationMs);
+    console.log('[TTS] speak() called, engine:', this.config.engine, 'text:', text.slice(0, 50), 'durationMs:', durationMs, 'offsetMs:', offsetMs);
     this.playing = true;
     this.segDurationMs = durationMs || 0;
+    this.offsetMs = offsetMs || 0;
     this.applyMute(true);
     try {
       if (this.config.engine === 'cloud') {
@@ -271,7 +273,18 @@ export class YouTubeTTS {
         audio.playbackRate = baseRate;
       };
 
-      audio.onloadedmetadata = () => adjustRate();
+      audio.onloadedmetadata = () => {
+        adjustRate();
+        // Apply seek offset for mid-group playback (e.g. after video seek)
+        if (this.offsetMs > 0 && this.segDurationMs > 0 && audio.duration && isFinite(audio.duration)) {
+          const audioOffset = (this.offsetMs / this.segDurationMs) * audio.duration;
+          if (audioOffset < audio.duration) {
+            audio.currentTime = audioOffset;
+            console.log('[TTS] Applied offset:', audioOffset.toFixed(2), 's',
+              `(offsetMs ${this.offsetMs}, segDur ${this.segDurationMs}, audioDur ${(audio.duration * 1000).toFixed(0)}ms)`);
+          }
+        }
+      };
 
       audio.onended = () => {
         console.log('[TTS] Audio playback ended');

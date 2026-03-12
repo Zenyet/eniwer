@@ -45,6 +45,10 @@ export class YouTubeSubtitleManager {
   private ttsGroups: TTSGroup[] = [];
   /** Maps segIndex → groupIndex */
   private segToGroupIdx: number[] = [];
+  /** Prevents tryPlayCurrentSegment during seek handling */
+  private seekPending = false;
+  /** Counter to prevent overlapping seek handlers */
+  private seekId = 0;
 
   constructor(config: MenuConfig) {
     this.subtitleConfig = config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
@@ -92,6 +96,8 @@ export class YouTubeSubtitleManager {
     this.pendingSegments = null;
     this.ttsGroups = [];
     this.segToGroupIdx = [];
+    this.seekPending = false;
+    this.seekId = 0;
     this.clearTTSSchedule();
     this.removeVideoListeners();
     this.overlay.unmount();
@@ -171,6 +177,8 @@ export class YouTubeSubtitleManager {
         this.lastSpokenGroupIdx = -1;
         this.ttsGroups = [];
         this.segToGroupIdx = [];
+        this.seekPending = false;
+        this.seekId = 0;
         this.clearTTSSchedule();
         this.overlay.setStatus('');
         this.overlay.setSegments([]);
@@ -344,8 +352,13 @@ export class YouTubeSubtitleManager {
     this.seekedHandler = () => {
       if (changeId !== this.activeVideoChangeId) return;
       this.tts.stop();
-      this.lastSpokenGroupIdx = -1;
       this.clearTTSSchedule();
+      if (!this.ttsEnabled) {
+        this.lastSpokenGroupIdx = -1;
+        return;
+      }
+      this.seekPending = true;
+      this.handleSeekTTS(changeId);
     };
 
     this.pauseHandler = () => {
@@ -369,6 +382,7 @@ export class YouTubeSubtitleManager {
   private tryPlayCurrentSegment(changeId: number): void {
     if (changeId !== this.activeVideoChangeId) return;
     if (!this.ttsEnabled || !this.videoElement) return;
+    if (this.seekPending) return;
     if (this.tts.isPlaying()) return;
 
     const currentTimeMs = this.videoElement.currentTime * 1000;
@@ -460,6 +474,87 @@ export class YouTubeSubtitleManager {
       clearTimeout(this.ttsScheduleTimer);
       this.ttsScheduleTimer = null;
     }
+  }
+
+  /**
+   * Handle TTS after a seek: pause video, prefetch the target group's audio,
+   * then play from the correct offset and resume video.
+   */
+  private async handleSeekTTS(changeId: number): Promise<void> {
+    const mySeekId = ++this.seekId;
+    const video = this.videoElement;
+    if (!video) {
+      this.seekPending = false;
+      return;
+    }
+
+    video.pause();
+
+    const currentTimeMs = video.currentTime * 1000;
+    const segIndex = this.overlay.getCurrentSegmentIndex(currentTimeMs);
+
+    // Not in any subtitle segment — resume video, no TTS
+    if (segIndex < 0) {
+      this.lastSpokenGroupIdx = -1;
+      this.seekPending = false;
+      video.play().catch(() => {});
+      return;
+    }
+
+    const groupIdx = this.segToGroupIdx[segIndex] ?? -1;
+    if (groupIdx < 0) {
+      this.lastSpokenGroupIdx = -1;
+      this.seekPending = false;
+      video.play().catch(() => {});
+      return;
+    }
+
+    const group = this.ttsGroups[groupIdx];
+    const segs = this.translator.getSegments();
+    const mergedText = this.getMergedGroupText(segs, group);
+
+    if (!mergedText) {
+      this.lastSpokenGroupIdx = -1;
+      this.seekPending = false;
+      video.play().catch(() => {});
+      return;
+    }
+
+    // Prefetch current group + next N groups
+    const prefetchPromises: Promise<void>[] = [];
+    prefetchPromises.push(this.tts.prefetchAsync(mergedText, group.totalDurationMs));
+    for (let ahead = 1; ahead <= TTS_PREFETCH_AHEAD; ahead++) {
+      const futureGroup = this.ttsGroups[groupIdx + ahead];
+      if (futureGroup) {
+        const futureText = this.getMergedGroupText(segs, futureGroup);
+        if (futureText) {
+          prefetchPromises.push(this.tts.prefetchAsync(futureText, futureGroup.totalDurationMs));
+        }
+      }
+    }
+
+    await Promise.all(prefetchPromises);
+
+    // Guard against rapid consecutive seeks
+    if (mySeekId !== this.seekId || changeId !== this.activeVideoChangeId) {
+      return; // A newer seek superseded this one
+    }
+
+    // Calculate offset within the group
+    const groupStartSeg = this.overlay.getSegment(group.startIdx);
+    const groupStartMs = groupStartSeg ? groupStartSeg.startMs : 0;
+    const offsetMs = Math.max(0, currentTimeMs - groupStartMs);
+
+    this.lastSpokenGroupIdx = groupIdx;
+    this.seekPending = false;
+
+    // Start TTS from offset (don't await — let it chain via onTTSGroupFinished)
+    this.tts.speak(mergedText, group.totalDurationMs, offsetMs)
+      .then(() => this.onTTSGroupFinished(changeId, groupIdx))
+      .catch(() => this.onTTSGroupFinished(changeId, groupIdx));
+
+    // Resume video
+    video.play().catch(() => {});
   }
 
   private removeVideoListeners(): void {

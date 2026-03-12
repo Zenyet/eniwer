@@ -5,7 +5,8 @@
     "moduleResolution": "node",
     "strict": true,
     "esModuleInterop": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": ["node"]
   },
-  "include": ["api/**/*.ts"]
+  "include": ["api/**/*.ts", "server.ts", "src/**/*.ts"]
 }

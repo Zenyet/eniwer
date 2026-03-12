@@ -1,10 +1,19 @@
 {
   "name": "edge-tts-proxy",
   "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch server.ts",
+    "start": "node dist/server.js"
+  },
   "dependencies": {
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.13"
+    "@types/node": "^24.5.2",
+    "@types/ws": "^8.5.13",
+    "@vercel/node": "^5.3.24",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
   }
 }

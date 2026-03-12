@@ -1486,6 +1486,12 @@ export function getStyles(): string {
         margin-top: 10px;
       }
 
+      .glass-form-group + .glass-form-group-stack,
+      .glass-form-group-stack + .glass-form-group,
+      .glass-form-group-stack + .glass-form-group-stack {
+        margin-top: 10px;
+      }
+
       .glass-form-group.glass-form-toggle {
         flex-direction: row;
         align-items: center;

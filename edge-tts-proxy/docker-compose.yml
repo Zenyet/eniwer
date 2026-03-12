@@ -1,0 +1,11 @@
+services:
+  edge-tts-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edge-tts-proxy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+    restart: unless-stopped

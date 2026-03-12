@@ -15,6 +15,37 @@ npm run package   # 构建并打包 zip
 
 构建产物在 `dist/` 目录，浏览器中加载该目录即可调试。
 
+## Edge TTS Proxy
+
+`edge-tts-proxy/` 是独立的代理服务，原先按 Vercel Serverless API 组织；现在也支持直接以 Node 服务运行，因此可以用 Docker 部署。
+
+```bash
+cd edge-tts-proxy
+npm install
+npm run dev
+```
+
+默认监听 `3000` 端口：
+
+- `POST /api/tts`
+- `GET /api/voices`
+- `GET /health`
+
+Docker 部署：
+
+```bash
+cd edge-tts-proxy
+docker build -t edge-tts-proxy .
+docker run --rm -p 3000:3000 edge-tts-proxy
+```
+
+Docker Compose：
+
+```bash
+cd edge-tts-proxy
+docker compose up -d --build
+```
+
 ## 项目结构
 
 ```

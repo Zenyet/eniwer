@@ -1,6 +1,6 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, ScreenshotConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_TTS_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState, AnnotationConfig, KnowledgeConfig } from '../../types';
+import { MenuItem, MenuConfig, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState } from '../../types';
 import { icons } from '../../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../../utils/storage';
 import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../../utils/taskStorage';
@@ -9,7 +9,7 @@ import { loadChatSession, saveChatSession, createNewChatSession, createChatMessa
 import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../../utils/ai';
 import { getAllAnnotations, deleteAnnotation as deleteAnnotationFromStorage } from '../annotation/storage';
 import { Annotation, ANNOTATION_COLORS } from '../../types/annotation';
-import { t, setLocale } from '../../i18n';
+import { t } from '../../i18n';
 
 // Import views
 import {
@@ -17,17 +17,12 @@ import {
   getSettingsViewHTML as getSettingsViewHTMLFromModule,
   getAccountSettingsHTML as getAccountSettingsHTMLFromModule,
   getMenuSettingsHTML as getMenuSettingsHTMLFromModule,
-  PROVIDER_MODELS,
   // Annotations View
-  getFilteredAnnotations,
-  getAnnotationsContentHTML as getAnnotationsContentHTMLFromModule,
   normalizeUrlForAnnotation,
   // Knowledge View
   KnowledgeItem,
   annotationToKnowledgeItem,
   savedTaskToKnowledgeItem,
-  getFilteredKnowledgeItems,
-  getKnowledgeContentHTML as getKnowledgeContentHTMLFromModule,
   getActionTypeLabel,
   getAIResultTypeLabel,
   groupKnowledgeByDate,
@@ -61,6 +56,47 @@ export type {
 
 // Import styles from styles module
 import { getStyles } from './styles';
+import {
+  bindAnnotationsEvents as bindAnnotationsEventsFromController,
+  bindBrowseTrailEvents as bindBrowseTrailEventsFromController,
+  bindCommandsEvents as bindCommandsEventsFromController,
+  renderBrowseTrailContent,
+  bindContextChatEvents as bindContextChatEventsFromController,
+  bindThinkingSections,
+  bindKnowledgeEvents as bindKnowledgeEventsFromController,
+  bindMenuSettingsEvents as bindMenuSettingsEventsFromController,
+  bindScreenshotViewEvents as bindScreenshotViewEventsFromController,
+  bindSettingsEvents as bindSettingsEventsFromController,
+  buildRestoredTaskState,
+  createAIResultMinimizedTask,
+  createChatMinimizedTask,
+  createDragHandlers,
+  createDragState,
+  createMinimizedTaskId,
+  createScreenshotMinimizedTask,
+  createStreamKey,
+  getAnnotationsViewHTML as getAnnotationsViewHTMLFromController,
+  getBrowseTrailViewHTML as getBrowseTrailViewHTMLFromController,
+  getCommandsViewHTML as getCommandsViewHTMLFromController,
+  getContextChatContentHTML as getContextChatContentHTMLFromController,
+  getContextChatViewHTML as getContextChatViewHTMLFromController,
+  getFilteredRecentTasks as getFilteredRecentTasksFromController,
+  getLocalFilteredAnnotations as getLocalFilteredAnnotationsFromController,
+  getKnowledgeViewHTML as getKnowledgeViewHTMLFromController,
+  getLocalFilteredKnowledgeItems as getLocalFilteredKnowledgeItemsFromController,
+  getScreenshotViewHTML as getScreenshotViewHTMLFromController,
+  removeExistingTaskForAction,
+  renderCommandsContent as renderCommandsContentFromController,
+  renderAnnotationsContent,
+  renderStreamingChatContent,
+  renderMinimizedTasksSection as renderMinimizedTasksSectionFromController,
+  renderRecentTasksSection as renderRecentTasksSectionFromController,
+  renderScreenshotContent as renderScreenshotContentFromController,
+  renderKnowledgeContent,
+  takeMinimizedTask,
+  updateAnnotationsFooter as updateAnnotationsFooterFromController,
+  updateKnowledgeFooter as updateKnowledgeFooterFromController,
+} from './controllers';
 
 // Import utility functions from utils module
 import {
@@ -70,12 +106,7 @@ import {
   getThinkingSectionHTML,
   formatTimeAgo,
   getTranslateLanguageSelectHTML,
-  getTranslationHint,
-  getAPIKeyHint,
-  getDefaultMinimizedIcon,
   getActionIcon,
-  getTaskMetaInfo,
-  getSavedTaskMetaInfo,
   getSourceInfoHTML,
 } from './utils';
 
@@ -144,14 +175,11 @@ export class CommandPalette {
   private isGlobalSearchLoading = false;
 
   // Drag state
-  private isDragging = false;
-  private hasDragged = false;
-  private dragStartX = 0;
-  private dragStartY = 0;
-  private panelStartX = 0;
-  private panelStartY = 0;
-  // Saved panel position (persists across hide/show)
-  private savedPanelPosition: { top: string; left: string; right: string; transform: string } | null = null;
+  private dragState = createDragState();
+  private readonly dragHandlers = createDragHandlers(() => this.shadowRoot, this.dragState);
+  private readonly handleDragStart = this.dragHandlers.handleDragStart;
+  private readonly handleDragMove = this.dragHandlers.handleDragMove;
+  private readonly handleDragEnd = this.dragHandlers.handleDragEnd;
 
   // Minimized tasks storage (in-memory for current session)
   private minimizedTasks: MinimizedTask[] = [];
@@ -205,10 +233,10 @@ export class CommandPalette {
 
     // Check if we should auto-restore the previous view
     if (this.autoRestoreTaskId) {
-      const taskIndex = this.minimizedTasks.findIndex(t => t.id === this.autoRestoreTaskId);
+      const taskId = this.autoRestoreTaskId;
       this.autoRestoreTaskId = null;
-      if (taskIndex !== -1) {
-        const task = this.minimizedTasks.splice(taskIndex, 1)[0];
+      const task = takeMinimizedTask(this.minimizedTasks, taskId);
+      if (task) {
         this.restoreStateFromTask(task);
         this.render();
         return;
@@ -276,7 +304,7 @@ export class CommandPalette {
       const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
       if (panel) {
         // Save panel position before hiding (for restoring on next show)
-        this.savedPanelPosition = {
+        this.dragState.savedPanelPosition = {
           top: panel.style.top,
           left: panel.style.left,
           right: panel.style.right,
@@ -303,7 +331,7 @@ export class CommandPalette {
         this.aiResultCallbacks = null;
         this.screenshotData = null;
         this.screenshotCallbacks = null;
-        this.hasDragged = false;
+        this.dragState.hasDragged = false;
         // Note: chatSession/isChatStreaming are NOT reset here because
         // sendChatMessage may still be running in the background with a local reference
       }, 250);
@@ -386,7 +414,7 @@ export class CommandPalette {
     this.saveCurrentAsMinimized();
 
     // Generate unique stream key for this AI request
-    this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    this.currentStreamKey = createStreamKey();
     this.activeStreamKeys.add(this.currentStreamKey);
 
     this.aiResultData = {
@@ -514,15 +542,7 @@ export class CommandPalette {
 
   private renderScreenshotContent(): void {
     if (!this.shadowRoot || !this.screenshotData) return;
-    const contentArea = this.shadowRoot.querySelector('.glass-screenshot-content');
-    if (contentArea) {
-      contentArea.innerHTML = this.getScreenshotContentHTML();
-    }
-    // Toggle header stop button visibility
-    const stopHeader = this.shadowRoot.querySelector('.glass-btn-screenshot-stop-header') as HTMLElement;
-    if (stopHeader) {
-      stopHeader.style.display = this.screenshotData.isLoading ? 'flex' : 'none';
-    }
+    renderScreenshotContentFromController(this.shadowRoot, this.screenshotData);
   }
 
   private _streamUpdateRAF: number | null = null;
@@ -749,19 +769,19 @@ export class CommandPalette {
 
     // Main panel
     const panel = document.createElement('div');
-    const hasRestoredPosition = this.savedPanelPosition && this.savedPanelPosition.transform === 'none';
+    const hasRestoredPosition = this.dragState.savedPanelPosition && this.dragState.savedPanelPosition.transform === 'none';
     panel.className = `glass-panel ${hasRestoredPosition ? 'glass-panel-enter-restored' : 'glass-panel-enter'} ${this.theme}`;
 
     // Restore saved position if available
-    if (this.savedPanelPosition) {
-      panel.style.top = this.savedPanelPosition.top;
-      panel.style.left = this.savedPanelPosition.left;
-      panel.style.right = this.savedPanelPosition.right;
-      panel.style.transform = this.savedPanelPosition.transform;
+    if (this.dragState.savedPanelPosition) {
+      panel.style.top = this.dragState.savedPanelPosition.top;
+      panel.style.left = this.dragState.savedPanelPosition.left;
+      panel.style.right = this.dragState.savedPanelPosition.right;
+      panel.style.transform = this.dragState.savedPanelPosition.transform;
       // If panel was previously dragged (fixed positioning), preserve it
-      if (this.savedPanelPosition.transform === 'none') {
+      if (this.dragState.savedPanelPosition.transform === 'none') {
         panel.style.position = 'fixed';
-        this.hasDragged = true;
+        this.dragState.hasDragged = true;
       }
     }
 
@@ -792,7 +812,7 @@ export class CommandPalette {
     panel.setAttribute('data-view', this.currentView);
 
     // Position the panel (unless keepPosition is true or user has dragged/restored position)
-    if (!keepPosition && !this.hasDragged) {
+    if (!keepPosition && !this.dragState.hasDragged) {
       if (this.currentView === 'ai-result') {
         // Position panel to the right side if not already dragged
         if (panel.style.transform !== 'none') {
@@ -902,294 +922,122 @@ export class CommandPalette {
   }
 
   private getCommandsViewHTML(): string {
-    const hasActiveCommand = this.activeCommand !== null;
-    const isAIAction = hasActiveCommand && ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'].includes(this.activeCommand?.action || '');
-    const needsInput = hasActiveCommand && ['contextChat', 'translateInput'].includes(this.activeCommand?.action || '');
-    const isLoading = this.aiResultData?.isLoading ?? false;
-    const isTranslate = this.aiResultData?.resultType === 'translate';
-    const isSavedTask = this.activeCommand?.id?.startsWith('saved_') ?? false;
-
-    // Determine placeholder text
-    let placeholder = t('palette.searchPlaceholder');
-    if (hasActiveCommand) {
-      if (needsInput) {
-        placeholder = t('palette.inputPlaceholder');
-      } else if (isTranslate && this.aiResultData?.originalText) {
-        placeholder = '';  // Will show original text in input
-      } else if (isLoading) {
-        placeholder = t('palette.processingPlaceholder');
-      } else {
-        placeholder = '';
-      }
-    }
-
-    // For translate, show original text in input
-    const inputValue = isTranslate && this.aiResultData?.originalText ? this.aiResultData.originalText : '';
-
-    return `
-      <div class="glass-search glass-draggable">
-        ${hasActiveCommand ? `
-          <div class="glass-command-tag" data-action="${this.activeCommand?.action}">
-            <span class="glass-command-tag-icon">${this.activeCommand?.icon || ''}</span>
-            <span class="glass-command-tag-label">${escapeHtml(this.activeCommand?.customLabel || t(this.activeCommand?.label || ''))}</span>
-            <button class="glass-command-tag-close">&times;</button>
-          </div>
-        ` : `
-          <div class="glass-search-icon">${icons.search}</div>
-        `}
-        <input
-          type="text"
-          class="glass-input"
-          placeholder="${placeholder}"
-          value="${escapeHtml(inputValue)}"
-          autocomplete="off"
-          spellcheck="false"
-          ${isAIAction && !needsInput ? 'readonly' : ''}
-        />
-        ${hasActiveCommand ? `
-          <button class="glass-header-btn glass-btn-stop" title="${t('common.abort')}" style="display: ${isLoading ? 'flex' : 'none'}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-            </svg>
-          </button>
-        ` : ''}
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      ${hasActiveCommand && this.aiResultData ? getSourceInfoHTML(this.aiResultData) : ''}
-      <div class="glass-body">
-        ${hasActiveCommand ? `
-          <div class="glass-ai-content-area">
-            ${getThinkingSectionHTML(this.aiResultData?.thinking)}
-            ${isLoading && !this.aiResultData?.content ? getLoadingHTML() : ''}
-            ${this.aiResultData?.content ? `<div class="glass-ai-content">${formatAIContent(this.aiResultData.content)}</div>` : ''}
-          </div>
-        ` : `
-          <div class="glass-commands"></div>
-          <div class="glass-minimized-section"></div>
-          <div class="glass-recent-section"></div>
-        `}
-      </div>
-      <div class="glass-footer">
-        ${hasActiveCommand ? `
-          <div class="glass-ai-footer-actions">
-            ${isTranslate ? getTranslateLanguageSelectHTML(this.aiResultData?.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN') : ''}
-            ${isTranslate && this.aiResultData?.originalText ? `
-              <button class="glass-footer-btn glass-btn-compare" title="${t('aiResult.compareOriginal')}">
-                ${icons.columns}
-              </button>
-            ` : ''}
-            <button class="glass-footer-btn glass-btn-copy" title="${t('common.copy')}" style="display: ${this.aiResultData?.content ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-            ${this.activeCommand?.action === 'summarizePage' && !isSavedTask ? `
-              <button class="glass-footer-btn glass-btn-refresh" title="${t('aiResult.resummarize')}" style="display: ${!isLoading ? 'flex' : 'none'}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 2v6h-6"></path>
-                  <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
-                  <path d="M3 22v-6h6"></path>
-                  <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
-                </svg>
-              </button>
-            ` : ''}
-            ${!isSavedTask ? `
-            <button class="glass-footer-btn glass-btn-save" title="${t('common.save')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
-              </svg>
-            </button>
-            ${this.aiResultData?.originalText ? `
-            <button class="glass-footer-btn glass-btn-annotate" title="${t('aiResult.saveToAnnotation')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 20h9"></path>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-              </svg>
-            </button>
-            ` : ''}
-            <button class="glass-footer-btn glass-btn-export-drive" title="${t('aiResult.exportToDrive')}" style="display: ${this.aiResultData?.content && !isLoading ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L4.5 12.5h5.5v9.5h4v-9.5h5.5L12 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M4 18.5L8 12.5L12 18.5L16 12.5L20 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            ` : ''}
-          </div>
-        ` : `
-          <div class="glass-hints">
-            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg></kbd><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg></kbd> ${t('palette.navigate')}</span>
-            <span><kbd><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 10 4 15 9 20"></polyline><path d="M20 4v7a4 4 0 0 1-4 4H4"></path></svg></kbd> ${t('palette.execute')}</span>
-          </div>
-        `}
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
+    return getCommandsViewHTMLFromController({
+      activeCommand: this.activeCommand,
+      aiResultData: this.aiResultData,
+      config: this.config,
+      filteredItems: this.filteredItems,
+      globalSearchResults: this.globalSearchResults,
+      isGlobalSearchLoading: this.isGlobalSearchLoading,
+      minimizedTasks: this.minimizedTasks,
+      recentCommands: this.recentCommands,
+      recentTasks: this.getFilteredRecentTasks(),
+      searchQuery: this.searchQuery,
+      selectedIndex: this.selectedIndex,
+    });
   }
 
   private bindCommandsEvents(): void {
     if (!this.shadowRoot) return;
-
-    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
-    const hasActiveCommand = this.activeCommand !== null;
-
-    // Bind drag events on search area
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close button
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.clearActiveCommand();
-    });
-
-    // Footer action buttons (when command is active)
-    if (hasActiveCommand) {
-      const stopBtn = this.shadowRoot.querySelector('.glass-btn-stop');
-      stopBtn?.addEventListener('click', () => {
-        if (this.aiResultData) {
-          this.aiResultData.isLoading = false;
-        }
-        this.aiResultCallbacks?.onStop?.();
-        this.updateUnifiedContent();
-      });
-
-      const copyBtn = this.shadowRoot.querySelector('.glass-btn-copy');
-      copyBtn?.addEventListener('click', () => {
-        if (this.aiResultData?.content) {
-          navigator.clipboard.writeText(this.aiResultData.content);
-          this.showCopyFeedback(copyBtn as HTMLButtonElement);
-        }
-      });
-
-      const compareBtn = this.shadowRoot.querySelector('.glass-btn-compare');
-      compareBtn?.addEventListener('click', () => {
-        this.toggleCompareMode();
-      });
-
-      // Language select for translate
-      const langSelect = this.shadowRoot.querySelector('.glass-lang-select') as HTMLSelectElement;
-      langSelect?.addEventListener('change', () => {
-        if (this.aiResultData) {
-          // Generate new stream key so streaming updates work
-          this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    bindCommandsEventsFromController(
+      {
+        activeCommand: this.activeCommand,
+        aiResultData: this.aiResultData,
+        config: this.config,
+        filteredItems: this.filteredItems,
+        globalSearchResults: this.globalSearchResults,
+        isGlobalSearchLoading: this.isGlobalSearchLoading,
+        minimizedTasks: this.minimizedTasks,
+        recentCommands: this.recentCommands,
+        recentTasks: this.getFilteredRecentTasks(),
+        searchQuery: this.searchQuery,
+        selectedIndex: this.selectedIndex,
+      },
+      {
+        handleDragStart: this.handleDragStart,
+        onActiveInputChange: (value) => {
+          this.activeCommandInput = value;
+        },
+        onBindThinkingSections: (container) => {
+          this.bindThinkingToggle(container);
+        },
+        onClearActiveCommand: () => this.clearActiveCommand(),
+        onCopyResult: (button) => {
+          if (this.aiResultData?.content) {
+            navigator.clipboard.writeText(this.aiResultData.content);
+            this.showCopyFeedback(button);
+          }
+        },
+        onDeleteRecentTask: (taskId) => this.deleteSavedTask(taskId),
+        onDismissMinimizedTask: (taskId) => this.dismissMinimizedTask(taskId),
+        onExecuteSelected: () => this.executeSelected(),
+        onExportToDrive: (button) => this.exportToDrive(button),
+        onFilterInput: (query) => {
+          this.searchQuery = query;
+          this.filterCommands();
+        },
+        onHide: () => this.hide(),
+        onHoverCommand: (index) => {
+          this.selectedIndex = index;
+          this.updateSelection();
+        },
+        onLeaveCommands: () => {
+          this.selectedIndex = -1;
+          this.updateSelection();
+        },
+        onOpenSearchResultUrl: (url) => {
+          this.hide();
+          window.open(url, '_blank');
+        },
+        onRefresh: () => {
+          this.aiResultCallbacks?.onRefresh?.();
+        },
+        onRestoreMinimizedTask: (taskId) => this.restoreMinimizedTask(taskId),
+        onRestoreRecentTask: (taskId) => {
+          const task = this.recentSavedTasks.find(t => t.id === taskId)
+            || this.unsavedRecentTasks.find(t => t.id === taskId);
+          if (task) {
+            this.restoreSavedTask(task);
+          }
+        },
+        onSaveTask: (button) => this.saveCurrentTask(button),
+        onSaveToAnnotation: (button) => this.saveToAnnotation(button),
+        onSearchCommandSelect: (id) => {
+          const item = this.menuItems.find(m => m.id === id);
+          if (!item) return;
+          this.selectedIndex = 0;
+          this.handleSelectItem(item);
+        },
+        onSelectCommand: (index) => {
+          this.selectedIndex = index;
+          this.executeSelected();
+        },
+        onSelectNext: () => this.selectNext(),
+        onSelectPrev: () => this.selectPrev(),
+        onStop: () => {
+          if (this.aiResultData) {
+            this.aiResultData.isLoading = false;
+          }
+          this.aiResultCallbacks?.onStop?.();
+          this.updateUnifiedContent();
+        },
+        onToggleCompare: () => this.toggleCompareMode(),
+        onTranslateInput: (text) => {
+          this.callbacks?.onTranslateInput?.(text);
+        },
+        onTranslateLanguageChange: (language) => {
+          if (!this.aiResultData) return;
+          this.currentStreamKey = createStreamKey();
           this.aiResultData.streamKey = this.currentStreamKey;
-          this.aiResultData.translateTargetLanguage = langSelect.value;
+          this.aiResultData.translateTargetLanguage = language;
           this.aiResultData.isLoading = true;
           this.aiResultData.content = '';
           this.updateUnifiedContent();
-          this.aiResultCallbacks?.onTranslateLanguageChange?.(langSelect.value);
-        }
-      });
-
-      const refreshBtn = this.shadowRoot.querySelector('.glass-btn-refresh');
-      refreshBtn?.addEventListener('click', () => {
-        this.aiResultCallbacks?.onRefresh?.();
-      });
-
-      const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
-      saveBtn?.addEventListener('click', () => {
-        this.saveCurrentTask(saveBtn as HTMLButtonElement);
-      });
-
-      const exportDriveBtn = this.shadowRoot.querySelector('.glass-btn-export-drive');
-      exportDriveBtn?.addEventListener('click', () => {
-        this.exportToDrive(exportDriveBtn as HTMLButtonElement);
-      });
-
-      const annotateBtn = this.shadowRoot.querySelector('.glass-btn-annotate');
-      annotateBtn?.addEventListener('click', () => {
-        this.saveToAnnotation(annotateBtn as HTMLButtonElement);
-      });
-    }
-
-    input?.addEventListener('input', () => {
-      if (!hasActiveCommand) {
-        this.searchQuery = input.value.toLowerCase().trim();
-        this.filterCommands();
-      } else {
-        this.activeCommandInput = input.value;
+          this.aiResultCallbacks?.onTranslateLanguageChange?.(language);
+        },
+        shadowRoot: this.shadowRoot,
       }
-    });
-
-    input?.addEventListener('keydown', (e) => {
-      if (e.isComposing) return;
-      if (hasActiveCommand) {
-        // When command is active
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          this.clearActiveCommand();
-        } else if (e.key === 'Enter' && this.activeCommand?.action === 'translateInput') {
-          e.preventDefault();
-          const text = input.value.trim();
-          if (text) {
-            this.callbacks?.onTranslateInput?.(text);
-            input.value = '';
-            this.activeCommandInput = '';
-          }
-        }
-        // For commands that need input (like contextChat), handle Enter
-        return;
-      }
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault();
-          this.selectNext();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          this.selectPrev();
-          break;
-        case 'Enter':
-          e.preventDefault();
-          this.executeSelected();
-          break;
-        case 'Escape':
-          e.preventDefault();
-          this.hide();
-          break;
-        case 'Tab':
-          e.preventDefault();
-          if (e.shiftKey) {
-            this.selectPrev();
-          } else {
-            this.selectNext();
-          }
-          break;
-      }
-    });
-
-    // Number keys for quick selection (1-9)
-    if (!hasActiveCommand) {
-      input?.addEventListener('keydown', (e) => {
-        if (e.isComposing) return;
-        if (e.key >= '1' && e.key <= '9' && !this.searchQuery) {
-          const index = parseInt(e.key) - 1;
-          if (index < this.filteredItems.length) {
-            e.preventDefault();
-            this.selectedIndex = index;
-            this.executeSelected();
-          }
-        }
-      });
-    }
-
-    // Bind thinking toggle if present (for restored saved tasks)
-    if (hasActiveCommand) {
-      const contentArea = this.shadowRoot.querySelector('.glass-ai-content-area');
-      if (contentArea) {
-        this.bindThinkingToggle(contentArea);
-      }
-    }
+    );
   }
 
   // Ensure menuItems is loaded (needed when panel was opened via showAIResult without show())
@@ -1730,7 +1578,7 @@ export class CommandPalette {
     langSelect?.addEventListener('change', () => {
       if (this.aiResultData) {
         // Generate new stream key so streaming updates work
-        this.currentStreamKey = `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        this.currentStreamKey = createStreamKey();
         this.aiResultData.streamKey = this.currentStreamKey;
         this.aiResultData.translateTargetLanguage = langSelect.value;
         this.aiResultData.isLoading = true;
@@ -1760,72 +1608,6 @@ export class CommandPalette {
     }
   };
 
-  // Drag handlers
-  private handleDragStart = (e: MouseEvent): void => {
-    // Don't start drag if clicking on interactive elements
-    const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('select') || target.closest('input')) return;
-
-    const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
-    if (!panel) return;
-
-    this.isDragging = true;
-    this.dragStartX = e.clientX;
-    this.dragStartY = e.clientY;
-
-    const rect = panel.getBoundingClientRect();
-    this.panelStartX = rect.left;
-    this.panelStartY = rect.top;
-
-    // Switch to absolute positioning for dragging
-    panel.style.position = 'fixed';
-    panel.style.left = `${rect.left}px`;
-    panel.style.top = `${rect.top}px`;
-    panel.style.transform = 'none';
-    panel.classList.add('glass-panel-dragging');
-
-    document.addEventListener('mousemove', this.handleDragMove);
-    document.addEventListener('mouseup', this.handleDragEnd);
-    e.preventDefault();
-  };
-
-  private handleDragMove = (e: MouseEvent): void => {
-    if (!this.isDragging) return;
-
-    const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
-    if (!panel) return;
-
-    const dx = e.clientX - this.dragStartX;
-    const dy = e.clientY - this.dragStartY;
-
-    let newX = this.panelStartX + dx;
-    let newY = this.panelStartY + dy;
-
-    // Keep panel within viewport bounds
-    const rect = panel.getBoundingClientRect();
-    const maxX = window.innerWidth - rect.width;
-    const maxY = window.innerHeight - rect.height;
-
-    newX = Math.max(0, Math.min(newX, maxX));
-    newY = Math.max(0, Math.min(newY, maxY));
-
-    panel.style.left = `${newX}px`;
-    panel.style.top = `${newY}px`;
-  };
-
-  private handleDragEnd = (): void => {
-    this.isDragging = false;
-    this.hasDragged = true;
-
-    const panel = this.shadowRoot?.querySelector('.glass-panel') as HTMLElement;
-    if (panel) {
-      panel.classList.remove('glass-panel-dragging');
-    }
-
-    document.removeEventListener('mousemove', this.handleDragMove);
-    document.removeEventListener('mouseup', this.handleDragEnd);
-  };
-
   // Minimize/Restore methods
 
   /**
@@ -1835,39 +1617,17 @@ export class CommandPalette {
   private saveCurrentAsMinimized(): void {
     if (!this.aiResultData) return;
 
-    // For page-level actions (summarizePage), only allow one minimized task
-    // Replace existing one if present
     if (this.aiResultData.actionType === 'summarizePage') {
-      const existingIndex = this.minimizedTasks.findIndex(t => t.actionType === 'summarizePage');
-      if (existingIndex !== -1) {
-        this.minimizedTasks.splice(existingIndex, 1);
-      }
+      removeExistingTaskForAction(this.minimizedTasks, 'summarizePage');
     }
 
-    // Store as minimized task with streamKey for ongoing updates
-    const task: MinimizedTask = {
-      id: `task-${++this.minimizedTaskIdCounter}`,
-      title: this.aiResultData.title,
-      content: this.aiResultData.content,
-      thinking: this.aiResultData.thinking,
-      originalText: this.aiResultData.originalText,
-      resultType: this.aiResultData.resultType,
-      translateTargetLanguage: this.aiResultData.translateTargetLanguage,
-      iconHtml: this.aiResultData.iconHtml,
-      isLoading: this.aiResultData.isLoading,
-      minimizedAt: Date.now(),
-      streamKey: this.aiResultData.streamKey, // Preserve streamKey for ongoing updates
-      callbacks: this.aiResultCallbacks || undefined,
-      // Extended metadata
-      actionType: this.aiResultData.actionType,
-      sourceUrl: this.aiResultData.sourceUrl,
-      sourceTitle: this.aiResultData.sourceTitle,
-      createdAt: this.aiResultData.createdAt || Date.now(),
-    };
+    const task = createAIResultMinimizedTask(
+      createMinimizedTaskId(++this.minimizedTaskIdCounter),
+      this.aiResultData,
+      this.aiResultCallbacks
+    );
     this.minimizedTasks.push(task);
 
-    // Reset AI result state
-    // Note: currentStreamKey is NOT cleared - it continues to be used for updates
     this.aiResultData = null;
     this.aiResultCallbacks = null;
   }
@@ -1875,28 +1635,15 @@ export class CommandPalette {
   private saveChatAsMinimized(): void {
     if (!this.chatSession) return;
 
-    // Build title from last user message
-    const lastUserMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'user');
-    const title = lastUserMsg
-      ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
-      : t('chat.conversation');
-
-    const task: MinimizedTask = {
-      id: `task-${++this.minimizedTaskIdCounter}`,
-      title,
-      content: '',
-      resultType: 'general',
-      isLoading: this.isChatStreaming,
-      minimizedAt: Date.now(),
-      createdAt: Date.now(),
-      taskType: 'contextChat',
-      chatSession: this.chatSession,
-      isQuickAsk: this.isQuickAsk,
-      iconHtml: this.isQuickAsk ? icons.messageCircle : icons.contextChat,
-    };
+    const task = createChatMinimizedTask(
+      createMinimizedTaskId(++this.minimizedTaskIdCounter),
+      this.chatSession,
+      this.isChatStreaming,
+      this.isQuickAsk,
+      t('chat.conversation')
+    );
     this.minimizedTasks.push(task);
 
-    // Reset chat state
     this.chatSession = null;
     this.isChatStreaming = false;
   }
@@ -1904,22 +1651,13 @@ export class CommandPalette {
   private saveScreenshotAsMinimized(): void {
     if (!this.screenshotData) return;
 
-    const task: MinimizedTask = {
-      id: `task-${++this.minimizedTaskIdCounter}`,
-      title: t('screenshot.screenshotAnalysis'),
-      content: this.screenshotData.result || '',
-      resultType: 'general',
-      isLoading: this.screenshotData.isLoading,
-      minimizedAt: Date.now(),
-      createdAt: Date.now(),
-      taskType: 'screenshot',
-      screenshotDataUrl: this.screenshotData.dataUrl,
-      screenshotResult: this.screenshotData.result,
-      iconHtml: icons.screenshot || icons.image,
-    };
+    const task = createScreenshotMinimizedTask(
+      createMinimizedTaskId(++this.minimizedTaskIdCounter),
+      this.screenshotData,
+      t('screenshot.screenshotAnalysis')
+    );
     this.minimizedTasks.push(task);
 
-    // Reset screenshot state
     this.screenshotData = null;
     this.screenshotCallbacks = null;
   }
@@ -1934,93 +1672,29 @@ export class CommandPalette {
    * Sets all relevant properties so the view can be rendered afterward.
    */
   private restoreStateFromTask(task: MinimizedTask): void {
-    if (task.taskType === 'contextChat') {
-      this.chatSession = task.chatSession || null;
-      this.isQuickAsk = task.isQuickAsk || false;
-      this.isChatStreaming = task.isLoading;
+    const restoredState = buildRestoredTaskState(task, {
+      contextChatLabel: t('chat.contextChatLabel'),
+      quickAskLabel: t('chat.quickAskLabel'),
+      screenshotLabel: t('menu.screenshot'),
+    });
 
-      this.activeCommand = {
-        id: task.isQuickAsk ? 'quickAsk' : 'contextChat',
-        action: 'contextChat',
-        label: task.isQuickAsk ? t('chat.quickAskLabel') : t('chat.contextChatLabel'),
-        icon: task.isQuickAsk ? icons.messageCircle : icons.contextChat,
-        enabled: true,
-        order: 0,
-      };
-
-      this.currentView = 'contextChat';
-      this.viewStack = [];
-      return;
-    }
-
-    if (task.taskType === 'screenshot') {
-      this.screenshotData = {
-        dataUrl: task.screenshotDataUrl || '',
-        isLoading: task.isLoading,
-        result: task.screenshotResult,
-      };
-
-      this.activeCommand = {
-        id: 'screenshot',
-        action: 'screenshot',
-        label: t('menu.screenshot'),
-        icon: '',
-        enabled: true,
-        order: 0,
-      };
-
-      this.currentView = 'screenshot';
-      this.viewStack = [];
-      return;
-    }
-
-    // Default: ai-result task type
-    this.aiResultData = {
-      title: task.title,
-      content: task.content,
-      thinking: task.thinking,
-      originalText: task.originalText,
-      isLoading: task.isLoading,
-      resultType: task.resultType,
-      translateTargetLanguage: task.translateTargetLanguage,
-      iconHtml: task.iconHtml,
-      streamKey: task.streamKey,
-      actionType: task.actionType,
-      sourceUrl: task.sourceUrl,
-      sourceTitle: task.sourceTitle,
-      createdAt: task.createdAt,
-    };
-
-    if (task.isLoading && task.streamKey) {
-      this.currentStreamKey = task.streamKey;
-    }
-
-    this.activeCommand = {
-      id: task.actionType || 'unknown',
-      label: task.title,
-      icon: task.iconHtml || '',
-      action: task.actionType || 'unknown',
-      enabled: true,
-      order: 0,
-    };
-
-    this.aiResultCallbacks = {
-      ...task.callbacks,
-      onStop: () => abortAllRequests(),
-    };
-
-    this.currentView = 'commands';
+    this.activeCommand = restoredState.activeCommand;
+    this.aiResultData = restoredState.aiResultData;
+    this.aiResultCallbacks = restoredState.aiResultCallbacks;
+    this.chatSession = restoredState.chatSession;
+    this.currentStreamKey = restoredState.currentStreamKey;
+    this.currentView = restoredState.currentView;
+    this.isChatStreaming = restoredState.isChatStreaming;
+    this.isQuickAsk = restoredState.isQuickAsk;
+    this.screenshotData = restoredState.screenshotData;
+    this.screenshotCallbacks = null;
     this.viewStack = [];
   }
 
   private restoreMinimizedTask(taskId: string): void {
-    // Find and remove the target task from minimized list first
-    // (before saveCurrentAsMinimized to avoid dedup conflicts)
-    const taskIndex = this.minimizedTasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
-    const task = this.minimizedTasks.splice(taskIndex, 1)[0];
+    const task = takeMinimizedTask(this.minimizedTasks, taskId);
+    if (!task) return;
 
-    // Save current active state as minimized before overwriting
     this.saveCurrentAsMinimized();
     if (this.isChatStreaming && this.chatSession) {
       this.saveChatAsMinimized();
@@ -2034,20 +1708,13 @@ export class CommandPalette {
   }
 
   private dismissMinimizedTask(taskId: string): void {
-    const taskIndex = this.minimizedTasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) return;
+    const task = takeMinimizedTask(this.minimizedTasks, taskId);
+    if (!task) return;
 
-    const task = this.minimizedTasks[taskIndex];
-
-    // Remove from minimized tasks
-    this.minimizedTasks.splice(taskIndex, 1);
-
-    // Clear stream key if it matches the dismissed task
     if (task.streamKey && this.currentStreamKey === task.streamKey) {
       this.currentStreamKey = null;
     }
 
-    // Re-render commands view to update the minimized tasks section
     if (this.currentView === 'commands') {
       this.renderMinimizedTasks();
     }
@@ -2131,673 +1798,25 @@ export class CommandPalette {
   private bindSettingsEvents(): void {
     if (!this.shadowRoot || !this.tempConfig) return;
 
-    const tempConfig = this.tempConfig;
-    const screenshotConfig = tempConfig.screenshot || { ...DEFAULT_SCREENSHOT_CONFIG };
-    const historyConfig = tempConfig.history || { ...DEFAULT_HISTORY_CONFIG };
-
-    // Drag events on search area
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Helper to mark settings as changed
-    const markChanged = () => { this.settingsChanged = true; };
-
-    // Command tag close button - same as cancel
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', () => this.cancelSettings());
-
-    // Cancel button
-    const cancelBtn = this.shadowRoot.querySelector('.glass-btn-cancel');
-    cancelBtn?.addEventListener('click', () => this.cancelSettings());
-
-    // Save button
-    const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
-    saveBtn?.addEventListener('click', () => this.saveSettings());
-
-    // ===== Account settings =====
-    // Google login button
-    const googleLoginBtn = this.shadowRoot.querySelector('#google-login-btn');
-    googleLoginBtn?.addEventListener('click', () => this.handleGoogleLogin());
-
-    // Re-login button (token expired)
-    const reloginBtn = this.shadowRoot.querySelector('#google-relogin-btn');
-    reloginBtn?.addEventListener('click', () => this.handleGoogleLogin());
-
-    // Logout button
-    const logoutBtn = this.shadowRoot.querySelector('.glass-btn-logout');
-    logoutBtn?.addEventListener('click', () => this.handleGoogleLogout());
-
-    // Sync toggle (immediate action, not affected by save/cancel)
-    const syncToggle = this.shadowRoot.querySelector('#sync-enabled-toggle') as HTMLInputElement;
-    const syncActions = this.shadowRoot.querySelector('#sync-actions') as HTMLElement;
-    const backupSection = this.shadowRoot.querySelector('#backup-history-section') as HTMLElement;
-    const syncOptionsSection = this.shadowRoot.querySelector('#sync-options') as HTMLElement;
-    syncToggle?.addEventListener('change', () => {
-      if (syncActions) syncActions.style.display = syncToggle.checked ? 'flex' : 'none';
-      if (backupSection) backupSection.style.display = syncToggle.checked ? 'block' : 'none';
-      if (syncOptionsSection) syncOptionsSection.style.display = syncToggle.checked ? 'block' : 'none';
-      this.handleSyncToggle(syncToggle.checked);
-      if (syncToggle.checked) {
-        this.loadBackupList();
-      }
-    });
-
-    // Sync options checkboxes
-    const syncOptKeys: Array<{ id: string; key: keyof import('../../types').SyncOptions }> = [
-      { id: 'sync-opt-translation', key: 'translation' },
-      { id: 'sync-opt-summary', key: 'summary' },
-      { id: 'sync-opt-knowledge', key: 'knowledge' },
-      { id: 'sync-opt-annotation', key: 'annotation' },
-      { id: 'sync-opt-browseTrail', key: 'browseTrail' },
-    ];
-    for (const { id, key } of syncOptKeys) {
-      const checkbox = this.shadowRoot.querySelector(`#${id}`) as HTMLInputElement;
-      checkbox?.addEventListener('change', () => {
-        if (!tempConfig.syncOptions) {
-          tempConfig.syncOptions = { translation: true, summary: true, knowledge: true, annotation: true, browseTrail: true };
-        }
-        tempConfig.syncOptions[key] = checkbox.checked;
-        this.settingsChanged = true;
-      });
-    }
-
-    // Sync buttons
-    const syncToCloudBtn = this.shadowRoot.querySelector('#sync-to-cloud-btn');
-    syncToCloudBtn?.addEventListener('click', () => this.handleSyncToCloud(syncToCloudBtn as HTMLButtonElement));
-
-    const syncFromCloudBtn = this.shadowRoot.querySelector('#sync-from-cloud-btn');
-    syncFromCloudBtn?.addEventListener('click', () => this.handleSyncFromCloud(syncFromCloudBtn as HTMLButtonElement));
-
-    // Refresh backups button
-    const refreshBackupsBtn = this.shadowRoot.querySelector('#refresh-backups-btn');
-    refreshBackupsBtn?.addEventListener('click', () => this.loadBackupList());
-
-    // Auto-load backup list if sync is enabled
-    if (this.authState?.syncEnabled) {
-      this.loadBackupList();
-    }
-
-    // Translation provider select
-    const translationProviderSelect = this.shadowRoot.querySelector('#translation-provider-select') as HTMLSelectElement;
-    const translationDeeplxKeyGroup = this.shadowRoot.querySelector('#translation-deeplx-key-group') as HTMLElement;
-    const translationDeeplxKeyInput = this.shadowRoot.querySelector('#translation-deeplx-key') as HTMLInputElement;
-    const translationCustomUrlGroup = this.shadowRoot.querySelector('#translation-custom-url-group') as HTMLElement;
-    const translationCustomUrlInput = this.shadowRoot.querySelector('#translation-custom-url') as HTMLInputElement;
-    const translationHint = this.shadowRoot.querySelector('#translation-hint') as HTMLElement;
-
-    translationProviderSelect?.addEventListener('change', () => {
-      const provider = translationProviderSelect.value;
-      if (!tempConfig.translation) {
-        tempConfig.translation = { provider: provider as any };
-      }
-      tempConfig.translation.provider = provider as any;
-
-      // Show/hide DeepLX key input
-      if (translationDeeplxKeyGroup) {
-        translationDeeplxKeyGroup.style.display = provider === 'deeplx' ? 'flex' : 'none';
-      }
-      // Show/hide custom URL input
-      if (translationCustomUrlGroup) {
-        translationCustomUrlGroup.style.display = provider === 'custom' ? 'flex' : 'none';
-      }
-      // Update hint
-      if (translationHint) {
-        translationHint.textContent = getTranslationHint(provider);
-      }
-      markChanged();
-    });
-
-    translationDeeplxKeyInput?.addEventListener('input', () => {
-      if (!tempConfig.translation) {
-        tempConfig.translation = { provider: 'deeplx' };
-      }
-      tempConfig.translation.deeplxApiKey = translationDeeplxKeyInput.value;
-      markChanged();
-    });
-
-    translationCustomUrlInput?.addEventListener('input', () => {
-      if (!tempConfig.translation) {
-        tempConfig.translation = { provider: 'custom' };
-      }
-      tempConfig.translation.customUrl = translationCustomUrlInput.value;
-      markChanged();
-    });
-
-    // Theme select
-    const themeSelect = this.shadowRoot.querySelector('#theme-select') as HTMLSelectElement;
-    themeSelect?.addEventListener('change', () => {
-      tempConfig.theme = themeSelect.value as 'dark' | 'light' | 'system';
-      markChanged();
-      // Preview theme change immediately
-      this.updateTheme(tempConfig.theme);
-      const panel = this.shadowRoot?.querySelector('.glass-panel');
-      panel?.classList.remove('dark', 'light');
-      panel?.classList.add(this.theme);
-    });
-
-    // Popover position select
-    const popoverSelect = this.shadowRoot.querySelector('#popover-position-select') as HTMLSelectElement;
-    popoverSelect?.addEventListener('change', () => {
-      tempConfig.popoverPosition = popoverSelect.value as 'above' | 'below';
-      markChanged();
-    });
-
-    // Show selection popover toggle
-    const showPopoverToggle = this.shadowRoot.querySelector('#show-popover-toggle') as HTMLInputElement;
-    const popoverPositionGroup = this.shadowRoot.querySelector('#popover-position-group') as HTMLElement;
-    showPopoverToggle?.addEventListener('change', () => {
-      tempConfig.showSelectionPopover = showPopoverToggle.checked;
-      if (popoverPositionGroup) popoverPositionGroup.style.display = showPopoverToggle.checked ? 'flex' : 'none';
-      markChanged();
-    });
-
-    // Translate language select
-    const translateSelect = this.shadowRoot.querySelector('#translate-lang-select') as HTMLSelectElement;
-    translateSelect?.addEventListener('change', () => {
-      tempConfig.preferredLanguage = translateSelect.value;
-      markChanged();
-    });
-
-    // UI language select
-    const uiLangSelect = this.shadowRoot.querySelector('#ui-lang-select') as HTMLSelectElement;
-    uiLangSelect?.addEventListener('change', () => {
-      tempConfig.uiLanguage = uiLangSelect.value;
-      setLocale(uiLangSelect.value);
-      markChanged();
-    });
-
-    // Summary language select
-    const summarySelect = this.shadowRoot.querySelector('#summary-lang-select') as HTMLSelectElement;
-    summarySelect?.addEventListener('change', () => {
-      tempConfig.summaryLanguage = summarySelect.value;
-      markChanged();
-    });
-
-    // Provider select
-    const providerSelect = this.shadowRoot.querySelector('#api-provider-select') as HTMLSelectElement;
-    const customUrlGroup = this.shadowRoot.querySelector('#custom-url-group') as HTMLElement;
-    const customModelGroup = this.shadowRoot.querySelector('#custom-model-group') as HTMLElement;
-    const apiKeyHint = this.shadowRoot.querySelector('#api-key-hint') as HTMLElement;
-    const modelSelectGroup = this.shadowRoot.querySelector('#model-select-group') as HTMLElement;
-    const modelSelect = this.shadowRoot.querySelector('#model-select') as HTMLSelectElement;
-
-    providerSelect?.addEventListener('change', () => {
-      const provider = providerSelect.value as MenuConfig['apiProvider'];
-      const isCustom = provider === 'custom';
-      if (customUrlGroup) customUrlGroup.style.display = isCustom ? 'flex' : 'none';
-      if (customModelGroup) customModelGroup.style.display = isCustom ? 'flex' : 'none';
-      if (modelSelectGroup) modelSelectGroup.style.display = isCustom ? 'none' : 'flex';
-      if (apiKeyHint) apiKeyHint.textContent = getAPIKeyHint(provider);
-      tempConfig.apiProvider = provider;
-      // Update model options and reset customModel
-      if (!isCustom && modelSelect) {
-        const models = PROVIDER_MODELS[provider] || [];
-        modelSelect.innerHTML = models.map(m =>
-          `<option value="${m.id}">${m.label}</option>`
-        ).join('');
-        tempConfig.customModel = undefined;
-      }
-      markChanged();
-    });
-
-    // Model select
-    modelSelect?.addEventListener('change', () => {
-      tempConfig.customModel = modelSelect.value || undefined;
-      markChanged();
-    });
-
-    // API Key input
-    const apiKeyInput = this.shadowRoot.querySelector('#api-key-input') as HTMLInputElement;
-    apiKeyInput?.addEventListener('input', () => {
-      tempConfig.apiKey = apiKeyInput.value || undefined;
-      markChanged();
-    });
-
-    // Custom URL input
-    const customUrlInput = this.shadowRoot.querySelector('#custom-url-input') as HTMLInputElement;
-    customUrlInput?.addEventListener('input', () => {
-      tempConfig.customApiUrl = customUrlInput.value || undefined;
-      markChanged();
-    });
-
-    // Custom model input
-    const customModelInput = this.shadowRoot.querySelector('#custom-model-input') as HTMLInputElement;
-    customModelInput?.addEventListener('input', () => {
-      tempConfig.customModel = customModelInput.value || undefined;
-      markChanged();
-    });
-
-    // Streaming toggle
-    const streamingToggle = this.shadowRoot.querySelector('#streaming-toggle') as HTMLInputElement;
-    streamingToggle?.addEventListener('change', () => {
-      tempConfig.useStreaming = streamingToggle.checked;
-      markChanged();
-    });
-
-    // Thinking mode toggle
-    const thinkingModeToggle = this.shadowRoot.querySelector('#thinking-mode-toggle') as HTMLInputElement;
-    thinkingModeToggle?.addEventListener('change', () => {
-      tempConfig.useThinkingModel = thinkingModeToggle.checked;
-      markChanged();
-    });
-
-    // Screenshot settings
-    const saveToFile = this.shadowRoot.querySelector('#save-to-file') as HTMLInputElement;
-    saveToFile?.addEventListener('change', () => {
-      screenshotConfig.saveToFile = saveToFile.checked;
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    const copyToClipboard = this.shadowRoot.querySelector('#copy-to-clipboard') as HTMLInputElement;
-    copyToClipboard?.addEventListener('change', () => {
-      screenshotConfig.copyToClipboard = copyToClipboard.checked;
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    const enableAI = this.shadowRoot.querySelector('#enable-ai') as HTMLInputElement;
-    enableAI?.addEventListener('change', () => {
-      screenshotConfig.enableAI = enableAI.checked;
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    const defaultAIAction = this.shadowRoot.querySelector('#default-ai-action') as HTMLSelectElement;
-    defaultAIAction?.addEventListener('change', () => {
-      screenshotConfig.defaultAIAction = defaultAIAction.value as ScreenshotConfig['defaultAIAction'];
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    // Image gen toggle
-    const enableImageGen = this.shadowRoot.querySelector('#enable-image-gen') as HTMLInputElement;
-    const imageGenSettings = this.shadowRoot.querySelector('#image-gen-settings') as HTMLElement;
-    enableImageGen?.addEventListener('change', () => {
-      screenshotConfig.enableImageGen = enableImageGen.checked;
-      tempConfig.screenshot = screenshotConfig;
-      if (imageGenSettings) imageGenSettings.style.display = enableImageGen.checked ? 'block' : 'none';
-      markChanged();
-    });
-
-    // Image gen provider
-    const imageGenProvider = this.shadowRoot.querySelector('#image-gen-provider') as HTMLSelectElement;
-    const customImageGenUrlGroup = this.shadowRoot.querySelector('#custom-image-gen-url-group') as HTMLElement;
-    imageGenProvider?.addEventListener('change', () => {
-      screenshotConfig.imageGenProvider = imageGenProvider.value as ScreenshotConfig['imageGenProvider'];
-      tempConfig.screenshot = screenshotConfig;
-      if (customImageGenUrlGroup) customImageGenUrlGroup.style.display = imageGenProvider.value === 'custom' ? 'block' : 'none';
-      markChanged();
-    });
-
-    // Custom image gen URL
-    const customImageGenUrl = this.shadowRoot.querySelector('#custom-image-gen-url') as HTMLInputElement;
-    customImageGenUrl?.addEventListener('input', () => {
-      screenshotConfig.customImageGenUrl = customImageGenUrl.value || undefined;
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    // Image size
-    const imageSizeSelect = this.shadowRoot.querySelector('#image-size-select') as HTMLSelectElement;
-    imageSizeSelect?.addEventListener('change', () => {
-      screenshotConfig.imageSize = imageSizeSelect.value as ScreenshotConfig['imageSize'];
-      tempConfig.screenshot = screenshotConfig;
-      markChanged();
-    });
-
-    // Image search settings
-    const imageSearchConfig = tempConfig.imageSearch || { google: true, yandex: true, bing: true, tineye: true };
-
-    const imageSearchGoogle = this.shadowRoot.querySelector('#image-search-google') as HTMLInputElement;
-    imageSearchGoogle?.addEventListener('change', () => {
-      imageSearchConfig.google = imageSearchGoogle.checked;
-      tempConfig.imageSearch = imageSearchConfig;
-      markChanged();
-    });
-
-    const imageSearchYandex = this.shadowRoot.querySelector('#image-search-yandex') as HTMLInputElement;
-    imageSearchYandex?.addEventListener('change', () => {
-      imageSearchConfig.yandex = imageSearchYandex.checked;
-      tempConfig.imageSearch = imageSearchConfig;
-      markChanged();
-    });
-
-    const imageSearchBing = this.shadowRoot.querySelector('#image-search-bing') as HTMLInputElement;
-    imageSearchBing?.addEventListener('change', () => {
-      imageSearchConfig.bing = imageSearchBing.checked;
-      tempConfig.imageSearch = imageSearchConfig;
-      markChanged();
-    });
-
-    const imageSearchTineye = this.shadowRoot.querySelector('#image-search-tineye') as HTMLInputElement;
-    imageSearchTineye?.addEventListener('change', () => {
-      imageSearchConfig.tineye = imageSearchTineye.checked;
-      tempConfig.imageSearch = imageSearchConfig;
-      markChanged();
-    });
-
-    // History settings
-    const maxCount = this.shadowRoot.querySelector('#history-max-count') as HTMLSelectElement;
-    maxCount?.addEventListener('change', () => {
-      historyConfig.maxSaveCount = parseInt(maxCount.value, 10);
-      tempConfig.history = historyConfig;
-      markChanged();
-    });
-
-    const displayCount = this.shadowRoot.querySelector('#history-display-count') as HTMLSelectElement;
-    displayCount?.addEventListener('change', () => {
-      historyConfig.panelDisplayCount = parseInt(displayCount.value, 10);
-      tempConfig.history = historyConfig;
-      markChanged();
-    });
-
-    // Clear history (immediate action, not affected by save/cancel)
-    const clearBtn = this.shadowRoot.querySelector('#clear-history');
-    clearBtn?.addEventListener('click', async () => {
-      if (confirm(t('confirm.clearHistory'))) {
+    bindSettingsEventsFromController({
+      authState: this.authState,
+      getSettingsMenuItems: () => this.settingsMenuItems,
+      getTheme: () => this.theme,
+      handleDragStart: this.handleDragStart,
+      onCancelSettings: () => this.cancelSettings(),
+      onClearHistory: async () => {
         const { clearAllTasks } = await import('../../utils/taskStorage');
         await clearAllTasks();
         this.recentSavedTasks = [];
         this.showToast(t('settings.historyCleared'));
-      }
-    });
-
-    // Auto save task toggle
-    const autoSaveTask = this.shadowRoot.querySelector('#auto-save-task') as HTMLInputElement;
-    autoSaveTask?.addEventListener('change', () => {
-      tempConfig.autoSaveTask = autoSaveTask.checked;
-      markChanged();
-    });
-
-    // ===== Annotation settings =====
-    const annotationConfig = tempConfig.annotation || { ...DEFAULT_ANNOTATION_CONFIG };
-
-    // Color picker
-    const colorPicker = this.shadowRoot.querySelector('#annotation-color-picker');
-    colorPicker?.querySelectorAll('.glass-color-option:not(.glass-color-option-custom)').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const color = (btn as HTMLElement).dataset.color as string;
-        annotationConfig.defaultColor = color;
-        tempConfig.annotation = annotationConfig;
-        // Update active state
-        colorPicker.querySelectorAll('.glass-color-option').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        markChanged();
-      });
-    });
-
-    // Custom color input
-    const customColorInput = this.shadowRoot.querySelector('#annotation-custom-color') as HTMLInputElement;
-    const customColorDiv = colorPicker?.querySelector('.glass-color-option-custom') as HTMLElement;
-    customColorInput?.addEventListener('input', () => {
-      const hex = customColorInput.value;
-      annotationConfig.defaultColor = hex;
-      tempConfig.annotation = annotationConfig;
-      // Update active state
-      colorPicker?.querySelectorAll('.glass-color-option').forEach(b => b.classList.remove('active'));
-      if (customColorDiv) {
-        customColorDiv.classList.add('active');
-        customColorDiv.style.setProperty('--color', `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},0.4)`);
-        customColorDiv.style.setProperty('--color-border', `rgba(${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)},0.8)`);
-      }
-      markChanged();
-    });
-
-    // Auto save AI result toggle
-    const annotationAutoSave = this.shadowRoot.querySelector('#annotation-auto-save') as HTMLInputElement;
-    annotationAutoSave?.addEventListener('change', () => {
-      annotationConfig.autoSaveAIResult = annotationAutoSave.checked;
-      tempConfig.annotation = annotationConfig;
-      markChanged();
-    });
-
-    // Page filter toggle
-    const annotationPageFilter = this.shadowRoot.querySelector('#annotation-page-filter') as HTMLInputElement;
-    annotationPageFilter?.addEventListener('change', () => {
-      annotationConfig.showPageFilter = annotationPageFilter.checked;
-      tempConfig.annotation = annotationConfig;
-      markChanged();
-    });
-
-    // ===== Knowledge settings =====
-    const knowledgeConfig = tempConfig.knowledge || { ...DEFAULT_KNOWLEDGE_CONFIG };
-
-    // Default filter select
-    const knowledgeFilterSelect = this.shadowRoot.querySelector('#knowledge-filter-select') as HTMLSelectElement;
-    knowledgeFilterSelect?.addEventListener('change', () => {
-      knowledgeConfig.defaultFilter = knowledgeFilterSelect.value as KnowledgeConfig['defaultFilter'];
-      tempConfig.knowledge = knowledgeConfig;
-      markChanged();
-    });
-
-    // Max display count select
-    const knowledgeMaxDisplay = this.shadowRoot.querySelector('#knowledge-max-display') as HTMLSelectElement;
-    knowledgeMaxDisplay?.addEventListener('change', () => {
-      knowledgeConfig.maxDisplayCount = parseInt(knowledgeMaxDisplay.value, 10);
-      tempConfig.knowledge = knowledgeConfig;
-      markChanged();
-    });
-
-    // Group by date toggle
-    const knowledgeGroupDate = this.shadowRoot.querySelector('#knowledge-group-date') as HTMLInputElement;
-    knowledgeGroupDate?.addEventListener('change', () => {
-      knowledgeConfig.groupByDate = knowledgeGroupDate.checked;
-      tempConfig.knowledge = knowledgeConfig;
-      markChanged();
-    });
-
-    // ===== YouTube subtitle settings =====
-    const ytSubtitleConfig = tempConfig.youtubeSubtitle || { enabled: false, sourceLanguage: 'auto', targetLanguage: 'zh-CN', fontSize: 'medium' as const, displayMode: 'bilingual' as const };
-
-    const ytSubtitleEnabled = this.shadowRoot.querySelector('#yt-subtitle-enabled') as HTMLInputElement;
-    const ytSubtitleSettings = this.shadowRoot.querySelector('#yt-subtitle-settings') as HTMLElement;
-    ytSubtitleEnabled?.addEventListener('change', () => {
-      ytSubtitleConfig.enabled = ytSubtitleEnabled.checked;
-      tempConfig.youtubeSubtitle = ytSubtitleConfig;
-      if (ytSubtitleSettings) ytSubtitleSettings.style.display = ytSubtitleEnabled.checked ? 'block' : 'none';
-      markChanged();
-    });
-
-    const ytSourceLang = this.shadowRoot.querySelector('#yt-subtitle-source-lang') as HTMLSelectElement;
-    ytSourceLang?.addEventListener('change', () => {
-      ytSubtitleConfig.sourceLanguage = ytSourceLang.value;
-      tempConfig.youtubeSubtitle = ytSubtitleConfig;
-      markChanged();
-    });
-
-    const ytTargetLang = this.shadowRoot.querySelector('#yt-subtitle-target-lang') as HTMLSelectElement;
-    ytTargetLang?.addEventListener('change', () => {
-      ytSubtitleConfig.targetLanguage = ytTargetLang.value;
-      tempConfig.youtubeSubtitle = ytSubtitleConfig;
-      markChanged();
-    });
-
-    const ytFontSize = this.shadowRoot.querySelector('#yt-subtitle-font-size') as HTMLSelectElement;
-    ytFontSize?.addEventListener('change', () => {
-      ytSubtitleConfig.fontSize = ytFontSize.value as 'small' | 'medium' | 'large';
-      tempConfig.youtubeSubtitle = ytSubtitleConfig;
-      markChanged();
-    });
-
-    const ytDisplayMode = this.shadowRoot.querySelector('#yt-subtitle-display-mode') as HTMLSelectElement;
-    ytDisplayMode?.addEventListener('change', () => {
-      ytSubtitleConfig.displayMode = ytDisplayMode.value as 'bilingual' | 'translated';
-      tempConfig.youtubeSubtitle = ytSubtitleConfig;
-      markChanged();
-    });
-
-    // ===== TTS settings =====
-    const ttsConfig = tempConfig.youtubeSubtitleTTS || { ...DEFAULT_TTS_CONFIG };
-
-    const ttsEnabled = this.shadowRoot.querySelector('#tts-enabled') as HTMLInputElement;
-    const ttsSettings = this.shadowRoot.querySelector('#tts-settings') as HTMLElement;
-    ttsEnabled?.addEventListener('change', () => {
-      ttsConfig.enabled = ttsEnabled.checked;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      if (ttsSettings) ttsSettings.style.display = ttsEnabled.checked ? 'block' : 'none';
-      markChanged();
-    });
-
-    const ttsEngine = this.shadowRoot.querySelector('#tts-engine') as HTMLSelectElement;
-    const ttsCloudSettings = this.shadowRoot.querySelector('#tts-cloud-settings') as HTMLElement;
-    const ttsEdgeSettings = this.shadowRoot.querySelector('#tts-edge-settings') as HTMLElement;
-    const ttsVoiceContainer = this.shadowRoot.querySelector('#tts-voice-container') as HTMLElement;
-
-    const loadEdgeVoices = async () => {
-      if (!ttsVoiceContainer) return;
-      ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoading')}</option></select>`;
-      try {
-        const resp = await chrome.runtime.sendMessage({ type: 'EDGE_VOICE_LIST' });
-        if (resp.success && Array.isArray(resp.voices)) {
-          const voices = resp.voices as { ShortName: string; Locale: string; Gender: string; FriendlyName: string }[];
-          // Group by locale, prioritize common languages
-          const priority = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'zh-TW', 'en-GB', 'fr-FR', 'de-DE', 'es-ES'];
-          const grouped = new Map<string, typeof voices>();
-          for (const v of voices) {
-            const locale = v.Locale || v.ShortName.split('-').slice(0, 2).join('-');
-            if (!grouped.has(locale)) grouped.set(locale, []);
-            grouped.get(locale)!.push(v);
-          }
-          // Sort locales: priority first, then alphabetical
-          const sortedLocales = [...grouped.keys()].sort((a, b) => {
-            const ai = priority.indexOf(a);
-            const bi = priority.indexOf(b);
-            if (ai >= 0 && bi >= 0) return ai - bi;
-            if (ai >= 0) return -1;
-            if (bi >= 0) return 1;
-            return a.localeCompare(b);
-          });
-
-          let html = '<select class="glass-select" id="tts-voice">';
-          for (const locale of sortedLocales) {
-            html += `<optgroup label="${locale}">`;
-            for (const v of grouped.get(locale)!) {
-              const selected = v.ShortName === ttsConfig.voice ? ' selected' : '';
-              html += `<option value="${v.ShortName}"${selected}>${v.ShortName} (${v.Gender})</option>`;
-            }
-            html += '</optgroup>';
-          }
-          html += '</select>';
-          ttsVoiceContainer.innerHTML = html;
-
-          // Bind change event for newly created select
-          const newSelect = ttsVoiceContainer.querySelector('#tts-voice') as HTMLSelectElement;
-          newSelect?.addEventListener('change', () => {
-            ttsConfig.voice = newSelect.value;
-            tempConfig.youtubeSubtitleTTS = ttsConfig;
-            markChanged();
-          });
-        } else {
-          ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
-        }
-      } catch {
-        ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
-      }
-    };
-
-    const switchToTextInput = () => {
-      if (!ttsVoiceContainer) return;
-      ttsVoiceContainer.innerHTML = `<input type="text" class="glass-input" id="tts-voice" value="${ttsConfig.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">`;
-      const newInput = ttsVoiceContainer.querySelector('#tts-voice') as HTMLInputElement;
-      newInput?.addEventListener('input', () => {
-        ttsConfig.voice = newInput.value;
-        tempConfig.youtubeSubtitleTTS = ttsConfig;
-        markChanged();
-      });
-    };
-
-    ttsEngine?.addEventListener('change', () => {
-      ttsConfig.engine = ttsEngine.value as 'native' | 'cloud' | 'edge';
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      if (ttsCloudSettings) ttsCloudSettings.style.display = ttsConfig.engine === 'cloud' ? 'block' : 'none';
-      if (ttsEdgeSettings) ttsEdgeSettings.style.display = ttsConfig.engine === 'edge' ? 'block' : 'none';
-      // Switch voice UI between select (edge) and text input (others)
-      if (ttsConfig.engine === 'edge') {
-        loadEdgeVoices();
-      } else {
-        switchToTextInput();
-      }
-      markChanged();
-    });
-
-    // Load edge voices on initial render if engine is already edge
-    if (ttsConfig.engine === 'edge') {
-      loadEdgeVoices();
-    }
-
-    const ttsCloudProvider = this.shadowRoot.querySelector('#tts-cloud-provider') as HTMLSelectElement;
-    const ttsCustomUrlGroup = this.shadowRoot.querySelector('#tts-custom-url-group') as HTMLElement;
-    ttsCloudProvider?.addEventListener('change', () => {
-      ttsConfig.cloudProvider = ttsCloudProvider.value as 'openai' | 'custom';
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      if (ttsCustomUrlGroup) ttsCustomUrlGroup.style.display = ttsConfig.cloudProvider === 'custom' ? 'flex' : 'none';
-      markChanged();
-    });
-
-    const ttsCloudApiKey = this.shadowRoot.querySelector('#tts-cloud-api-key') as HTMLInputElement;
-    ttsCloudApiKey?.addEventListener('input', () => {
-      ttsConfig.cloudApiKey = ttsCloudApiKey.value;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    const ttsCloudApiUrl = this.shadowRoot.querySelector('#tts-cloud-api-url') as HTMLInputElement;
-    ttsCloudApiUrl?.addEventListener('input', () => {
-      ttsConfig.cloudApiUrl = ttsCloudApiUrl.value;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    const ttsCloudModel = this.shadowRoot.querySelector('#tts-cloud-model') as HTMLInputElement;
-    ttsCloudModel?.addEventListener('input', () => {
-      ttsConfig.cloudModel = ttsCloudModel.value;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    // Voice input binding for non-edge engines (edge uses select loaded by loadEdgeVoices)
-    if (ttsConfig.engine !== 'edge') {
-      const ttsVoice = this.shadowRoot.querySelector('#tts-voice') as HTMLInputElement;
-      ttsVoice?.addEventListener('input', () => {
-        ttsConfig.voice = ttsVoice.value;
-        tempConfig.youtubeSubtitleTTS = ttsConfig;
-        markChanged();
-      });
-    }
-
-    const ttsRate = this.shadowRoot.querySelector('#tts-rate') as HTMLSelectElement;
-    ttsRate?.addEventListener('change', () => {
-      ttsConfig.rate = parseFloat(ttsRate.value);
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    const ttsAutoPlay = this.shadowRoot.querySelector('#tts-auto-play') as HTMLInputElement;
-    ttsAutoPlay?.addEventListener('change', () => {
-      ttsConfig.autoPlay = ttsAutoPlay.checked;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    const ttsMuteOriginal = this.shadowRoot.querySelector('#tts-mute-original') as HTMLInputElement;
-    ttsMuteOriginal?.addEventListener('change', () => {
-      ttsConfig.muteOriginal = ttsMuteOriginal.checked;
-      tempConfig.youtubeSubtitleTTS = ttsConfig;
-      markChanged();
-    });
-
-    // ===== Storage usage =====
-    this.loadStorageUsage();
-    const storageRefreshBtn = this.shadowRoot.querySelector('#storage-refresh-btn');
-    storageRefreshBtn?.addEventListener('click', () => this.loadStorageUsage());
-
-    // Reset button (immediate action)
-    const resetBtn = this.shadowRoot.querySelector('.glass-btn-reset');
-    resetBtn?.addEventListener('click', async () => {
-      if (confirm(t('confirm.resetSettings'))) {
+      },
+      onGoogleLogin: () => this.handleGoogleLogin(),
+      onGoogleLogout: () => this.handleGoogleLogout(),
+      onLoadBackupList: () => this.loadBackupList(),
+      onLoadStorageUsage: () => this.loadStorageUsage(),
+      onPopView: () => this.popView(),
+      onRenderCurrentView: () => this.renderCurrentView(true, true),
+      onResetSettings: async () => {
         await saveConfig(DEFAULT_CONFIG);
         await saveGlobalMenuItems(DEFAULT_GLOBAL_MENU);
         this.config = { ...DEFAULT_CONFIG };
@@ -2806,15 +1825,17 @@ export class CommandPalette {
         this.settingsChanged = false;
         this.showToast(t('settings.resetDone'));
         this.renderCurrentView(true, true);
-      }
-    });
-
-    // Escape key - same as cancel
-    this.shadowRoot.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.cancelSettings();
-      }
+      },
+      onSaveSettings: () => this.saveSettings(),
+      onShowToast: (message) => this.showToast(message),
+      onSyncFromCloud: (btn) => this.handleSyncFromCloud(btn),
+      onSyncToCloud: (btn) => this.handleSyncToCloud(btn),
+      onSyncToggle: (enabled) => this.handleSyncToggle(enabled),
+      onUpdateTheme: (theme) => this.updateTheme(theme),
+      setSettingsChanged: (changed) => { this.settingsChanged = changed; },
+      setSettingsMenuItems: (items) => { this.settingsMenuItems = items; },
+      shadowRoot: this.shadowRoot,
+      tempConfig: this.tempConfig,
     });
   }
 
@@ -3241,325 +2262,74 @@ export class CommandPalette {
   private bindMenuSettingsEvents(): void {
     if (!this.shadowRoot) return;
 
-    // Back button
-    const backBtn = this.shadowRoot.querySelector('.glass-back-btn');
-    backBtn?.addEventListener('click', () => this.popView());
-
-    // Toggle switches
-    this.shadowRoot.querySelectorAll('.glass-toggle input').forEach(toggle => {
-      toggle.addEventListener('change', async (e) => {
-        const input = e.target as HTMLInputElement;
-        const id = input.dataset.id;
-        const item = this.settingsMenuItems.find(m => m.id === id);
-        if (item) {
-          item.enabled = input.checked;
-          await saveGlobalMenuItems(this.settingsMenuItems);
-          this.showToast(t('settings.menuItemUpdated'));
-        }
-      });
-    });
-
-    // Delete buttons
-    this.shadowRoot.querySelectorAll('.glass-menu-delete').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = (btn as HTMLElement).dataset.id;
-        if (id) {
-          this.settingsMenuItems = this.settingsMenuItems.filter(m => m.id !== id);
-          await saveGlobalMenuItems(this.settingsMenuItems);
-          this.renderCurrentView(true, true);
-          this.showToast(t('settings.menuItemDeleted'));
-        }
-      });
-    });
-
-    // Add button
-    const addBtn = this.shadowRoot.querySelector('.glass-btn-add');
-    addBtn?.addEventListener('click', () => {
-      this.showToast(t('settings.addCustomInSettings'));
-    });
-
-    // Setup drag and drop
-    this.setupMenuDragDrop();
-
-    // Escape key
-    this.shadowRoot.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.popView();
-      }
-    });
-  }
-
-  private setupMenuDragDrop(): void {
-    if (!this.shadowRoot) return;
-
-    const list = this.shadowRoot.querySelector('#menu-list');
-    if (!list) return;
-
-    let draggedItem: HTMLElement | null = null;
-
-    list.querySelectorAll('.glass-menu-item').forEach(item => {
-      const el = item as HTMLElement;
-
-      el.addEventListener('dragstart', () => {
-        draggedItem = el;
-        setTimeout(() => el.classList.add('dragging'), 0);
-      });
-
-      el.addEventListener('dragend', async () => {
-        el.classList.remove('dragging');
-        draggedItem = null;
-        // Update order
-        const items = list.querySelectorAll('.glass-menu-item');
-        items.forEach((item, index) => {
-          const id = (item as HTMLElement).dataset.id;
-          const menuItem = this.settingsMenuItems.find(m => m.id === id);
-          if (menuItem) menuItem.order = index;
-        });
-        await saveGlobalMenuItems(this.settingsMenuItems);
-      });
-
-      el.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        el.classList.add('drag-over');
-      });
-
-      el.addEventListener('dragleave', () => {
-        el.classList.remove('drag-over');
-      });
-
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        el.classList.remove('drag-over');
-        if (draggedItem && draggedItem !== el) {
-          const rect = el.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          if ((e as DragEvent).clientY < midY) {
-            list.insertBefore(draggedItem, el);
-          } else {
-            list.insertBefore(draggedItem, el.nextSibling);
-          }
-        }
-      });
+    bindMenuSettingsEventsFromController({
+      getSettingsMenuItems: () => this.settingsMenuItems,
+      onPopView: () => this.popView(),
+      onRenderCurrentView: () => this.renderCurrentView(true, true),
+      onShowToast: (message) => this.showToast(message),
+      setSettingsMenuItems: (items) => { this.settingsMenuItems = items; },
+      shadowRoot: this.shadowRoot,
     });
   }
 
   // Screenshot View
   private getScreenshotViewHTML(): string {
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="screenshot">
-          <span class="glass-command-tag-icon">${icons.screenshot || icons.camera || ''}</span>
-          <span class="glass-command-tag-label">${t('menu.screenshot')}</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input glass-screenshot-input"
-          placeholder="${t('screenshot.inputPlaceholder')}"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <button class="glass-header-btn glass-btn-stop glass-btn-screenshot-stop-header" title="${t('common.abort')}" style="display: ${this.screenshotData?.isLoading ? 'flex' : 'none'}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-          </svg>
-        </button>
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-body glass-screenshot-body">
-        <div class="glass-screenshot-preview">
-          <img src="${this.screenshotData?.dataUrl || ''}" alt="Screenshot" />
-        </div>
-        <div class="glass-screenshot-content">
-          ${this.getScreenshotContentHTML()}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <div class="glass-screenshot-actions">
-          <button class="glass-btn glass-btn-save">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            ${t('common.save')}
-          </button>
-          <button class="glass-btn glass-btn-copy-img">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            ${t('common.copy')}
-          </button>
-          <button class="glass-btn glass-btn-describe">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-            </svg>
-            ${t('screenshot.describeBtn')}
-          </button>
-        </div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private getScreenshotContentHTML(): string {
-    if (!this.screenshotData) return '';
-    let html = '';
-
-    // Render history items
-    if (this.screenshotData.history?.length) {
-      for (const item of this.screenshotData.history) {
-        html += `
-          <div class="glass-screenshot-qa">
-            <div class="glass-screenshot-question">${escapeHtml(item.question)}</div>
-            <div class="glass-screenshot-answer">${escapeHtml(item.answer)}</div>
-          </div>
-        `;
-      }
-    }
-
-    if (this.screenshotData.generatedImageUrl) {
-      html += `
-        <div class="glass-screenshot-result">
-          <div class="glass-screenshot-generated-label">${t('screenshot.generatedImage')}</div>
-          <img class="glass-screenshot-generated-img" src="${this.screenshotData.generatedImageUrl}" alt="Generated" />
-          <div class="glass-screenshot-result-actions">
-            <button class="glass-btn glass-btn-copy-result">${t('screenshot.copyImage')}</button>
-            <button class="glass-btn glass-btn-save-result">${t('screenshot.saveImage')}</button>
-          </div>
-        </div>
-      `;
-      return html;
-    }
-
-    // Show current streaming/finished result
-    if (this.screenshotData.result) {
-      html += `
-        <div class="glass-screenshot-qa">
-          <div class="glass-screenshot-question">${escapeHtml(this.screenshotData.currentQuestion || t('screenshot.describeImage'))}</div>
-          <div class="glass-screenshot-answer">${escapeHtml(this.screenshotData.result)}</div>
-          ${!this.screenshotData.isLoading ? `<div class="glass-screenshot-result-actions">
-            <button class="glass-footer-btn glass-btn-copy-result" title="${t('common.copy')}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
-          </div>` : ''}
-        </div>
-      `;
-      return html;
-    }
-
-    if (this.screenshotData.isLoading) {
-      html += `
-        <div class="glass-loading">
-          <div class="glass-loading-spinner"></div>
-          <span>${t('common.processing')}</span>
-        </div>
-      `;
-    }
-
-    return html;
+    return getScreenshotViewHTMLFromController({
+      screenshotData: this.screenshotData,
+    });
   }
 
   private bindScreenshotViewEvents(): void {
     if (!this.shadowRoot) return;
 
-    // Drag events on search area
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close button
-    const closeBtn = this.shadowRoot.querySelector('.glass-command-tag-close');
-    closeBtn?.addEventListener('click', () => {
-      // If loading, minimize to background instead of discarding
-      if (this.screenshotData?.isLoading) {
-        this.saveScreenshotAsMinimized();
-      }
-      this.screenshotData = null;
-      this.screenshotCallbacks?.onClose?.();
-      this.screenshotCallbacks = null;
-      this.activeCommand = null;
-      this.currentView = 'commands';
-      this.renderCurrentView(true, true);
-    });
-
-    // Save button
-    const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
-    saveBtn?.addEventListener('click', () => {
-      this.screenshotCallbacks?.onSave?.();
-    });
-
-    // Copy button
-    const copyBtn = this.shadowRoot.querySelector('.glass-btn-copy-img');
-    copyBtn?.addEventListener('click', () => {
-      this.screenshotCallbacks?.onCopy?.();
-    });
-
-    // Screenshot input - press Enter to ask AI
-    const screenshotInput = this.shadowRoot.querySelector('.glass-screenshot-input') as HTMLInputElement;
-    screenshotInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.isComposing) {
-        e.preventDefault();
-        const question = screenshotInput.value.trim();
-        if (question) {
-          this.screenshotData!.currentQuestion = question;
-          this.screenshotData!.result = undefined;
-          this.screenshotData!.isLoading = true;
-          this.renderScreenshotContent();
-          this.screenshotCallbacks?.onAskAI?.(question);
-          screenshotInput.value = '';
+    bindScreenshotViewEventsFromController({
+      handleDragStart: this.handleDragStart,
+      onClose: () => {
+        if (this.screenshotData?.isLoading) {
+          this.saveScreenshotAsMinimized();
         }
-      }
-    });
-    // Focus the input
-    setTimeout(() => screenshotInput?.focus(), 100);
-
-    // Describe button
-    const describeBtn = this.shadowRoot.querySelector('.glass-btn-describe');
-    describeBtn?.addEventListener('click', () => {
-      this.screenshotData!.currentQuestion = t('screenshot.describeImage');
-      this.screenshotData!.result = undefined;
-      this.screenshotData!.isLoading = true;
-      this.renderScreenshotContent();
-      this.screenshotCallbacks?.onDescribe?.();
-    });
-
-    // Stop button (header)
-    const handleScreenshotStop = () => {
-      if (this.screenshotData) {
-        this.screenshotData.isLoading = false;
-      }
-      this.screenshotCallbacks?.onStop?.();
-      this.renderScreenshotContent();
-    };
-    this.shadowRoot.querySelector('.glass-btn-screenshot-stop-header')?.addEventListener('click', handleScreenshotStop);
-
-    // Copy result button (use event delegation for dynamic content)
-    const contentArea = this.shadowRoot.querySelector('.glass-screenshot-content');
-    contentArea?.addEventListener('click', (e) => {
-      const target = (e.target as HTMLElement).closest('.glass-btn-copy-result');
-      if (target && this.screenshotData) {
-        // Find the answer text in the same QA block
-        const qaBlock = target.closest('.glass-screenshot-qa');
-        const answerEl = qaBlock?.querySelector('.glass-screenshot-answer');
-        const text = answerEl?.textContent || this.screenshotData.result || '';
-        if (text) {
-          navigator.clipboard.writeText(text);
-          this.showCopyFeedback(target as HTMLButtonElement);
+        this.screenshotData = null;
+        this.screenshotCallbacks?.onClose?.();
+        this.screenshotCallbacks = null;
+        this.activeCommand = null;
+        this.currentView = 'commands';
+        this.renderCurrentView(true, true);
+      },
+      onCopyImage: () => {
+        this.screenshotCallbacks?.onCopy?.();
+      },
+      onCopyResult: (button, text) => {
+        navigator.clipboard.writeText(text);
+        this.showCopyFeedback(button);
+      },
+      onDescribe: () => {
+        if (!this.screenshotData) return;
+        this.screenshotData.currentQuestion = t('screenshot.describeImage');
+        this.screenshotData.result = undefined;
+        this.screenshotData.isLoading = true;
+        this.renderScreenshotContent();
+        this.screenshotCallbacks?.onDescribe?.();
+      },
+      onSave: () => {
+        this.screenshotCallbacks?.onSave?.();
+      },
+      onStop: () => {
+        if (this.screenshotData) {
+          this.screenshotData.isLoading = false;
         }
-      }
+        this.screenshotCallbacks?.onStop?.();
+        this.renderScreenshotContent();
+      },
+      onSubmitQuestion: (question, input) => {
+        if (!this.screenshotData) return;
+        this.screenshotData.currentQuestion = question;
+        this.screenshotData.result = undefined;
+        this.screenshotData.isLoading = true;
+        this.renderScreenshotContent();
+        this.screenshotCallbacks?.onAskAI?.(question);
+        input.value = '';
+      },
+      shadowRoot: this.shadowRoot,
     });
 
     // Escape key
@@ -3670,326 +2440,91 @@ export class CommandPalette {
   }
 
   private getFilteredRecentTasks(): SavedTask[] {
-    // Merge unsaved recent tasks (in-memory) with persisted saved tasks
-    // Unsaved tasks appear first, then saved tasks (dedup by content)
-    const savedIds = new Set(this.recentSavedTasks.map(t => t.id));
-    const merged = [
-      ...this.unsavedRecentTasks.filter(t => !savedIds.has(t.id)),
-      ...this.recentSavedTasks,
-    ];
-
-    if (!this.searchQuery) {
-      return merged;
-    }
-    return merged.filter(task => {
-      const title = task.title.toLowerCase();
-      const content = task.content.toLowerCase();
-      const actionType = task.actionType.toLowerCase();
-      const sourceTitle = (task.sourceTitle || '').toLowerCase();
-      const originalText = (task.originalText || '').toLowerCase();
-      return title.includes(this.searchQuery) ||
-             content.includes(this.searchQuery) ||
-             actionType.includes(this.searchQuery) ||
-             sourceTitle.includes(this.searchQuery) ||
-             originalText.includes(this.searchQuery);
-    });
+    return getFilteredRecentTasksFromController(
+      this.recentSavedTasks,
+      this.unsavedRecentTasks,
+      this.searchQuery
+    );
   }
 
   private renderCommands(): void {
     if (!this.shadowRoot) return;
-
-    const container = this.shadowRoot.querySelector('.glass-commands');
-    if (!container) return;
-
-    // If searching, show global search results
-    if (this.searchQuery) {
-      this.renderGlobalSearchResults(container as HTMLElement);
-      return;
-    }
-
-    // Normal command list
-    if (this.filteredItems.length === 0) {
-      container.innerHTML = `
-        <div class="glass-empty">
-          <span>${t('palette.noMatchingCommands')}</span>
-        </div>
-      `;
-    } else {
-      container.innerHTML = this.filteredItems.map((item, index) => {
-        const isSelected = index === this.selectedIndex;
-        const displayIcon = item.customIcon || item.icon;
-        const displayLabel = item.customLabel || t(item.label);
-        const shortcutKey = index < 9 && !this.searchQuery ? index + 1 : null;
-        const isRecent = this.recentCommands.includes(item.id) && !this.searchQuery;
-
-        return `
-          <div class="glass-item ${isSelected ? 'selected' : ''}" data-index="${index}">
-            <div class="glass-item-icon">${displayIcon}</div>
-            <div class="glass-item-label">${escapeHtml(displayLabel)}</div>
-            ${isRecent ? `<span class="glass-item-badge">${t('palette.recent')}</span>` : ''}
-            ${shortcutKey ? `<kbd class="glass-item-key">${shortcutKey}</kbd>` : ''}
-          </div>
-        `;
-      }).join('');
-
-      // Bind events
-      container.querySelectorAll('.glass-item').forEach((el) => {
-        el.addEventListener('click', () => {
-          this.selectedIndex = parseInt(el.getAttribute('data-index') || '0');
-          this.executeSelected();
-        });
-        el.addEventListener('mouseenter', () => {
-          this.selectedIndex = parseInt(el.getAttribute('data-index') || '0');
+    renderCommandsContentFromController(
+      this.shadowRoot,
+      {
+        activeCommand: this.activeCommand,
+        aiResultData: this.aiResultData,
+        config: this.config,
+        filteredItems: this.filteredItems,
+        globalSearchResults: this.globalSearchResults,
+        isGlobalSearchLoading: this.isGlobalSearchLoading,
+        minimizedTasks: this.minimizedTasks,
+        recentCommands: this.recentCommands,
+        recentTasks: this.getFilteredRecentTasks(),
+        searchQuery: this.searchQuery,
+        selectedIndex: this.selectedIndex,
+      },
+      {
+        onDeleteRecentTask: (taskId) => this.deleteSavedTask(taskId),
+        onDismissMinimizedTask: (taskId) => this.dismissMinimizedTask(taskId),
+        onHoverCommand: (index) => {
+          this.selectedIndex = index;
           this.updateSelection();
-        });
-      });
-
-      // Clear selection when mouse leaves the command list
-      container.addEventListener('mouseleave', () => {
-        this.selectedIndex = -1;
-        this.updateSelection();
-      });
-    }
-
-    // Render minimized tasks section
-    this.renderMinimizedTasks();
-    // Render recent saved tasks section
-    this.renderRecentTasks();
-  }
-
-  private renderGlobalSearchResults(container: HTMLElement): void {
-    const { commands, knowledge, trails } = this.globalSearchResults;
-    const hasResults = commands.length > 0 || knowledge.length > 0 || trails.length > 0;
-
-    if (!hasResults && !this.isGlobalSearchLoading) {
-      container.innerHTML = `
-        <div class="glass-empty">
-          <span>${t('palette.noMatchingResults')}</span>
-        </div>
-      `;
-      return;
-    }
-
-    let html = '';
-
-    // Commands section
-    if (commands.length > 0) {
-      html += `
-        <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.command} ${t('palette.commandsSection')}</div>
-          ${commands.slice(0, 5).map((item, index) => `
-            <div class="glass-item ${index === this.selectedIndex ? 'selected' : ''}" data-type="command" data-index="${index}" data-id="${item.id}">
-              <div class="glass-item-icon">${item.customIcon || item.icon}</div>
-              <div class="glass-item-label">${escapeHtml(item.customLabel || t(item.label))}</div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
-
-    // Knowledge section
-    if (knowledge.length > 0) {
-      html += `
-        <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.library} ${t('palette.knowledgeSection')}</div>
-          ${knowledge.map(item => {
-            const typeIcon = item.type === 'annotation' ? icons.highlighter : icons.sparkles;
-            const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
-            const preview = item.content.substring(0, 60) + (item.content.length > 60 ? '...' : '');
-            return `
-              <div class="glass-search-result" data-type="knowledge" data-id="${item.id}" data-url="${escapeHtml(item.url)}">
-                <div class="glass-search-result-icon">${typeIcon}</div>
-                <div class="glass-search-result-content">
-                  <div class="glass-search-result-title">${typeLabel}</div>
-                  <div class="glass-search-result-preview">${escapeHtml(preview)}</div>
-                  <div class="glass-search-result-meta">${escapeHtml(item.pageTitle || '')}</div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    }
-
-    // Browse trails section
-    if (trails.length > 0) {
-      html += `
-        <div class="glass-search-section">
-          <div class="glass-search-section-title">${icons.history} ${t('palette.browseTrailSection')}</div>
-          ${trails.map(entry => `
-            <div class="glass-search-result" data-type="trail" data-url="${escapeHtml(entry.url)}">
-              <div class="glass-search-result-icon">${icons.globe}</div>
-              <div class="glass-search-result-content">
-                <div class="glass-search-result-title">${escapeHtml(entry.title || t('trail.noTitle'))}</div>
-                ${entry.summary ? `<div class="glass-search-result-preview">${escapeHtml(entry.summary.substring(0, 60))}...</div>` : ''}
-                <div class="glass-search-result-meta">${new URL(entry.url).hostname}</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
-
-    // Loading indicator
-    if (this.isGlobalSearchLoading && !hasResults) {
-      html += `
-        <div class="glass-search-loading">
-          <span class="glass-search-loading-spinner"></span>
-          <span>${t('palette.searchingResults')}</span>
-        </div>
-      `;
-    }
-
-    container.innerHTML = html;
-
-    // Bind command events
-    container.querySelectorAll('.glass-item[data-type="command"]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const id = el.getAttribute('data-id');
-        const item = this.menuItems.find(m => m.id === id);
-        if (item) {
-          this.selectedIndex = 0;
-          this.handleSelectItem(item);
-        }
-      });
-    });
-
-    // Bind knowledge events
-    container.querySelectorAll('.glass-search-result[data-type="knowledge"]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const url = el.getAttribute('data-url');
-        if (url) {
+        },
+        onLeaveCommands: () => {
+          this.selectedIndex = -1;
+          this.updateSelection();
+        },
+        onOpenSearchResultUrl: (url) => {
           this.hide();
           window.open(url, '_blank');
-        }
-      });
-    });
-
-    // Bind trail events
-    container.querySelectorAll('.glass-search-result[data-type="trail"]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const url = el.getAttribute('data-url');
-        if (url) {
-          this.hide();
-          window.open(url, '_blank');
-        }
-      });
-    });
-  }
-
-  private renderMinimizedTasks(): void {
-    if (!this.shadowRoot) return;
-
-    const section = this.shadowRoot.querySelector('.glass-minimized-section');
-    if (!section) return;
-
-    if (this.minimizedTasks.length === 0) {
-      section.innerHTML = '';
-      return;
-    }
-
-    section.innerHTML = `
-      <div class="glass-section-label">${t('palette.inProgress')}</div>
-      ${this.minimizedTasks.map(task => {
-        const icon = task.iconHtml || getDefaultMinimizedIcon();
-        const meta = getTaskMetaInfo(task);
-        return `
-          <div class="glass-minimized-task" data-task-id="${task.id}">
-            <div class="glass-task-icon">${icon}</div>
-            <div class="glass-task-info">
-              <div class="glass-task-title">${escapeHtml(t(task.title))}</div>
-              <div class="glass-task-meta">${meta}</div>
-            </div>
-            ${task.isLoading ? '<div class="glass-minimized-task-loading"></div>' : ''}
-            <button class="glass-minimized-close" data-task-id="${task.id}">&times;</button>
-          </div>
-        `;
-      }).join('')}
-    `;
-
-    // Bind click events for restoring tasks
-    section.querySelectorAll('.glass-minimized-task').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        // Don't restore if clicking the close button
-        if (target.classList.contains('glass-minimized-close')) return;
-        const taskId = el.getAttribute('data-task-id');
-        if (taskId) {
-          this.restoreMinimizedTask(taskId);
-        }
-      });
-    });
-
-    // Bind click events for dismissing tasks
-    section.querySelectorAll('.glass-minimized-close').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const taskId = el.getAttribute('data-task-id');
-        if (taskId) {
-          this.dismissMinimizedTask(taskId);
-        }
-      });
-    });
-  }
-
-  private renderRecentTasks(): void {
-    if (!this.shadowRoot) return;
-
-    const section = this.shadowRoot.querySelector('.glass-recent-section');
-    if (!section) return;
-
-    const filteredTasks = this.getFilteredRecentTasks();
-
-    if (filteredTasks.length === 0) {
-      section.innerHTML = '';
-      return;
-    }
-
-    section.innerHTML = `
-      <div class="glass-section-label">${t('palette.recentRecords')}</div>
-      ${filteredTasks.map(task => {
-        const icon = getActionIcon(task.actionType);
-        const meta = getSavedTaskMetaInfo(task);
-        return `
-          <div class="glass-recent-task" data-task-id="${task.id}">
-            <div class="glass-task-icon">${icon}</div>
-            <div class="glass-task-info">
-              <div class="glass-task-title">${escapeHtml(t(task.title))}</div>
-              <div class="glass-task-meta">${meta}</div>
-            </div>
-            <button class="glass-recent-close" data-task-id="${task.id}">&times;</button>
-          </div>
-        `;
-      }).join('')}
-    `;
-
-    // Bind click events for restoring saved tasks
-    section.querySelectorAll('.glass-recent-task').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        // Don't restore if clicking the close button
-        if (target.classList.contains('glass-recent-close')) return;
-        const taskId = el.getAttribute('data-task-id');
-        if (taskId) {
+        },
+        onRestoreMinimizedTask: (taskId) => this.restoreMinimizedTask(taskId),
+        onRestoreRecentTask: (taskId) => {
           const task = this.recentSavedTasks.find(t => t.id === taskId)
             || this.unsavedRecentTasks.find(t => t.id === taskId);
           if (task) {
             this.restoreSavedTask(task);
           }
-        }
-      });
-    });
+        },
+        onSearchCommandSelect: (id) => {
+          const item = this.menuItems.find(m => m.id === id);
+          if (!item) return;
+          this.selectedIndex = 0;
+          this.handleSelectItem(item);
+        },
+        onSelectCommand: (index) => {
+          this.selectedIndex = index;
+          this.executeSelected();
+        },
+      }
+    );
+  }
 
-    // Bind click events for deleting saved tasks
-    section.querySelectorAll('.glass-recent-close').forEach((el) => {
-      el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const taskId = el.getAttribute('data-task-id');
-        if (taskId) {
-          this.deleteSavedTask(taskId);
+  private renderMinimizedTasks(): void {
+    if (!this.shadowRoot) return;
+    renderMinimizedTasksSectionFromController(
+      this.shadowRoot,
+      this.minimizedTasks,
+      (taskId) => this.restoreMinimizedTask(taskId),
+      (taskId) => this.dismissMinimizedTask(taskId)
+    );
+  }
+
+  private renderRecentTasks(): void {
+    if (!this.shadowRoot) return;
+    renderRecentTasksSectionFromController(
+      this.shadowRoot,
+      this.getFilteredRecentTasks(),
+      (taskId) => {
+        const task = this.recentSavedTasks.find(t => t.id === taskId)
+          || this.unsavedRecentTasks.find(t => t.id === taskId);
+        if (task) {
+          this.restoreSavedTask(task);
         }
-      });
-    });
+      },
+      (taskId) => this.deleteSavedTask(taskId)
+    );
   }
 
   public async loadRecentSavedTasks(): Promise<void> {
@@ -4242,252 +2777,62 @@ export class CommandPalette {
   }
 
   private getBrowseTrailViewHTML(): string {
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="browseTrail">
-          <span class="glass-command-tag-icon">${icons.history}</span>
-          <span class="glass-command-tag-label">${t('menu.browseTrail')}</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input"
-          placeholder="${t('trail.searchPlaceholder')}"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-body">
-        <div class="glass-trail-content">
-          ${this.getBrowseTrailContentHTML()}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <div class="glass-trail-footer-actions">
-          <button class="glass-btn glass-btn-trail-clear">${t('trail.clearHistory')}</button>
-          <button class="glass-btn glass-btn-trail-export">${t('common.export')}</button>
-        </div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
-  }
-
-  private getBrowseTrailContentHTML(): string {
-    // Flatten all entries
-    const allEntries: TrailEntry[] = [];
-    for (const session of this.browseTrailSessions) {
-      allEntries.push(...session.entries);
-    }
-    allEntries.sort((a, b) => b.visitedAt - a.visitedAt);
-
-    // Filter by search
-    const query = this.browseTrailSearch.toLowerCase();
-    const filtered = query
-      ? allEntries.filter(e =>
-          e.title.toLowerCase().includes(query) ||
-          e.url.toLowerCase().includes(query) ||
-          (e.summary?.toLowerCase().includes(query))
-        )
-      : allEntries;
-
-    if (filtered.length === 0) {
-      return `
-        <div class="glass-trail-empty">
-          <div class="glass-trail-empty-icon">${icons.history}</div>
-          <div class="glass-trail-empty-text">
-            ${query ? t('trail.noMatchingRecords') : t('trail.noRecordsYet')}
-          </div>
-          <div class="glass-trail-empty-hint">
-            ${query ? t('trail.tryOtherKeywords') : t('trail.autoRecordHint')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Progressive loading: only show up to displayCount
-    const displayEntries = filtered.slice(0, this.browseTrailDisplayCount);
-    const hasMore = filtered.length > this.browseTrailDisplayCount;
-
-    // Group by date
-    const groups = this.groupTrailByDate(displayEntries);
-
-    const entriesHTML = Object.entries(groups).map(([date, entries]) => `
-      <div class="glass-trail-group">
-        <div class="glass-trail-date">${date}</div>
-        <div class="glass-trail-entries">
-          ${entries.map(entry => {
-            const time = new Date(entry.visitedAt).toLocaleTimeString(undefined, {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-            let domain = '';
-            try { domain = new URL(entry.url).hostname; } catch {}
-
-            return `
-              <div class="glass-trail-entry" data-url="${escapeHtml(entry.url)}">
-                <div class="glass-trail-entry-info">
-                  <div class="glass-trail-entry-title">${escapeHtml(entry.title || t('trail.noTitle'))}</div>
-                  <div class="glass-trail-entry-meta">
-                    <span class="glass-trail-entry-domain">${escapeHtml(domain)}</span>
-                    <span class="glass-trail-entry-time">${time}</span>
-                  </div>
-                </div>
-                <button class="glass-trail-entry-delete" data-id="${entry.id}" title="${t('common.delete')}">&times;</button>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      </div>
-    `).join('');
-
-    const loadMoreHTML = hasMore ? `
-      <div class="glass-trail-load-more">
-        <button class="glass-btn glass-btn-load-more">
-          ${t('trail.loadMore', { count: filtered.length - this.browseTrailDisplayCount })}
-        </button>
-      </div>
-    ` : '';
-
-    return entriesHTML + loadMoreHTML;
-  }
-
-  private groupTrailByDate(entries: TrailEntry[]): Record<string, TrailEntry[]> {
-    const groups: Record<string, TrailEntry[]> = {};
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 86400000).toDateString();
-
-    for (const entry of entries) {
-      const date = new Date(entry.visitedAt).toDateString();
-      let label: string;
-
-      if (date === today) {
-        label = t('time.today');
-      } else if (date === yesterday) {
-        label = t('time.yesterday');
-      } else {
-        label = new Date(entry.visitedAt).toLocaleDateString(undefined, {
-          month: 'long',
-          day: 'numeric',
-          weekday: 'short',
-        });
-      }
-
-      if (!groups[label]) {
-        groups[label] = [];
-      }
-      groups[label].push(entry);
-    }
-
-    return groups;
+    return getBrowseTrailViewHTMLFromController({
+      displayCount: this.browseTrailDisplayCount,
+      search: this.browseTrailSearch,
+      sessions: this.browseTrailSessions,
+    });
   }
 
   private bindBrowseTrailEvents(): void {
     if (!this.shadowRoot) return;
 
-    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.activeCommand = null;
-      this.currentView = 'commands';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    });
-
-    // Search
-    input?.addEventListener('input', () => {
-      this.browseTrailSearch = input.value.trim();
-      this.browseTrailDisplayCount = 50;
-      const content = this.shadowRoot?.querySelector('.glass-trail-content');
-      if (content) {
-        content.innerHTML = this.getBrowseTrailContentHTML();
-        this.bindTrailEntryEvents();
-      }
-    });
-
-    input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.activeCommand = null;
-        this.currentView = 'commands';
-        this.viewStack = [];
-        this.renderCurrentView(true, true);
-      }
-    });
-
-    // Footer actions
-    const clearBtn = this.shadowRoot.querySelector('.glass-btn-trail-clear');
-    clearBtn?.addEventListener('click', async () => {
-      if (confirm(t('confirm.clearBrowseTrail'))) {
-        await clearTrailHistory();
-        this.browseTrailSessions = [];
-        const content = this.shadowRoot?.querySelector('.glass-trail-content');
-        if (content) {
-          content.innerHTML = this.getBrowseTrailContentHTML();
-        }
-      }
-    });
-
-    const exportBtn = this.shadowRoot.querySelector('.glass-btn-trail-export');
-    exportBtn?.addEventListener('click', () => {
-      exportTrailData(this.browseTrailSessions);
-      this.showToast(t('trail.exported'));
-    });
-
-    // Bind entry events
-    this.bindTrailEntryEvents();
-  }
-
-  private bindTrailEntryEvents(): void {
-    if (!this.shadowRoot) return;
-
-    this.shadowRoot.querySelectorAll('.glass-trail-entry').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.closest('.glass-trail-entry-delete')) return;
-        const url = el.getAttribute('data-url');
-        if (url) {
-          window.open(url, '_blank');
-        }
+    const rerenderTrailContent = () => {
+      if (!this.shadowRoot) return;
+      renderBrowseTrailContent(this.shadowRoot, {
+        displayCount: this.browseTrailDisplayCount,
+        search: this.browseTrailSearch,
+        sessions: this.browseTrailSessions,
       });
-    });
-
-    this.shadowRoot.querySelectorAll('.glass-trail-entry-delete').forEach(el => {
-      el.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = el.getAttribute('data-id');
-        if (id) {
+      bindBrowseTrailEventsFromController({
+        handleDragStart: this.handleDragStart,
+        onClearHistory: async () => {
+          if (!confirm(t('confirm.clearBrowseTrail'))) return;
+          await clearTrailHistory();
+          this.browseTrailSessions = [];
+          rerenderTrailContent();
+        },
+        onClose: () => {
+          this.activeCommand = null;
+          this.currentView = 'commands';
+          this.viewStack = [];
+          this.renderCurrentView(true, true);
+        },
+        onDeleteEntry: async (id) => {
           this.browseTrailSessions = await deleteTrailEntry(id);
-          const content = this.shadowRoot?.querySelector('.glass-trail-content');
-          if (content) {
-            content.innerHTML = this.getBrowseTrailContentHTML();
-            this.bindTrailEntryEvents();
-          }
-        }
+          rerenderTrailContent();
+        },
+        onExport: () => {
+          exportTrailData(this.browseTrailSessions);
+          this.showToast(t('trail.exported'));
+        },
+        onLoadMore: () => {
+          this.browseTrailDisplayCount += 50;
+          rerenderTrailContent();
+        },
+        onOpenEntry: (url) => {
+          window.open(url, '_blank');
+        },
+        onSearch: (query) => {
+          this.browseTrailSearch = query;
+          this.browseTrailDisplayCount = 50;
+          rerenderTrailContent();
+        },
+        shadowRoot: this.shadowRoot,
       });
-    });
+    };
 
-    // Load more button
-    const loadMoreBtn = this.shadowRoot.querySelector('.glass-btn-load-more');
-    loadMoreBtn?.addEventListener('click', () => {
-      this.browseTrailDisplayCount += 50;
-      const content = this.shadowRoot?.querySelector('.glass-trail-content');
-      if (content) {
-        content.innerHTML = this.getBrowseTrailContentHTML();
-        this.bindTrailEntryEvents();
-      }
-    });
+    rerenderTrailContent();
   }
 
   // ========================================
@@ -4547,145 +2892,26 @@ export class CommandPalette {
 
   private getContextChatViewHTML(): string {
     const label = this.activeCommand?.customLabel || t(this.activeCommand?.label || 'menu.contextChat');
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="contextChat">
-          <span class="glass-command-tag-icon">${this.isQuickAsk ? icons.messageCircle : icons.contextChat}</span>
-          <span class="glass-command-tag-label">${escapeHtml(label)}</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input glass-chat-input"
-          placeholder="${t('chat.inputPlaceholder')}"
-          autocomplete="off"
-          spellcheck="false"
-          ${this.isChatStreaming ? 'disabled' : ''}
-        />
-        <button class="glass-header-btn glass-btn-stop glass-btn-chat-stop" title="${t('common.abort')}" style="display: ${this.isChatStreaming ? 'flex' : 'none'}">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-          </svg>
-        </button>
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-body">
-        <div class="glass-chat-content">
-          ${this.getContextChatContentHTML()}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <div class="glass-chat-footer-actions">
-          <button class="glass-btn glass-btn-chat-clear">${t('chat.clearChat')}</button>
-          <button class="glass-footer-btn glass-btn-chat-save" title="${t('common.save')}" style="display: ${this.chatSession?.messages?.some(m => m.role === 'assistant' && m.content) && !this.isChatStreaming ? 'flex' : 'none'}">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
-              </svg>
-            </button>
-        </div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
+    return getContextChatViewHTMLFromController({
+      activeLabel: label,
+      chatSession: this.chatSession,
+      isChatStreaming: this.isChatStreaming,
+      isQuickAsk: this.isQuickAsk,
+    });
   }
 
   private getContextChatContentHTML(): string {
-    if (!this.chatSession || this.chatSession.messages.length === 0) {
-      const emptyText = this.isQuickAsk
-        ? t('chat.emptyQuickAsk')
-        : t('chat.emptyContextChat');
-      return `
-        <div class="glass-chat-empty">
-          <div class="glass-chat-empty-icon">${this.isQuickAsk ? icons.messageCircle : icons.contextChat}</div>
-          <div class="glass-chat-empty-text">${emptyText}</div>
-        </div>
-      `;
-    }
-
-    return this.chatSession.messages.map(msg => {
-      const roleLabel = msg.role === 'user' ? t('chat.roleUser') : t('chat.roleAI');
-      const roleClass = msg.role === 'user' ? 'glass-chat-msg-user' : 'glass-chat-msg-assistant';
-
-      let contentHtml = '';
-      if (msg.references && msg.references.length > 0) {
-        const refsHtml = msg.references.map(r =>
-          `<div class="glass-chat-reference">"${escapeHtml(r.text)}"</div>`
-        ).join('');
-        contentHtml = `<div class="glass-chat-references">${refsHtml}</div>`;
-      }
-      // Add thinking section for assistant messages
-      if (msg.role === 'assistant' && msg.thinking) {
-        contentHtml += getThinkingSectionHTML(msg.thinking);
-      }
-      contentHtml += `<div class="glass-chat-msg-text">${formatAIContent(msg.content)}</div>`;
-
-      return `
-        <div class="glass-chat-msg ${roleClass}">
-          <div class="glass-chat-msg-label">${roleLabel}</div>
-          ${contentHtml}
-        </div>
-      `;
-    }).join('');
+    return getContextChatContentHTMLFromController(this.chatSession, this.isQuickAsk);
   }
 
   private bindContextChatEvents(): void {
     if (!this.shadowRoot) return;
 
-    const input = this.shadowRoot.querySelector('.glass-chat-input') as HTMLInputElement;
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      // If streaming, minimize to background instead of discarding
-      if (this.isChatStreaming && this.chatSession) {
-        this.saveChatAsMinimized();
-      }
-      this.activeCommand = null;
-      this.chatSession = null;
-      this.currentView = 'commands';
-      this.viewStack = [];
-      await this.ensureMenuItems();
-      this.filteredItems = this.sortByRecent(this.menuItems);
-      this.selectedIndex = 0;
-      this.renderCurrentView(true, true);
-    });
-
-    // Send message on Enter
-    input?.addEventListener('keydown', (e) => {
-      if (e.isComposing) return;
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (!this.isChatStreaming) {
-          this.sendChatMessage(input);
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        // If streaming, minimize to background instead of discarding
-        if (this.isChatStreaming && this.chatSession) {
-          this.saveChatAsMinimized();
-        }
-        this.activeCommand = null;
-        this.chatSession = null;
-        this.currentView = 'commands';
-        this.viewStack = [];
-        this.renderCurrentView(true, true);
-      }
-    });
-
-    // Clear chat
-    const clearBtn = this.shadowRoot.querySelector('.glass-btn-chat-clear');
-    clearBtn?.addEventListener('click', async () => {
-      if (this.chatSession) {
+    bindContextChatEventsFromController({
+      handleDragStart: this.handleDragStart,
+      isChatStreaming: this.isChatStreaming,
+      onClearChat: async () => {
+        if (!this.chatSession) return;
         this.chatSession.messages = [];
         if (!this.isQuickAsk) {
           await saveChatSession(this.chatSession);
@@ -4694,60 +2920,41 @@ export class CommandPalette {
         if (content) {
           content.innerHTML = this.getContextChatContentHTML();
         }
-        // Hide save button since there's no content
         const chatSaveBtn = this.shadowRoot?.querySelector('.glass-btn-chat-save') as HTMLElement;
         if (chatSaveBtn) chatSaveBtn.style.display = 'none';
-      }
-    });
-
-    // Save chat to knowledge base
-    const chatSaveBtn = this.shadowRoot.querySelector('.glass-btn-chat-save');
-    chatSaveBtn?.addEventListener('click', () => {
-      this.saveChatToKnowledge(chatSaveBtn as HTMLButtonElement);
-    });
-
-    // Stop button (header)
-    const handleChatStop = () => {
-      this.isChatStreaming = false;
-      abortAllRequests();
-      // Re-enable input
-      if (input) {
-        input.disabled = false;
-        input.placeholder = t('chat.inputPlaceholder');
-      }
-      // Hide stop button
-      const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
-      if (chatStopBtn) chatStopBtn.style.display = 'none';
-      // Re-render chat content
-      const content = this.shadowRoot?.querySelector('.glass-chat-content');
-      if (content && this.chatSession) {
-        content.innerHTML = this.getContextChatContentHTML();
-        content.querySelectorAll('.glass-thinking-section').forEach(section => {
-          const header = section.querySelector('.glass-thinking-header');
-          if (header && !header.hasAttribute('data-bound')) {
-            header.setAttribute('data-bound', 'true');
-            header.addEventListener('click', () => {
-              section.classList.toggle('collapsed');
-            });
-          }
-        });
-      }
-    };
-    this.shadowRoot.querySelector('.glass-btn-chat-stop')?.addEventListener('click', handleChatStop);
-
-    // Scroll to bottom
-    this.scrollChatToBottom();
-
-    // Bind thinking toggle events for existing messages
-    const chatContent = this.shadowRoot.querySelector('.glass-chat-content');
-    chatContent?.querySelectorAll('.glass-thinking-section').forEach(section => {
-      const header = section.querySelector('.glass-thinking-header');
-      if (header && !header.hasAttribute('data-bound')) {
-        header.setAttribute('data-bound', 'true');
-        header.addEventListener('click', () => {
-          section.classList.toggle('collapsed');
-        });
-      }
+      },
+      onClose: async () => {
+        if (this.isChatStreaming && this.chatSession) {
+          this.saveChatAsMinimized();
+        }
+        this.activeCommand = null;
+        this.chatSession = null;
+        this.currentView = 'commands';
+        this.viewStack = [];
+        await this.ensureMenuItems();
+        this.filteredItems = this.sortByRecent(this.menuItems);
+        this.selectedIndex = 0;
+        this.renderCurrentView(true, true);
+      },
+      onSaveChat: (button) => this.saveChatToKnowledge(button),
+      onScrollToBottom: () => this.scrollChatToBottom(),
+      onSendMessage: (input) => this.sendChatMessage(input),
+      onStop: (input) => {
+        this.isChatStreaming = false;
+        abortAllRequests();
+        if (input) {
+          input.disabled = false;
+          input.placeholder = t('chat.inputPlaceholder');
+        }
+        const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
+        if (chatStopBtn) chatStopBtn.style.display = 'none';
+        const content = this.shadowRoot?.querySelector('.glass-chat-content');
+        if (content && this.chatSession) {
+          content.innerHTML = this.getContextChatContentHTML();
+          bindThinkingSections(content);
+        }
+      },
+      shadowRoot: this.shadowRoot,
     });
   }
 
@@ -4776,16 +2983,7 @@ export class CommandPalette {
     const content = this.shadowRoot?.querySelector('.glass-chat-content');
     if (content) {
       content.innerHTML = this.getContextChatContentHTML();
-      // Bind thinking toggle events
-      content.querySelectorAll('.glass-thinking-section').forEach(section => {
-        const header = section.querySelector('.glass-thinking-header');
-        if (header && !header.hasAttribute('data-bound')) {
-          header.setAttribute('data-bound', 'true');
-          header.addEventListener('click', () => {
-            section.classList.toggle('collapsed');
-          });
-        }
-      });
+      bindThinkingSections(content);
     }
     this.scrollChatToBottom();
 
@@ -4795,17 +2993,7 @@ export class CommandPalette {
 
     // Render the placeholder
     if (content) {
-      content.innerHTML = this.getContextChatContentHTML() + `
-        <div class="glass-chat-msg glass-chat-msg-assistant glass-chat-streaming">
-          <div class="glass-chat-msg-label">AI</div>
-          <div class="glass-chat-msg-text">${getLoadingHTML()}</div>
-        </div>
-      `;
-      // Remove the empty assistant msg from the rendered chat (it shows in streaming div)
-      const lastMsg = content.querySelector('.glass-chat-msg:nth-last-child(2)');
-      if (lastMsg && lastMsg.querySelector('.glass-chat-msg-text')?.textContent === '') {
-        lastMsg.remove();
-      }
+      renderStreamingChatContent(content, session, this.isQuickAsk);
     }
     this.scrollChatToBottom();
 
@@ -4874,10 +3062,7 @@ export class CommandPalette {
                 if (textEl) {
                   textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(lastMsg.thinking));
                   thinkingSection = _cachedStreamingContainer.querySelector('.glass-thinking-section');
-                  const header = thinkingSection?.querySelector('.glass-thinking-header');
-                  header?.addEventListener('click', () => {
-                    thinkingSection?.classList.toggle('collapsed');
-                  });
+                  bindThinkingSections(_cachedStreamingContainer);
                 }
               } else {
                 const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
@@ -4979,16 +3164,7 @@ export class CommandPalette {
     const currentContent = this.shadowRoot?.querySelector('.glass-chat-content');
     if (this.chatSession === session && currentContent) {
       currentContent.innerHTML = this.getContextChatContentHTML();
-      // Bind thinking toggle events for all thinking sections
-      currentContent.querySelectorAll('.glass-thinking-section').forEach(section => {
-        const header = section.querySelector('.glass-thinking-header');
-        if (header && !header.hasAttribute('data-bound')) {
-          header.setAttribute('data-bound', 'true');
-          header.addEventListener('click', () => {
-            section.classList.toggle('collapsed');
-          });
-        }
-      });
+      bindThinkingSections(currentContent);
     }
 
     // Re-enable input (only if panel is still showing this chat)
@@ -5032,185 +3208,97 @@ export class CommandPalette {
   }
 
   private getAnnotationsViewHTML(): string {
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="annotations">
-          <span class="glass-command-tag-icon">${icons.highlighter}</span>
-          <span class="glass-command-tag-label">${t('menu.annotations')}</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input"
-          placeholder="${t('annotations.searchPlaceholder')}"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-knowledge-filter">
-        <button class="glass-filter-btn ${this.annotationsFilter === 'all' ? 'active' : ''}" data-filter="all">${t('annotations.all')}</button>
-        <button class="glass-filter-btn ${this.annotationsFilter === 'current' ? 'active' : ''}" data-filter="current">${t('annotations.currentPage')}</button>
-      </div>
-      <div class="glass-body">
-        <div class="glass-knowledge-content">
-          ${this.getAnnotationsContentHTML()}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <div class="glass-knowledge-footer-info">
-          ${t('annotations.count', { count: this.getLocalFilteredAnnotations().length })}
-        </div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
+    return getAnnotationsViewHTMLFromController({
+      annotations: this.annotationsList,
+      currentUrl: window.location.href,
+      filter: this.annotationsFilter,
+      search: this.annotationsSearch,
+    });
   }
 
   private getLocalFilteredAnnotations(): Annotation[] {
-    return getFilteredAnnotations(
-      this.annotationsList,
-      this.annotationsFilter,
-      this.annotationsSearch,
-      window.location.href
-    );
-  }
-
-  private getAnnotationsContentHTML(): string {
-    return getAnnotationsContentHTMLFromModule(
-      this.annotationsList,
-      this.annotationsFilter,
-      this.annotationsSearch,
-      window.location.href,
-      icons
-    );
+    return getLocalFilteredAnnotationsFromController({
+      annotations: this.annotationsList,
+      currentUrl: window.location.href,
+      filter: this.annotationsFilter,
+      search: this.annotationsSearch,
+    });
   }
 
   private bindAnnotationsEvents(): void {
     if (!this.shadowRoot) return;
 
-    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.currentView = 'commands';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    });
-
-    // Filter buttons
-    const filterBtns = this.shadowRoot.querySelectorAll('.glass-filter-btn');
-    filterBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.annotationsFilter = (btn as HTMLElement).dataset.filter as 'all' | 'current';
-        const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-        if (content) {
-          content.innerHTML = this.getAnnotationsContentHTML();
-          this.bindAnnotationEntryEvents();
-        }
-        // Update filter button states
-        filterBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        // Update footer count
-        const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
-        if (footerInfo) {
-          footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
-        }
+    const rerenderAnnotations = () => {
+      if (!this.shadowRoot) return;
+      renderAnnotationsContent(this.shadowRoot, {
+        annotations: this.annotationsList,
+        currentUrl: window.location.href,
+        filter: this.annotationsFilter,
+        search: this.annotationsSearch,
       });
-    });
-
-    // Search
-    input?.addEventListener('input', () => {
-      this.annotationsSearch = input.value.trim();
-      const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-      if (content) {
-        content.innerHTML = this.getAnnotationsContentHTML();
-        this.bindAnnotationEntryEvents();
-      }
-      // Update footer count
-      const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
-      if (footerInfo) {
-        footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
-      }
-    });
-
-    input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.currentView = 'commands';
-        this.viewStack = [];
-        this.renderCurrentView(true, true);
-      }
-    });
-
-    // Bind entry events
-    this.bindAnnotationEntryEvents();
-  }
-
-  private bindAnnotationEntryEvents(): void {
-    if (!this.shadowRoot) return;
-
-    // Entry click - navigate to the page and scroll to the annotation
-    const entries = this.shadowRoot.querySelectorAll('.glass-knowledge-entry');
-    entries.forEach(entry => {
-      entry.addEventListener('click', (e) => {
-        // Don't navigate if clicking delete button
-        if ((e.target as HTMLElement).classList.contains('glass-knowledge-entry-delete')) return;
-
-        const url = (entry as HTMLElement).dataset.url;
-        const id = (entry as HTMLElement).dataset.id;
-        if (url) {
-          // If on the same page, scroll to the annotation
+      bindAnnotationsEventsFromController({
+        handleDragStart: this.handleDragStart,
+        onClose: () => {
+          this.currentView = 'commands';
+          this.viewStack = [];
+          this.renderCurrentView(true, true);
+        },
+        onDeleteAnnotation: async (id) => {
+          if (!confirm(t('confirm.deleteAnnotation'))) return;
+          await deleteAnnotationFromStorage(id);
+          this.annotationsList = this.annotationsList.filter((annotation) => annotation.id !== id);
+          rerenderAnnotations();
+          updateAnnotationsFooterFromController(this.shadowRoot!, {
+            annotations: this.annotationsList,
+            currentUrl: window.location.href,
+            filter: this.annotationsFilter,
+            search: this.annotationsSearch,
+          });
+        },
+        onFilterChange: (filter) => {
+          this.annotationsFilter = filter;
+          rerenderAnnotations();
+          updateAnnotationsFooterFromController(this.shadowRoot!, {
+            annotations: this.annotationsList,
+            currentUrl: window.location.href,
+            filter: this.annotationsFilter,
+            search: this.annotationsSearch,
+          });
+        },
+        onOpenAnnotation: (id, url) => {
           const currentUrl = normalizeUrlForAnnotation(window.location.href);
           if (url === currentUrl) {
             this.hide();
-            // Try to scroll to the annotation after hiding
             if (id && this.onScrollToAnnotation) {
               setTimeout(() => {
                 this.onScrollToAnnotation?.(id);
-              }, 300); // Wait for panel to hide
+              }, 300);
             }
           } else {
-            // Navigate to the page (annotation will be visible when page loads)
             window.location.href = url;
           }
-        }
+        },
+        onSearch: (query) => {
+          this.annotationsSearch = query;
+          rerenderAnnotations();
+          updateAnnotationsFooterFromController(this.shadowRoot!, {
+            annotations: this.annotationsList,
+            currentUrl: window.location.href,
+            filter: this.annotationsFilter,
+            search: this.annotationsSearch,
+          });
+        },
+        shadowRoot: this.shadowRoot,
       });
-    });
+      updateAnnotationsFooterFromController(this.shadowRoot, {
+        annotations: this.annotationsList,
+        currentUrl: window.location.href,
+        filter: this.annotationsFilter,
+        search: this.annotationsSearch,
+      });
+    };
 
-    // Delete buttons
-    const deleteButtons = this.shadowRoot.querySelectorAll('.glass-knowledge-entry-delete');
-    deleteButtons.forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = (btn as HTMLElement).dataset.id;
-        if (id && confirm(t('confirm.deleteAnnotation'))) {
-          await deleteAnnotationFromStorage(id);
-          // Remove from local list
-          this.annotationsList = this.annotationsList.filter(a => a.id !== id);
-          // Re-render content
-          const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-          if (content) {
-            content.innerHTML = this.getAnnotationsContentHTML();
-            this.bindAnnotationEntryEvents();
-          }
-          // Update footer count
-          const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
-          if (footerInfo) {
-            footerInfo.textContent = t('annotations.count', { count: this.getLocalFilteredAnnotations().length });
-          }
-        }
-      });
-    });
+    rerenderAnnotations();
   }
 
   // ========================================
@@ -5252,187 +3340,83 @@ export class CommandPalette {
   }
 
   private getKnowledgeViewHTML(): string {
-    return `
-      <div class="glass-search glass-draggable">
-        <div class="glass-command-tag" data-action="knowledge">
-          <span class="glass-command-tag-icon">${icons.library}</span>
-          <span class="glass-command-tag-label">${t('menu.knowledge')}</span>
-          <button class="glass-command-tag-close">&times;</button>
-        </div>
-        <input
-          type="text"
-          class="glass-input"
-          placeholder="${t('knowledge.searchPlaceholder')}"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <kbd class="glass-kbd">ESC</kbd>
-      </div>
-      <div class="glass-divider"></div>
-      <div class="glass-knowledge-filter">
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'all' ? 'active' : ''}" data-filter="all">${t('knowledge.all')}</button>
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'annotations' ? 'active' : ''}" data-filter="annotations">${t('knowledge.annotationsOnly')}</button>
-        <button class="glass-filter-btn ${this.knowledgeFilter === 'ai-results' ? 'active' : ''}" data-filter="ai-results">${t('knowledge.aiResultsOnly')}</button>
-      </div>
-      <div class="glass-body">
-        <div class="glass-knowledge-content">
-          ${this.getKnowledgeContentHTML()}
-        </div>
-      </div>
-      <div class="glass-footer">
-        <div class="glass-footer-content">
-          <div class="glass-knowledge-footer-info">
-            ${t('knowledge.count', { count: this.getLocalFilteredKnowledgeItems().length })}
-          </div>
-          <button class="glass-footer-btn glass-btn-export-knowledge" title="${t('common.export')}">
-            ${icons.download}
-          </button>
-        </div>
-        <div class="glass-brand">
-          <span class="glass-logo">${icons.logo}</span>
-        </div>
-      </div>
-    `;
+    return getKnowledgeViewHTMLFromController({
+      items: this.knowledgeItems,
+      filter: this.knowledgeFilter,
+      search: this.knowledgeSearch,
+    });
   }
 
   private getLocalFilteredKnowledgeItems(): KnowledgeItem[] {
-    return getFilteredKnowledgeItems(this.knowledgeItems, this.knowledgeFilter, this.knowledgeSearch);
-  }
-
-  private getKnowledgeContentHTML(): string {
-    return getKnowledgeContentHTMLFromModule(
-      this.knowledgeItems,
-      this.knowledgeFilter,
-      this.knowledgeSearch,
-      icons
-    );
+    return getLocalFilteredKnowledgeItemsFromController({
+      items: this.knowledgeItems,
+      filter: this.knowledgeFilter,
+      search: this.knowledgeSearch,
+    });
   }
 
   private bindKnowledgeEvents(): void {
     if (!this.shadowRoot) return;
 
-    const input = this.shadowRoot.querySelector('.glass-input') as HTMLInputElement;
-    const searchArea = this.shadowRoot.querySelector('.glass-search.glass-draggable') as HTMLElement;
-
-    if (searchArea) {
-      searchArea.addEventListener('mousedown', this.handleDragStart);
-    }
-
-    // Command tag close
-    const tagClose = this.shadowRoot.querySelector('.glass-command-tag-close');
-    tagClose?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.currentView = 'commands';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    });
-
-    // Filter buttons
-    const filterBtns = this.shadowRoot.querySelectorAll('.glass-filter-btn');
-    filterBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.knowledgeFilter = (btn as HTMLElement).dataset.filter as 'all' | 'annotations' | 'ai-results';
-        const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-        if (content) {
-          content.innerHTML = this.getKnowledgeContentHTML();
-          this.bindKnowledgeEntryEvents();
-        }
-        // Update filter button states
-        filterBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        // Update footer count
-        this.updateKnowledgeFooter();
+    const rerenderKnowledgeContent = () => {
+      if (!this.shadowRoot) return;
+      renderKnowledgeContent(this.shadowRoot, {
+        items: this.knowledgeItems,
+        filter: this.knowledgeFilter,
+        search: this.knowledgeSearch,
       });
-    });
-
-    // Search
-    input?.addEventListener('input', () => {
-      this.knowledgeSearch = input.value.trim();
-      const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-      if (content) {
-        content.innerHTML = this.getKnowledgeContentHTML();
-        this.bindKnowledgeEntryEvents();
-      }
-      this.updateKnowledgeFooter();
-    });
-
-    input?.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        this.currentView = 'commands';
-        this.viewStack = [];
-        this.renderCurrentView(true, true);
-      }
-    });
-
-    // Export button
-    const exportBtn = this.shadowRoot.querySelector('.glass-btn-export-knowledge');
-    exportBtn?.addEventListener('click', () => {
-      this.exportKnowledge();
-    });
-
-    // Bind entry events
-    this.bindKnowledgeEntryEvents();
-  }
-
-  private updateKnowledgeFooter(): void {
-    const footerInfo = this.shadowRoot?.querySelector('.glass-knowledge-footer-info');
-    if (footerInfo) {
-      footerInfo.textContent = t('knowledge.count', { count: this.getLocalFilteredKnowledgeItems().length });
-    }
-  }
-
-  private bindKnowledgeEntryEvents(): void {
-    if (!this.shadowRoot) return;
-
-    // Entry click - open detail view for AI results, navigate for annotations
-    const entries = this.shadowRoot.querySelectorAll('.glass-knowledge-entry');
-    entries.forEach(entry => {
-      entry.addEventListener('click', (e) => {
-        // Don't navigate if clicking delete button
-        if ((e.target as HTMLElement).classList.contains('glass-knowledge-entry-delete')) return;
-
-        const id = (entry as HTMLElement).dataset.id;
-        const type = (entry as HTMLElement).dataset.type;
-        const url = (entry as HTMLElement).dataset.url;
-
-        if (type === 'ai-result' && id) {
-          // Open AI result in detail view like recent tasks
-          const item = this.knowledgeItems.find(i => i.id === id);
-          if (item) {
-            this.openKnowledgeAIResult(item);
-          }
-        } else if (url) {
-          // For annotations, navigate to the page
-          window.open(url, '_blank');
-        }
-      });
-    });
-
-    // Delete buttons
-    const deleteButtons = this.shadowRoot.querySelectorAll('.glass-knowledge-entry-delete');
-    deleteButtons.forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const id = (btn as HTMLElement).dataset.id;
-        if (id && confirm(t('confirm.deleteRecord'))) {
-          // Delete from storage
+      bindKnowledgeEventsFromController({
+        handleDragStart: this.handleDragStart,
+        onClose: () => {
+          this.currentView = 'commands';
+          this.viewStack = [];
+          this.renderCurrentView(true, true);
+        },
+        onDeleteItem: async (id) => {
+          if (!confirm(t('confirm.deleteRecord'))) return;
           if (id.startsWith('ann_')) {
             await deleteAnnotationFromStorage(id.replace('ann_', ''));
           } else if (id.startsWith('task_')) {
             await deleteTask(parseInt(id.replace('task_', '')));
           }
-          // Remove from local list
-          this.knowledgeItems = this.knowledgeItems.filter(item => item.id !== id);
-          // Re-render content
-          const content = this.shadowRoot?.querySelector('.glass-knowledge-content');
-          if (content) {
-            content.innerHTML = this.getKnowledgeContentHTML();
-            this.bindKnowledgeEntryEvents();
-          }
+          this.knowledgeItems = this.knowledgeItems.filter((item) => item.id !== id);
+          rerenderKnowledgeContent();
           this.updateKnowledgeFooter();
-        }
+        },
+        onExport: () => this.exportKnowledge(),
+        onFilterChange: (filter) => {
+          this.knowledgeFilter = filter;
+          rerenderKnowledgeContent();
+          this.updateKnowledgeFooter();
+        },
+        onOpenAIResult: (id) => {
+          const item = this.knowledgeItems.find((entry) => entry.id === id);
+          if (item) {
+            this.openKnowledgeAIResult(item);
+          }
+        },
+        onOpenUrl: (url) => {
+          window.open(url, '_blank');
+        },
+        onSearch: (query) => {
+          this.knowledgeSearch = query;
+          rerenderKnowledgeContent();
+          this.updateKnowledgeFooter();
+        },
+        shadowRoot: this.shadowRoot,
       });
+      this.updateKnowledgeFooter();
+    };
+
+    rerenderKnowledgeContent();
+  }
+
+  private updateKnowledgeFooter(): void {
+    if (!this.shadowRoot) return;
+    updateKnowledgeFooterFromController(this.shadowRoot, {
+      items: this.knowledgeItems,
+      filter: this.knowledgeFilter,
+      search: this.knowledgeSearch,
     });
   }
 

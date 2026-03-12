@@ -1,6 +1,7 @@
 // Drag Controller - handles panel dragging functionality
 
 export interface DragState {
+  hasDragged: boolean;
   isDragging: boolean;
   dragStartX: number;
   dragStartY: number;
@@ -11,6 +12,7 @@ export interface DragState {
 
 export function createDragState(): DragState {
   return {
+    hasDragged: false,
     isDragging: false,
     dragStartX: 0,
     dragStartY: 0,
@@ -21,7 +23,7 @@ export function createDragState(): DragState {
 }
 
 export function createDragHandlers(
-  shadowRoot: ShadowRoot | null,
+  getShadowRoot: () => ShadowRoot | null,
   state: DragState
 ): {
   handleDragStart: (e: MouseEvent) => void;
@@ -29,6 +31,7 @@ export function createDragHandlers(
   handleDragEnd: () => void;
 } {
   const handleDragStart = (e: MouseEvent): void => {
+    const shadowRoot = getShadowRoot();
     if (!shadowRoot) return;
     const panel = shadowRoot.querySelector('.glass-panel') as HTMLElement;
     if (!panel) return;
@@ -55,6 +58,13 @@ export function createDragHandlers(
     state.panelStartX = rect.left;
     state.panelStartY = rect.top;
 
+    panel.style.position = 'fixed';
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.style.right = 'auto';
+    panel.style.transform = 'none';
+    panel.classList.add('glass-panel-dragging');
+
     // Save initial position if not saved
     if (!state.savedPanelPosition) {
       state.savedPanelPosition = {
@@ -70,6 +80,7 @@ export function createDragHandlers(
   };
 
   const handleDragMove = (e: MouseEvent): void => {
+    const shadowRoot = getShadowRoot();
     if (!state.isDragging || !shadowRoot) return;
 
     const panel = shadowRoot.querySelector('.glass-panel') as HTMLElement;
@@ -93,6 +104,12 @@ export function createDragHandlers(
 
   const handleDragEnd = (): void => {
     state.isDragging = false;
+    state.hasDragged = true;
+
+    const shadowRoot = getShadowRoot();
+    const panel = shadowRoot?.querySelector('.glass-panel') as HTMLElement | null;
+    panel?.classList.remove('glass-panel-dragging');
+
     document.removeEventListener('mousemove', handleDragMove);
     document.removeEventListener('mouseup', handleDragEnd);
   };

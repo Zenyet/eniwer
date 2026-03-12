@@ -477,6 +477,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'model.glm46v': 'GLM-4.6V (Vision)',
 
   // === YouTube Subtitle ===
+  'settings.youtubeSubtitleToolsSection': 'YouTube Audio & Subtitles',
   'settings.youtubeSubtitleSection': 'YouTube Subtitle Translation',
   'settings.youtubeSubtitleEnabled': 'Enable Subtitle Translation',
   'settings.youtubeSubtitleSourceLang': 'Source Language',

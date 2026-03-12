@@ -475,6 +475,7 @@ export const zhCN: Record<string, string> = {
   'model.glm46v': 'GLM-4.6V (视觉)',
 
   // === YouTube Subtitle ===
+  'settings.youtubeSubtitleToolsSection': 'YouTube声音和字幕',
   'settings.youtubeSubtitleSection': 'YouTube 字幕翻译',
   'settings.youtubeSubtitleEnabled': '启用字幕翻译',
   'settings.youtubeSubtitleSourceLang': '源语言',

@@ -291,9 +291,9 @@ export function getSettingsViewHTML(
           <span class="glass-form-hint" id="translation-hint">${getTranslationHint(config.translation?.provider || 'ai')}</span>
         </div>
 
-        <!-- YouTube 字幕翻译 -->
+        <!-- YouTube 字幕 -->
         <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.youtubeSubtitleSection')}</div>
+          <div class="glass-settings-section-title">${t('settings.youtubeSubtitleToolsSection')}</div>
           <div class="glass-form-group glass-form-toggle">
             <label class="glass-form-label">${t('settings.youtubeSubtitleEnabled')}</label>
             <label class="glass-toggle">
@@ -302,7 +302,7 @@ export function getSettingsViewHTML(
             </label>
             <span class="glass-form-hint">${t('settings.youtubeSubtitleHint')}</span>
           </div>
-          <div id="yt-subtitle-settings"${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? '' : ' style="display: none"'}>
+          <div class="glass-form-group-stack" id="yt-subtitle-settings"${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? '' : ' style="display: none"'}>
             <div class="glass-form-group">
               <label class="glass-form-label">${t('settings.youtubeSubtitleSourceLang')}</label>
               <select class="glass-select" id="yt-subtitle-source-lang">
@@ -346,11 +346,6 @@ export function getSettingsViewHTML(
               </select>
             </div>
           </div>
-        </div>
-
-        <!-- 字幕朗读 TTS -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.ttsSection')}</div>
           <div class="glass-form-group glass-form-toggle">
             <label class="glass-form-label">${t('settings.ttsEnabled')}</label>
             <label class="glass-toggle">
@@ -359,7 +354,7 @@ export function getSettingsViewHTML(
             </label>
             <span class="glass-form-hint">${t('settings.ttsHint')}</span>
           </div>
-          <div id="tts-settings"${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? '' : ' style="display: none"'}>
+          <div class="glass-form-group-stack" id="tts-settings"${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? '' : ' style="display: none"'}>
             <div class="glass-form-group">
               <label class="glass-form-label">${t('settings.ttsEngine')}</label>
               <select class="glass-select" id="tts-engine">

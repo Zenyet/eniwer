@@ -191,54 +191,80 @@ export class YouTubeSubtitleManager {
 
   /** Fetch subtitle segments in advance so they're ready when user clicks. */
   private async prefetchSubtitles(changeId: number): Promise<void> {
-    console.log(LOG, '步骤1: 注入主世界获取播放器数据...');
-    const playerData = await this.extractor.extractViaPlayerAPI();
-    if (changeId !== this.activeVideoChangeId) return;
-
-    if (!playerData || playerData.captionTracks.length === 0) {
-      console.warn(LOG, '未找到字幕轨道');
-      return;
-    }
-
-    this.extractor.setCaptionTracks(playerData.captionTracks);
-    console.log(LOG, '找到', playerData.captionTracks.length, '个字幕轨道');
-
-    const track = this.extractor.selectTrack(this.subtitleConfig.sourceLanguage);
-    if (!track) return;
-
-    const potToken = this.extractor.extractPotToken(track, playerData.audioCaptionTracks);
-    const subtitleUrl = this.extractor.buildSubtitleUrl(
-      track, potToken, playerData.clientVersion, playerData.device
-    );
-
     let segments: SubtitleSegment[] = [];
     try {
+      console.log(LOG, '步骤1: 通过 InnerTube 预取字幕...');
       const response = await chrome.runtime.sendMessage({
-        type: 'FETCH_URL',
-        payload: { url: subtitleUrl },
+        type: 'FETCH_YOUTUBE_CAPTIONS',
+        payload: {
+          videoId: this.currentVideoId,
+          lang: this.subtitleConfig.sourceLanguage,
+        },
       });
-      if (response.success && response.data && response.data.length > 10) {
-        segments = this.parseJson3(response.data);
-        console.log(LOG, '预取字幕:', segments.length, '条');
+      if (response.success && Array.isArray(response.segments) && response.segments.length > 0) {
+        segments = response.segments;
+        console.log(LOG, 'InnerTube 预取字幕:', segments.length, '条');
       }
     } catch (e) {
-      console.warn(LOG, '字幕请求异常:', e);
+      console.warn(LOG, 'InnerTube 字幕请求异常:', e);
     }
 
     if (changeId !== this.activeVideoChangeId) return;
 
-    // Fallback without PO Token
-    if (segments.length === 0 && potToken.pot) {
-      const fallbackUrl = track.baseUrl + '&fmt=json3';
+    if (segments.length === 0) {
+      console.log(LOG, 'InnerTube 未取到字幕，回退到播放器接口...');
+      const playerData = await this.extractor.extractViaPlayerAPI();
+      if (changeId !== this.activeVideoChangeId) return;
+
+      if (!playerData || playerData.captionTracks.length === 0) {
+        console.warn(LOG, '未找到字幕轨道');
+        this.pendingSegments = null;
+        return;
+      }
+
+      this.extractor.setCaptionTracks(playerData.captionTracks);
+      console.log(LOG, '找到', playerData.captionTracks.length, '个字幕轨道');
+
+      const track = this.extractor.selectTrack(this.subtitleConfig.sourceLanguage);
+      if (!track) {
+        this.pendingSegments = null;
+        return;
+      }
+
+      const potToken = this.extractor.extractPotToken(track, playerData.audioCaptionTracks);
+      const subtitleUrl = this.extractor.buildSubtitleUrl(
+        track, potToken, playerData.clientVersion, playerData.device
+      );
+
       try {
-        const resp = await chrome.runtime.sendMessage({
+        const response = await chrome.runtime.sendMessage({
           type: 'FETCH_URL',
-          payload: { url: fallbackUrl },
+          payload: { url: subtitleUrl },
         });
-        if (resp.success && resp.data && resp.data.length > 10) {
-          segments = this.parseJson3(resp.data);
+        if (response.success && response.data && response.data.length > 10) {
+          segments = this.parseJson3(response.data);
+          console.log(LOG, '播放器接口预取字幕:', segments.length, '条');
         }
-      } catch { /* ignore */ }
+      } catch (e) {
+        console.warn(LOG, '播放器字幕请求异常:', e);
+      }
+
+      if (changeId !== this.activeVideoChangeId) return;
+
+      // Fallback without PO Token
+      if (segments.length === 0 && potToken.pot) {
+        const fallbackUrl = track.baseUrl + '&fmt=json3';
+        try {
+          const resp = await chrome.runtime.sendMessage({
+            type: 'FETCH_URL',
+            payload: { url: fallbackUrl },
+          });
+          if (resp.success && resp.data && resp.data.length > 10) {
+            segments = this.parseJson3(resp.data);
+            console.log(LOG, '无 PO Token 兜底预取字幕:', segments.length, '条');
+          }
+        } catch { /* ignore */ }
+      }
     }
 
     if (changeId !== this.activeVideoChangeId) return;

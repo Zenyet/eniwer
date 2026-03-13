@@ -1921,26 +1921,35 @@ export class CommandPalette {
     if (!this.tempConfig) return;
 
     const langChanged = this.tempConfig.uiLanguage !== this.config.uiLanguage;
+    const savedConfig = JSON.parse(JSON.stringify(this.tempConfig));
+    const settingsBody = this.shadowRoot?.querySelector('.glass-settings-body') as HTMLElement | null;
+    const scrollTop = settingsBody?.scrollTop || 0;
 
     // Save to storage
-    await saveConfig(this.tempConfig);
-    this.config = this.tempConfig;
+    await saveConfig(savedConfig);
+    this.config = savedConfig;
 
     // Apply history settings if changed
-    if (this.tempConfig.history) {
-      await enforceMaxCount(this.tempConfig.history.maxSaveCount);
+    if (savedConfig.history) {
+      await enforceMaxCount(savedConfig.history.maxSaveCount);
       await this.loadRecentSavedTasks();
     }
 
-    // Keep tempConfig for continued editing, just reset changed flag
-    this.tempConfig = JSON.parse(JSON.stringify(this.config));
+    // Recreate tempConfig and re-render so event handlers bind to the new draft object.
+    this.tempConfig = JSON.parse(JSON.stringify(savedConfig));
     this.settingsChanged = false;
     this.showToast(t('settings.saved'));
+    this.renderCurrentView(langChanged, true);
 
-    // Re-render settings view if language changed so all labels update immediately
-    if (langChanged) {
-      this.renderCurrentView(true, true);
-    }
+    // Restores the scroll position after the settings DOM is rebuilt.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const nextSettingsBody = this.shadowRoot?.querySelector('.glass-settings-body') as HTMLElement | null;
+        if (nextSettingsBody) {
+          nextSettingsBody.scrollTop = scrollTop;
+        }
+      });
+    });
   }
 
   // Account Settings HTML

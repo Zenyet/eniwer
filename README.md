@@ -1,6 +1,8 @@
 # Eniwer
 
-AI 驱动的浏览器工具箱扩展 — 翻译、标注、摘要、与网页对话等。
+Eniwer（灵感来自 JetBrains 的双击 Shift）是一款优雅的 AI 浏览器工具面板。
+
+通过简洁统一的命令面板界面，你可以快速调用翻译、标注、摘要、网页对话、YouTube 字幕翻译与朗读等能力，让阅读、学习与信息处理更高效。
 
 支持 Chrome 及其他 Chromium 浏览器（Edge、Brave、Arc 等）。
 

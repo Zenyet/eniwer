@@ -104,6 +104,9 @@ export function bindSettingsEvents({
   };
   const ttsConfig = tempConfig.youtubeSubtitleTTS || { ...DEFAULT_TTS_CONFIG };
 
+  tempConfig.youtubeSubtitle = ytSubtitleConfig;
+  tempConfig.youtubeSubtitleTTS = ttsConfig;
+
   const changed = () => {
     setSettingsChanged(true);
   };

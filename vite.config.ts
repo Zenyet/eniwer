@@ -1,11 +1,14 @@
 import { defineConfig } from 'vite';
 import { resolve, dirname } from 'path';
-import { copyFileSync, mkdirSync, existsSync } from 'fs';
+import { copyFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { build } from 'vite';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const extensionVersion = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8')
+).version as string;
 
 function chromeExtensionPlugin() {
   return {
@@ -45,6 +48,9 @@ function chromeExtensionPlugin() {
 
 export default defineConfig({
   root: 'src',
+  define: {
+    __APP_VERSION__: JSON.stringify(extensionVersion),
+  },
   build: {
     outDir: '../dist',
     emptyOutDir: true,

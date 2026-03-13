@@ -3,6 +3,8 @@ import { DEFAULT_CONFIG } from '../types';
 import { icons } from '../icons';
 import { initI18n, setLocale, t } from '../i18n';
 
+declare const __APP_VERSION__: string;
+
 // Popup script
 document.addEventListener('DOMContentLoaded', async () => {
   // Initialize i18n
@@ -21,6 +23,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Inject icons
   const logoHeader = document.getElementById('app-logo-header');
   if (logoHeader) logoHeader.innerHTML = icons.logo;
+  const appVersionEl = document.getElementById('appVersion');
+  if (appVersionEl) appVersionEl.textContent = `v${__APP_VERSION__}`;
 
   // Load config and stats
   const result = await chrome.storage.local.get('thecircle_data');

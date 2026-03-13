@@ -152,14 +152,11 @@ async function handleMessage(message: Message, sender: chrome.runtime.MessageSen
 // Proxy fetch from background (bypasses page Service Worker, includes cookies)
 async function handleFetchUrl(payload: { url: string }): Promise<{ success: boolean; data?: string; error?: string }> {
   try {
-    // Extract domain from URL for cookies
     const urlObj = new URL(payload.url);
-    const cookies = await chrome.cookies.getAll({ domain: urlObj.hostname });
-    const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
 
     const response = await fetch(payload.url, {
+      credentials: 'include',
       headers: {
-        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
         'Referer': `${urlObj.origin}/`,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       },

@@ -6,6 +6,7 @@ import { AIResultData, MinimizedTask } from '../types';
 import {
   escapeHtml,
   formatAIContent,
+  formatTokenUsage,
   getActionIcon,
   getLoadingHTML,
   getSavedTaskMetaInfo,
@@ -362,6 +363,7 @@ export function getCommandsViewHTML(model: CommandsViewModel): string {
             </svg>
           </button>
           ` : ''}
+          <span class="glass-token-usage" style="display: ${model.aiResultData?.usage && !isLoading ? 'inline' : 'none'}">${formatTokenUsage(model.aiResultData?.usage)}</span>
         </div>
       ` : `
         <div class="glass-hints">

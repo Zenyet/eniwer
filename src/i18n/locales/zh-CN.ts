@@ -253,6 +253,9 @@ export const zhCN: Record<string, string> = {
   'settings.groupByDate': '按日期分组',
   'settings.storage': '存储空间',
   'settings.cannotGetStorageInfo': '无法获取存储信息',
+  'settings.pluginManagement': '插件管理',
+  'settings.plugins': '插件',
+  'settings.pluginsEnabledCount': '{enabled} / {total} 已启用',
   'settings.resetToDefault': '重置为默认设置',
   'settings.confirmReset': '确定要重置所有设置吗？',
   'settings.resetDone': '已重置为默认设置',
@@ -262,6 +265,20 @@ export const zhCN: Record<string, string> = {
 
   // === Settings - Storage categories ===
   'storage.aiResults': 'AI 结果',
+
+  // === Plugin descriptions ===
+  'plugin.translate.description': '翻译选中文本为目标语言',
+  'plugin.summarize.description': '总结选中文本或整个页面',
+  'plugin.screenshot.description': '截取屏幕区域并用AI分析',
+  'plugin.contextChat.description': '基于页面上下文的AI对话',
+  'plugin.browseTrail.description': '自动记录浏览历史轨迹',
+  'plugin.annotations.description': '高亮文本并添加批注笔记',
+  'plugin.knowledge.description': '管理保存的知识和AI结果',
+  'plugin.youtube.description': 'YouTube双语字幕翻译与朗读',
+  'plugin.selectionPopover.description': '选中文本时显示快捷操作栏',
+  'plugin.imageSearch.description': '右键图片进行以图搜图',
+  'plugin.base64.description': 'Base64 编码/解码工具',
+  'plugin.cloudSync.description': 'Google 登录、云同步与备份管理',
   'storage.annotations': '批注',
   'storage.browseTrail': '浏览轨迹',
   'storage.chatRecords': '聊天记录',
@@ -519,4 +536,32 @@ export const zhCN: Record<string, string> = {
   'settings.ttsEdgeVoiceHint': '例如: zh-CN-XiaoxiaoNeural, en-US-JennyNeural, zh-CN-YunxiNeural',
   'settings.ttsVoiceLoading': '加载音色中...',
   'settings.ttsVoiceLoadError': '加载音色失败',
+
+  // === Base64 ===
+  'menu.base64': 'Base64 编码/解码',
+  'base64.encode': '编码',
+  'base64.decode': '解码',
+  'base64.encodePlaceholder': '输入文本，按回车编码...',
+  'base64.decodePlaceholder': '输入 Base64，按回车解码...',
+  'base64.toggleMode': '切换编码/解码',
+  'base64.swap': '交换输入/输出',
+  'base64.hint': '输入文本后按回车执行',
+  'base64.encodeError': '编码失败',
+  'base64.decodeError': '解码失败：输入不是有效的 Base64 字符串',
+
+  // === Browse Trail Exclude ===
+  'settings.browseTrailExclude': 'URL 排除规则',
+  'settings.browseTrailExcludeLabel': '不记录匹配以下模式的 URL（每行一个，支持正则）',
+  'settings.browseTrailExcludeHint': '支持正则表达式，如 .*\\.internal\\.com',
+  'settings.browseTrailExcludePlaceholder': 'mail\\.google\\.com\nhttps://internal\\.company\\..*',
+
+  // === Selection Popover Quote ===
+  'popover.quote': '引用追问',
+  'popover.quoteAsk': '引用提问',
+  'settings.popoverButtons': '显示的快捷按钮',
+  'settings.popoverBtnSearch': '搜索引擎',
+  'settings.popoverBtnTranslate': '翻译',
+  'settings.popoverBtnHighlight': '标注',
+  'settings.popoverBtnQuote': '引用追问',
+  'settings.popoverBtnQuoteAsk': '引用提问',
 };

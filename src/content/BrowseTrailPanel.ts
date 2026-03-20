@@ -88,10 +88,18 @@ export class TrailRecorder {
   private currentSessionId: string;
   private recordingEnabled = true;
   private hasRecordedCurrentPage = false;
+  private userExcludePatterns: RegExp[] = [];
 
   constructor() {
     this.currentSessionId = this.generateId();
     this.startRecording();
+  }
+
+  public setExcludePatterns(patterns: string[]): void {
+    this.userExcludePatterns = patterns
+      .filter(p => p.trim())
+      .map(p => { try { return new RegExp(p); } catch { return null; } })
+      .filter((r): r is RegExp => r !== null);
   }
 
   private async startRecording(): Promise<void> {
@@ -203,7 +211,9 @@ export class TrailRecorder {
       /^javascript:/,
     ];
 
-    return skipPatterns.some(pattern => pattern.test(url));
+    if (skipPatterns.some(pattern => pattern.test(url))) return true;
+    if (this.userExcludePatterns.some(pattern => pattern.test(url))) return true;
+    return false;
   }
 
   private generateId(): string {

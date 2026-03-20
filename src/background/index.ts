@@ -653,6 +653,11 @@ async function setupImageSearchMenu() {
 
   // Get config
   const result = await chrome.storage.local.get(['thecircle_data']);
+  const pluginStates = result.thecircle_data?.config?.pluginStates || {};
+
+  // If the imageSearch plugin is disabled, don't create any context menus
+  if (pluginStates.imageSearch === false) return;
+
   const config = result.thecircle_data?.config?.imageSearch || {
     google: true,
     yandex: true,
@@ -700,8 +705,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.thecircle_data) {
     const oldConfig = changes.thecircle_data.oldValue?.config?.imageSearch;
     const newConfig = changes.thecircle_data.newValue?.config?.imageSearch;
-    // Only rebuild menu if imageSearch config changed
-    if (JSON.stringify(oldConfig) !== JSON.stringify(newConfig)) {
+    const oldPluginStates = changes.thecircle_data.oldValue?.config?.pluginStates;
+    const newPluginStates = changes.thecircle_data.newValue?.config?.pluginStates;
+    // Rebuild menu if imageSearch config or plugin states changed
+    if (JSON.stringify(oldConfig) !== JSON.stringify(newConfig) ||
+        JSON.stringify(oldPluginStates?.imageSearch) !== JSON.stringify(newPluginStates?.imageSearch)) {
       setupImageSearchMenu();
     }
   }

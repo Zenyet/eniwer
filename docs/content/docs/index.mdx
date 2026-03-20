@@ -1,0 +1,32 @@
+---
+title: Introduction
+description: Eniwer plugin architecture overview
+---
+
+## What is Eniwer?
+
+Eniwer is an AI-powered browser command palette extension. It provides quick access to AI actions (translate, summarize, explain), context chat, screenshot analysis, browsing trails, annotations, and a knowledge base — all from a single keyboard shortcut.
+
+## Plugin Architecture
+
+Starting from v1.2, Eniwer features a **plugin architecture** that makes every major feature a self-contained plugin. This enables:
+
+- **Modular features**: Each feature (chat, screenshot, annotations, YouTube subtitles, etc.) is an independent plugin
+- **Settings isolation**: Plugins own their settings UI via `SettingsContributor`
+- **Enable/disable**: Users can toggle plugins on/off from the settings panel
+- **External plugins**: Third-party developers can create and register plugins via the global API
+
+## Built-in Plugins
+
+| Plugin | ID | Capabilities |
+|---|---|---|
+| Browse Trail | `browseTrail` | Commands, View |
+| Annotations | `annotations` | Commands, View, Settings |
+| Knowledge Base | `knowledge` | Commands, View, Settings |
+| Screenshot | `screenshot` | View, Minimizable |
+| Context Chat | `contextChat` | Commands, View, Minimizable |
+| YouTube Subtitles | `youtube` | Settings |
+
+## Quick Start
+
+To create an external plugin, see the [Getting Started](/docs/guides/getting-started) guide.

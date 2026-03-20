@@ -59,11 +59,18 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
   },
 };
 
+export interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export interface AIResponse {
   success: boolean;
   result?: string;
   thinking?: string;
   error?: string;
+  usage?: TokenUsage;
 }
 
 export type OnChunkCallback = (chunk: string, fullText: string, thinking?: string) => void;
@@ -213,6 +220,11 @@ async function callOpenAICompatibleAPI(
     }
   }
 
+  // Request usage info in streaming mode (OpenAI compatible providers)
+  if (useStreaming) {
+    requestBody.stream_options = { include_usage: true };
+  }
+
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
@@ -232,8 +244,13 @@ async function callOpenAICompatibleAPI(
   if (isOpenAIThinkingModel) {
     const data = await response.json();
     const result = data.choices?.[0]?.message?.content;
+    const usage: TokenUsage | undefined = data.usage ? {
+      promptTokens: data.usage.prompt_tokens,
+      completionTokens: data.usage.completion_tokens,
+      totalTokens: data.usage.total_tokens,
+    } : undefined;
     if (result) {
-      return { success: true, result };
+      return { success: true, result, usage };
     }
     return { success: false, error: t('ai.noResponse') };
   }
@@ -244,17 +261,22 @@ async function callOpenAICompatibleAPI(
 
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content;
+  const usage: TokenUsage | undefined = data.usage ? {
+    promptTokens: data.usage.prompt_tokens,
+    completionTokens: data.usage.completion_tokens,
+    totalTokens: data.usage.total_tokens,
+  } : undefined;
 
   // Handle reasoning_content response (DeepSeek / Zhipu / Qwen / Moonshot / xAI)
   if (hasReasoningContent) {
     const reasoning = data.choices?.[0]?.message?.reasoning_content;
     if (result) {
-      return { success: true, result, thinking: reasoning };
+      return { success: true, result, thinking: reasoning, usage };
     }
   }
 
   if (result) {
-    return { success: true, result };
+    return { success: true, result, usage };
   }
 
   return { success: false, error: t('ai.noResponse') };
@@ -274,6 +296,7 @@ async function processOpenAIStream(
   const decoder = new TextDecoder();
   let fullText = '';
   let thinkingText = '';
+  let usage: TokenUsage | undefined;
 
   try {
     while (true) {
@@ -310,6 +333,14 @@ async function processOpenAIStream(
               fullText += content;
               onChunk(content, fullText, thinkingText || undefined);
             }
+            // Track usage from the last chunk (stream_options: include_usage)
+            if (parsed.usage) {
+              usage = {
+                promptTokens: parsed.usage.prompt_tokens,
+                completionTokens: parsed.usage.completion_tokens,
+                totalTokens: parsed.usage.total_tokens,
+              };
+            }
           } catch {
             // Skip invalid JSON lines
           }
@@ -318,7 +349,7 @@ async function processOpenAIStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText, thinking: thinkingText || undefined };
+      return { success: true, result: fullText, thinking: thinkingText || undefined, usage };
     }
     return { success: false, error: t('ai.noResponse') };
   } finally {
@@ -379,6 +410,13 @@ async function callAnthropicAPI(
 
   const data = await response.json();
 
+  // Parse Anthropic usage (input_tokens / output_tokens)
+  const usage: TokenUsage | undefined = data.usage ? {
+    promptTokens: data.usage.input_tokens,
+    completionTokens: data.usage.output_tokens,
+    totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+  } : undefined;
+
   // Handle extended thinking response
   if (useThinking) {
     let result = '';
@@ -391,12 +429,12 @@ async function callAnthropicAPI(
       }
     }
     if (result) {
-      return { success: true, result, thinking: thinking || undefined };
+      return { success: true, result, thinking: thinking || undefined, usage };
     }
   } else {
     const result = data.content?.[0]?.text;
     if (result) {
-      return { success: true, result };
+      return { success: true, result, usage };
     }
   }
 
@@ -418,6 +456,7 @@ async function processAnthropicStream(
   let fullText = '';
   let thinkingText = '';
   let currentBlockType = '';
+  let usage: TokenUsage | undefined;
 
   try {
     while (true) {
@@ -456,6 +495,21 @@ async function processAnthropicStream(
                 onChunk(content, fullText, thinkingText || undefined);
               }
             }
+
+            // Parse usage from message_start and message_delta events
+            if (parsed.type === 'message_start' && parsed.message?.usage) {
+              usage = {
+                promptTokens: parsed.message.usage.input_tokens,
+                completionTokens: 0,
+              };
+            }
+            if (parsed.type === 'message_delta' && parsed.usage) {
+              usage = {
+                ...usage,
+                completionTokens: parsed.usage.output_tokens,
+                totalTokens: (usage?.promptTokens || 0) + (parsed.usage.output_tokens || 0),
+              };
+            }
           } catch {
             // Skip invalid JSON lines
           }
@@ -464,7 +518,7 @@ async function processAnthropicStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText, thinking: thinkingText || undefined };
+      return { success: true, result: fullText, thinking: thinkingText || undefined, usage };
     }
     return { success: false, error: t('ai.noResponse') };
   } finally {
@@ -521,6 +575,14 @@ async function callGeminiAPI(
 
   const data = await response.json();
 
+  // Parse Gemini usage metadata
+  const usageMeta = data.usageMetadata;
+  const usage: TokenUsage | undefined = usageMeta ? {
+    promptTokens: usageMeta.promptTokenCount,
+    completionTokens: usageMeta.candidatesTokenCount,
+    totalTokens: usageMeta.totalTokenCount,
+  } : undefined;
+
   // Handle thinking model response (may contain thought parts)
   if (useThinking) {
     const parts = data.candidates?.[0]?.content?.parts || [];
@@ -534,12 +596,12 @@ async function callGeminiAPI(
       }
     }
     if (result) {
-      return { success: true, result, thinking: thinking || undefined };
+      return { success: true, result, thinking: thinking || undefined, usage };
     }
   } else {
     const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (result) {
-      return { success: true, result };
+      return { success: true, result, usage };
     }
   }
 
@@ -560,6 +622,7 @@ async function processGeminiStream(
   const decoder = new TextDecoder();
   let fullText = '';
   let thinkingText = '';
+  let usage: TokenUsage | undefined;
 
   try {
     while (true) {
@@ -597,6 +660,15 @@ async function processGeminiStream(
                 onChunk(content, fullText, thinkingText || undefined);
               }
             }
+
+            // Track usage metadata from last chunk
+            if (parsed.usageMetadata) {
+              usage = {
+                promptTokens: parsed.usageMetadata.promptTokenCount,
+                completionTokens: parsed.usageMetadata.candidatesTokenCount,
+                totalTokens: parsed.usageMetadata.totalTokenCount,
+              };
+            }
           } catch {
             // Skip invalid JSON lines
           }
@@ -605,7 +677,7 @@ async function processGeminiStream(
     }
 
     if (fullText) {
-      return { success: true, result: fullText, thinking: thinkingText || undefined };
+      return { success: true, result: fullText, thinking: thinkingText || undefined, usage };
     }
     return { success: false, error: t('ai.noResponse') };
   } finally {
@@ -718,9 +790,14 @@ async function callOpenAIVisionAPI(
 
   const data = await response.json();
   const result = data.choices?.[0]?.message?.content;
+  const usage: TokenUsage | undefined = data.usage ? {
+    promptTokens: data.usage.prompt_tokens,
+    completionTokens: data.usage.completion_tokens,
+    totalTokens: data.usage.total_tokens,
+  } : undefined;
 
   if (result) {
-    return { success: true, result };
+    return { success: true, result, usage };
   }
 
   return { success: false, error: t('ai.noResponse') };
@@ -786,8 +863,14 @@ async function callAnthropicVisionAPI(
 
   const data = await response.json();
   const result = data.content?.[0]?.text;
+  const usage: TokenUsage | undefined = data.usage ? {
+    promptTokens: data.usage.input_tokens,
+    completionTokens: data.usage.output_tokens,
+    totalTokens: (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0),
+  } : undefined;
 
   if (result) {
+    return { success: true, result, usage };
     return { success: true, result };
   }
 
@@ -853,9 +936,15 @@ async function callGeminiVisionAPI(
 
   const data = await response.json();
   const result = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const geminiUsage = data.usageMetadata;
+  const usage: TokenUsage | undefined = geminiUsage ? {
+    promptTokens: geminiUsage.promptTokenCount,
+    completionTokens: geminiUsage.candidatesTokenCount,
+    totalTokens: geminiUsage.totalTokenCount,
+  } : undefined;
 
   if (result) {
-    return { success: true, result };
+    return { success: true, result, usage };
   }
 
   return { success: false, error: t('ai.noResponse') };

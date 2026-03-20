@@ -1,5 +1,6 @@
 // Context Chat - Multi-turn conversation with page context
 import { ChatMessage, ChatSession } from '../types';
+import { extractPageContent } from '../utils/pageContent';
 
 const CHAT_STORAGE_KEY = 'thecircle_chat_sessions';
 const MAX_SESSIONS = 100;
@@ -54,7 +55,7 @@ export function createNewChatSession(url: string, title: string): ChatSession {
     url,
     title,
     messages: [],
-    pageContext: document.body.innerText.slice(0, 10000),
+    pageContext: extractPageContent(),
     updatedAt: Date.now(),
   };
 }

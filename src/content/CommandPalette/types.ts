@@ -3,16 +3,15 @@ import { MenuItem, MenuConfig, AuthState, BrowseSession, ChatSession } from '../
 import { SavedTask } from '../../utils/taskStorage';
 
 // View types for multi-view system
+// The `(string & {})` union allows plugins to register custom view types
+// while preserving IDE autocompletion for built-in types.
 export type ViewType =
   | 'commands'
   | 'ai-result'
   | 'settings'
   | 'settings-menu'
-  | 'screenshot'
-  | 'browseTrail'
-  | 'contextChat'
-  | 'annotations'
-  | 'knowledge';
+  | 'plugins'
+  | (string & {});
 
 export interface ViewState {
   type: ViewType;
@@ -34,6 +33,7 @@ export interface AIResultData {
   sourceUrl?: string;
   sourceTitle?: string;
   createdAt?: number;
+  usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
 }
 
 export interface CommandPaletteCallbacks {
@@ -98,4 +98,7 @@ export interface MinimizedTask {
   isQuickAsk?: boolean;
   screenshotDataUrl?: string;
   screenshotResult?: string;
+  // Plugin-based minimized tasks
+  pluginId?: string;
+  pluginData?: unknown;
 }

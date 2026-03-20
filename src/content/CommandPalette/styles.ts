@@ -330,6 +330,14 @@ export function getStyles(): string {
         gap: 6px;
       }
 
+      .glass-token-usage {
+        font-size: 11px;
+        color: var(--text-tertiary);
+        margin-left: auto;
+        white-space: nowrap;
+        line-height: 32px;
+      }
+
       .glass-footer-btn {
         display: flex;
         align-items: center;
@@ -418,7 +426,6 @@ export function getStyles(): string {
       }
 
       .glass-item:active {
-        transform: scale(0.98);
       }
 
       .glass-item-icon {
@@ -2175,6 +2182,138 @@ export function getStyles(): string {
         color: var(--text-primary);
       }
 
+      /* Plugin nav card (in settings page) */
+      .glass-plugin-nav {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: var(--glass-bg-elevated);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-plugin-nav:hover {
+        background: var(--glass-bg-hover);
+      }
+
+      .glass-plugin-nav:active {
+      }
+
+      .glass-plugin-nav-icon {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--glass-bg-hover);
+        border-radius: 8px;
+        flex-shrink: 0;
+      }
+
+      .glass-plugin-nav-icon svg {
+        width: 20px;
+        height: 20px;
+        color: var(--text-primary);
+      }
+
+      .glass-plugin-nav-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .glass-plugin-nav-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .glass-plugin-nav-subtitle {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+      }
+
+      .glass-plugin-nav-arrow {
+        color: var(--text-tertiary);
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+
+      /* Plugin cards list (in plugins management page) */
+      .glass-plugin-cards-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px;
+      }
+
+      .glass-plugin-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: var(--glass-bg-elevated);
+        border: 1px solid var(--glass-border);
+        border-radius: 12px;
+        transition: background var(--duration-fast) var(--ease-out), opacity var(--duration-fast) var(--ease-out);
+      }
+
+      .glass-plugin-card-clickable {
+        cursor: pointer;
+      }
+
+      .glass-plugin-card-clickable:hover {
+        background: var(--glass-bg-hover);
+      }
+
+      .glass-plugin-card-clickable:active {
+      }
+
+      .glass-plugin-card-disabled {
+        opacity: 0.5;
+      }
+
+      .glass-plugin-card-icon {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--glass-bg-hover);
+        border-radius: 8px;
+        flex-shrink: 0;
+      }
+
+      .glass-plugin-card-icon svg {
+        width: 20px;
+        height: 20px;
+        color: var(--text-primary);
+      }
+
+      .glass-plugin-card-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .glass-plugin-card-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .glass-plugin-card-desc {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
       /* Storage usage */
       .glass-settings-section-title {
         display: flex;
@@ -2769,6 +2908,7 @@ export function getStyles(): string {
       .glass-chat-footer-actions {
         display: flex;
         gap: 6px;
+        align-items: center;
       }
 
       /* ========================================

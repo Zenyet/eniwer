@@ -1,0 +1,62 @@
+---
+title: Plugin Interface
+description: Core Plugin interface and lifecycle
+---
+
+## Plugin Interface
+
+Every plugin must implement the `Plugin` interface:
+
+```typescript
+interface Plugin {
+  /** Unique plugin identifier */
+  readonly id: string;
+  /** Display name */
+  readonly name: string;
+  /** Called when the plugin is activated; receives the context */
+  activate(ctx: PluginContext): void;
+  /** Called when the plugin is deactivated */
+  deactivate(): void;
+}
+```
+
+## Lifecycle
+
+1. **Registration** — plugin instance is registered with `PluginManager.register(plugin)`
+2. **Activation** — `activate(ctx)` is called with a `PluginContext` providing all available services
+3. **Runtime** — the plugin responds to commands, renders views, contributes settings
+4. **Deactivation** — `deactivate()` is called for cleanup
+
+## Minimal Example
+
+```typescript
+import type { Plugin, PluginContext } from './plugins/types';
+
+class HelloPlugin implements Plugin {
+  readonly id = 'hello';
+  readonly name = 'Hello World';
+
+  activate(ctx: PluginContext): void {
+    ctx.showToast('Hello from plugin!');
+  }
+
+  deactivate(): void {
+    // cleanup
+  }
+}
+```
+
+## Registration
+
+### Pre-init (before Eniwer loads)
+
+```javascript
+window.__thePanelPlugins = window.__thePanelPlugins || [];
+window.__thePanelPlugins.push(new HelloPlugin());
+```
+
+### Late registration (after Eniwer loads)
+
+```javascript
+window.__thePanelRegisterPlugin?.(new HelloPlugin());
+```

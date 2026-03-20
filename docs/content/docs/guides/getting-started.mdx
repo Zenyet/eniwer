@@ -1,0 +1,116 @@
+---
+title: Getting Started
+description: Create your first Eniwer plugin
+---
+
+## Overview
+
+External plugins can be loaded into Eniwer via two methods:
+- **Pre-init**: Set `window.__thePanelPlugins` before Eniwer initializes
+- **Late registration**: Call `window.__thePanelRegisterPlugin()` after Eniwer is ready
+
+## Create a Plugin
+
+Create a JavaScript file that defines and registers your plugin:
+
+```javascript
+// my-plugin.js
+(function() {
+  const plugin = {
+    id: 'word-counter',
+    name: 'Word Counter',
+
+    activate(ctx) {
+      this.ctx = ctx;
+    },
+
+    deactivate() {
+      this.ctx = null;
+    },
+
+    // CommandContributor
+    getCommands() {
+      return [{
+        id: 'count-words',
+        action: 'countWords',
+        label: 'Count Words',
+        icon: '#',
+        enabled: true,
+        order: 200,
+      }];
+    },
+
+    handleCommand(action, selectedText) {
+      if (action !== 'countWords') return false;
+
+      const text = selectedText || this.ctx.getSelectedText();
+      const count = text.trim().split(/\s+/).filter(Boolean).length;
+      this.ctx.showToast(`Word count: ${count}`);
+      return true;
+    },
+  };
+
+  // Register
+  if (window.__thePanelRegisterPlugin) {
+    window.__thePanelRegisterPlugin(plugin);
+  } else {
+    window.__thePanelPlugins = window.__thePanelPlugins || [];
+    window.__thePanelPlugins.push(plugin);
+  }
+})();
+```
+
+## Load the Plugin
+
+Inject the script into web pages using a userscript manager (Tampermonkey, Violentmonkey) or another browser extension.
+
+### Tampermonkey Example
+
+```javascript
+// ==UserScript==
+// @name         Eniwer Word Counter
+// @match        *://*/*
+// @run-at       document-start
+// ==/UserScript==
+
+(function() {
+  window.__thePanelPlugins = window.__thePanelPlugins || [];
+  window.__thePanelPlugins.push({
+    id: 'word-counter',
+    name: 'Word Counter',
+    activate(ctx) { this.ctx = ctx; },
+    deactivate() {},
+    getCommands() {
+      return [{
+        id: 'count-words',
+        action: 'countWords',
+        label: 'Count Words',
+        icon: '#',
+        enabled: true,
+        order: 200,
+      }];
+    },
+    handleCommand(action) {
+      if (action !== 'countWords') return false;
+      const text = this.ctx.getSelectedText();
+      this.ctx.showToast(`Words: ${text.trim().split(/\s+/).length}`);
+      return true;
+    },
+  });
+})();
+```
+
+## Plugin States
+
+Users can enable/disable plugins from the settings panel. Plugin states are persisted in the extension config under `pluginStates`:
+
+```json
+{
+  "pluginStates": {
+    "word-counter": true,
+    "youtube": false
+  }
+}
+```
+
+When a plugin is disabled, its commands are hidden and its settings section is not rendered.

@@ -1,33 +1,26 @@
 // Command Palette - Apple Liquid Glass Design
 // The unified interface for The Panel with authentic iOS 26 Liquid Glass aesthetics
-import { MenuItem, MenuConfig, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, CustomMenuItem, BrowseSession, TrailEntry, ChatSession, AuthState } from '../../types';
+import { MenuItem, MenuConfig, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_HISTORY_CONFIG, TrailEntry } from '../../types';
 import { icons } from '../../icons';
 import { getStorageData, saveConfig, saveGlobalMenuItems } from '../../utils/storage';
 import { saveTask, getAllTasks, deleteTask, SavedTask, enforceMaxCount } from '../../utils/taskStorage';
-import { loadBrowseTrailSessions, deleteTrailEntry, clearTrailHistory, exportTrailData } from '../BrowseTrailPanel';
-import { loadChatSession, saveChatSession, createNewChatSession, createChatMessage, getContextChatSystemPrompt, buildConversationPrompt, parseReferences } from '../ContextChatPanel';
+import { loadBrowseTrailSessions } from '../BrowseTrailPanel';
+import { createNewChatSession, createChatMessage } from '../ContextChatPanel';
 import { callAI, OnChunkCallback, getTranslatePrompt, abortAllRequests } from '../../utils/ai';
-import { getAllAnnotations, deleteAnnotation as deleteAnnotationFromStorage } from '../annotation/storage';
-import { Annotation, ANNOTATION_COLORS } from '../../types/annotation';
+import { getAllAnnotations } from '../annotation/storage';
+import { Annotation } from '../../types/annotation';
 import { t } from '../../i18n';
+import type { PluginManager } from '../../plugins';
+import { isSettingsContributor } from '../../plugins/types';
+import type { Plugin, SettingsContributor } from '../../plugins/types';
 
 // Import views
 import {
   // Settings View
   getSettingsViewHTML as getSettingsViewHTMLFromModule,
-  getAccountSettingsHTML as getAccountSettingsHTMLFromModule,
   getMenuSettingsHTML as getMenuSettingsHTMLFromModule,
-  // Annotations View
-  normalizeUrlForAnnotation,
   // Knowledge View
   KnowledgeItem,
-  annotationToKnowledgeItem,
-  savedTaskToKnowledgeItem,
-  getActionTypeLabel,
-  getAIResultTypeLabel,
-  groupKnowledgeByDate,
-  exportKnowledgeToJSON,
-  exportKnowledgeToMarkdown,
 } from './views';
 
 // Import types from types module
@@ -57,51 +50,29 @@ export type {
 // Import styles from styles module
 import { getStyles } from './styles';
 import {
-  bindAnnotationsEvents as bindAnnotationsEventsFromController,
-  bindBrowseTrailEvents as bindBrowseTrailEventsFromController,
   bindCommandsEvents as bindCommandsEventsFromController,
-  renderBrowseTrailContent,
-  bindContextChatEvents as bindContextChatEventsFromController,
-  bindThinkingSections,
-  bindKnowledgeEvents as bindKnowledgeEventsFromController,
   bindMenuSettingsEvents as bindMenuSettingsEventsFromController,
-  bindScreenshotViewEvents as bindScreenshotViewEventsFromController,
   bindSettingsEvents as bindSettingsEventsFromController,
   buildRestoredTaskState,
   createAIResultMinimizedTask,
-  createChatMinimizedTask,
   createDragHandlers,
   createDragState,
   createMinimizedTaskId,
-  createScreenshotMinimizedTask,
   createStreamKey,
-  getAnnotationsViewHTML as getAnnotationsViewHTMLFromController,
-  getBrowseTrailViewHTML as getBrowseTrailViewHTMLFromController,
   getCommandsViewHTML as getCommandsViewHTMLFromController,
-  getContextChatContentHTML as getContextChatContentHTMLFromController,
-  getContextChatViewHTML as getContextChatViewHTMLFromController,
   getFilteredRecentTasks as getFilteredRecentTasksFromController,
-  getLocalFilteredAnnotations as getLocalFilteredAnnotationsFromController,
-  getKnowledgeViewHTML as getKnowledgeViewHTMLFromController,
-  getLocalFilteredKnowledgeItems as getLocalFilteredKnowledgeItemsFromController,
-  getScreenshotViewHTML as getScreenshotViewHTMLFromController,
   removeExistingTaskForAction,
   renderCommandsContent as renderCommandsContentFromController,
-  renderAnnotationsContent,
-  renderStreamingChatContent,
   renderMinimizedTasksSection as renderMinimizedTasksSectionFromController,
   renderRecentTasksSection as renderRecentTasksSectionFromController,
-  renderScreenshotContent as renderScreenshotContentFromController,
-  renderKnowledgeContent,
   takeMinimizedTask,
-  updateAnnotationsFooter as updateAnnotationsFooterFromController,
-  updateKnowledgeFooter as updateKnowledgeFooterFromController,
 } from './controllers';
 
 // Import utility functions from utils module
 import {
   escapeHtml,
   formatAIContent,
+  formatTokenUsage,
   getLoadingHTML,
   getThinkingSectionHTML,
   formatTimeAgo,
@@ -134,36 +105,11 @@ export class CommandPalette {
   private aiResultData: AIResultData | null = null;
   private aiResultCallbacks: AIResultCallbacks | null = null;
 
-  // Screenshot state
-  private screenshotData: ScreenshotData | null = null;
-  private screenshotCallbacks: ScreenshotCallbacks | null = null;
-
   // Settings state
   private settingsMenuItems: MenuItem[] = [];
   private editingItemId: string | null = null;
   private tempConfig: MenuConfig | null = null;
   private settingsChanged = false;
-
-  // Browse Trail state
-  private browseTrailSessions: BrowseSession[] = [];
-  private browseTrailSearch = '';
-  private browseTrailDisplayCount = 50;
-
-  // Context Chat state
-  private chatSession: ChatSession | null = null;
-  private isChatStreaming = false;
-  private isQuickAsk = false;
-  private pendingQuickAskQuestion: string | null = null;
-
-  // Annotations state
-  private annotationsList: Annotation[] = [];
-  private annotationsSearch = '';
-  private annotationsFilter: 'all' | 'current' = 'all';
-
-  // Knowledge base state
-  private knowledgeItems: KnowledgeItem[] = [];
-  private knowledgeSearch = '';
-  private knowledgeFilter: 'all' | 'annotations' | 'ai-results' = 'all';
 
   // Global search state
   private globalSearchResults: {
@@ -195,8 +141,9 @@ export class CommandPalette {
   // Unsaved recent results (in-memory only, cleared on page refresh)
   private unsavedRecentTasks: SavedTask[] = [];
 
-  // Auth state for Google login
-  private authState: AuthState | null = null;
+  // Plugin manager (set via setPluginManager)
+  private pluginManager: PluginManager | null = null;
+  private currentPluginSettingsId: string | null = null;
 
   constructor(config: MenuConfig) {
     this.config = config;
@@ -210,6 +157,54 @@ export class CommandPalette {
     this.updateTheme();
     // Reload recent tasks when config changes (display count may have changed)
     this.loadRecentSavedTasks();
+    // Refresh menu items so disabled plugin commands are removed
+    this.refreshMenuItems();
+  }
+
+  /** Filter out base menu items whose id matches a disabled plugin. */
+  private filterDisabledPluginItems(items: MenuItem[]): MenuItem[] {
+    if (!this.pluginManager) return items;
+    return items.filter(item => this.pluginManager!.isMenuItemEnabled(item.id));
+  }
+
+  /** Rebuild menuItems by merging stored global items with enabled plugin commands. */
+  public refreshMenuItems(): void {
+    if (this.menuItems.length === 0) return; // not initialized yet
+    const baseItems = this.filterDisabledPluginItems(this.menuItems.filter(item => !item._fromPlugin));
+    const pluginCommands = (this.pluginManager?.getAllCommands() ?? []).map(c => ({ ...c, _fromPlugin: true } as MenuItem));
+    this.menuItems = [...baseItems, ...pluginCommands];
+    this.filteredItems = this.sortByRecent(this.menuItems);
+  }
+
+  public setPluginManager(pm: PluginManager): void {
+    this.pluginManager = pm;
+  }
+
+  /** Navigate to a plugin-provided (or built-in) view, resetting the view stack. */
+  public navigateToView(viewType: string): void {
+    const from = this.currentView as string;
+    this.currentView = viewType as ViewType;
+    this.viewStack = [];
+
+    // When returning to commands, clear active command state so the command tag doesn't persist
+    if (viewType === 'commands') {
+      this.currentStreamKey = null;
+      this.activeCommand = null;
+      this.activeCommandInput = '';
+      this.aiResultData = null;
+      this.aiResultCallbacks = null;
+      this.searchQuery = '';
+      void this.ensureMenuItems().then(() => {
+        this.filteredItems = this.sortByRecent(this.menuItems);
+        this.selectedIndex = 0;
+        this.renderCurrentView(true, true);
+        this.pluginManager?.emit('view:change', { from, to: viewType });
+      });
+      return;
+    }
+
+    this.renderCurrentView(true, true);
+    this.pluginManager?.emit('view:change', { from, to: viewType });
   }
 
   private updateTheme(overrideTheme?: 'dark' | 'light' | 'system'): void {
@@ -224,7 +219,10 @@ export class CommandPalette {
   }
 
   public show(items: MenuItem[], callbacks: CommandPaletteCallbacks): void {
-    this.menuItems = items.filter(item => item.enabled !== false);
+    // Merge static menu items with dynamic plugin commands (filtered by enabled state)
+    const pluginCommands = (this.pluginManager?.getAllCommands() ?? []).map(c => ({ ...c, _fromPlugin: true }));
+    const baseItems = this.filterDisabledPluginItems(items.filter(item => item.enabled !== false));
+    this.menuItems = [...baseItems, ...pluginCommands];
     this.filteredItems = this.sortByRecent(this.menuItems);
     this.callbacks = callbacks;
     this.updateTheme();
@@ -278,14 +276,18 @@ export class CommandPalette {
         this.saveCurrentAsMinimized();
       }
 
-      // Auto-minimize active chat session before hiding (streaming or completed)
-      if (this.chatSession) {
-        this.saveChatAsMinimized();
-      }
-
-      // Auto-minimize active screenshot before hiding (loading or completed)
-      if (this.screenshotData) {
-        this.saveScreenshotAsMinimized();
+      // Auto-minimize any plugin MinimizableContributors (handles chat, screenshot, etc.)
+      if (this.pluginManager) {
+        for (const contributor of this.pluginManager.getMinimizableContributors()) {
+          try {
+            const data = contributor.saveAsMinimized();
+            if (data) {
+              this.createPluginMinimizedTask(data);
+            }
+          } catch (err) {
+            console.error(`[CommandPalette] Error saving minimized state for plugin "${contributor.id}":`, err);
+          }
+        }
       }
 
       // Determine auto-restore strategy for next show()
@@ -329,11 +331,7 @@ export class CommandPalette {
         this.currentView = 'commands';
         this.aiResultData = null;
         this.aiResultCallbacks = null;
-        this.screenshotData = null;
-        this.screenshotCallbacks = null;
         this.dragState.hasDragged = false;
-        // Note: chatSession/isChatStreaming are NOT reset here because
-        // sendChatMessage may still be running in the background with a local reference
       }, 250);
     }
   }
@@ -364,11 +362,13 @@ export class CommandPalette {
       'ai-result': this.aiResultData?.title || t('view.aiResult'),
       'settings': t('view.settings'),
       'settings-menu': t('view.settingsMenu'),
+      'plugins': t('settings.pluginManagement'),
       'screenshot': t('view.screenshot'),
       'browseTrail': t('view.browseTrail'),
       'contextChat': t('view.contextChat'),
       'annotations': t('view.annotations'),
       'knowledge': t('view.knowledge'),
+      'plugin-settings': '',
     };
     return titles[view];
   }
@@ -459,90 +459,27 @@ export class CommandPalette {
     this.searchQuery = '';
   }
 
-  // Screenshot methods
+  // Screenshot methods — thin proxies delegating to ScreenshotPlugin
   public showScreenshot(dataUrl: string, callbacks?: ScreenshotCallbacks): void {
-    // Set active command for screenshot
-    this.activeCommand = {
-      id: 'screenshot',
-      action: 'screenshot',
-      label: t('menu.screenshot'),
-      icon: '',
-      enabled: true,
-      order: 0,
-    };
-
-    this.screenshotData = {
-      dataUrl,
-      isLoading: false,
-    };
-    this.screenshotCallbacks = callbacks || null;
-    this.currentView = 'screenshot';
-    this.viewStack = [];
-
-    if (!this.container) {
-      this.updateTheme();
-      this.render();
-    } else {
-      this.renderCurrentView(true, true);
+    const plugin = this.pluginManager?.getPlugin('screenshot') as { showScreenshot(d: string, c?: ScreenshotCallbacks): void } | undefined;
+    if (plugin) {
+      // Ensure palette is visible first
+      if (!this.container) {
+        this.updateTheme();
+        this.render();
+      }
+      plugin.showScreenshot(dataUrl, callbacks);
     }
   }
 
-  private _screenshotStreamRAF: number | null = null;
-
   public updateScreenshotResult(result: string, isLoading: boolean = false): void {
-    if (this.screenshotData) {
-      this.screenshotData.result = result;
-      this.screenshotData.isLoading = isLoading;
-
-      // When finished, save to history
-      if (!isLoading && result && !result.startsWith('AI') && !result.includes(t('aiResult.configureHint')) && !result.includes(t('aiResult.requestFailed'))) {
-        if (!this.screenshotData.history) this.screenshotData.history = [];
-        this.screenshotData.history.push({
-          question: this.screenshotData.currentQuestion || t('screenshot.describeImage'),
-          answer: result,
-        });
-        this.screenshotData.currentQuestion = undefined;
-      }
-
-      // Throttle DOM updates during streaming via rAF
-      if (isLoading) {
-        if (!this._screenshotStreamRAF) {
-          this._screenshotStreamRAF = requestAnimationFrame(() => {
-            this._screenshotStreamRAF = null;
-            this.renderScreenshotContent();
-          });
-        }
-      } else {
-        // Final update: render immediately
-        if (this._screenshotStreamRAF) {
-          cancelAnimationFrame(this._screenshotStreamRAF);
-          this._screenshotStreamRAF = null;
-        }
-        this.renderScreenshotContent();
-      }
-    } else {
-      // If screenshot was minimized, update the minimized task
-      const minimizedTask = this.minimizedTasks.find(t => t.taskType === 'screenshot' && t.isLoading);
-      if (minimizedTask) {
-        minimizedTask.screenshotResult = result;
-        minimizedTask.content = result;
-        minimizedTask.isLoading = isLoading;
-        this.renderMinimizedTasksIfVisible();
-      }
-    }
+    const plugin = this.pluginManager?.getPlugin('screenshot') as { updateScreenshotResult(r: string, l?: boolean): void } | undefined;
+    plugin?.updateScreenshotResult(result, isLoading);
   }
 
   public updateScreenshotGeneratedImage(imageUrl: string): void {
-    if (this.screenshotData) {
-      this.screenshotData.generatedImageUrl = imageUrl;
-      this.screenshotData.isLoading = false;
-      this.renderScreenshotContent();
-    }
-  }
-
-  private renderScreenshotContent(): void {
-    if (!this.shadowRoot || !this.screenshotData) return;
-    renderScreenshotContentFromController(this.shadowRoot, this.screenshotData);
+    const plugin = this.pluginManager?.getPlugin('screenshot') as { updateScreenshotGeneratedImage(u: string): void } | undefined;
+    plugin?.updateScreenshotGeneratedImage(imageUrl);
   }
 
   private _streamUpdateRAF: number | null = null;
@@ -588,7 +525,7 @@ export class CommandPalette {
     }
   }
 
-  public updateAIResult(content: string, thinking?: string, targetStreamKey?: string): void {
+  public updateAIResult(content: string, thinking?: string, targetStreamKey?: string, usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }): void {
     // Use targetStreamKey if provided, otherwise use currentStreamKey
     const streamKey = targetStreamKey || this.currentStreamKey;
 
@@ -601,6 +538,9 @@ export class CommandPalette {
       this.aiResultData.isLoading = false;
       if (thinking) {
         this.aiResultData.thinking = thinking;
+      }
+      if (usage) {
+        this.aiResultData.usage = usage;
       }
       completedData = this.aiResultData;
       // Use unified content update if in commands view with active command
@@ -697,7 +637,7 @@ export class CommandPalette {
   }
 
   // Helper to re-render minimized tasks section if currently visible
-  private renderMinimizedTasksIfVisible(): void {
+  public renderMinimizedTasksIfVisible(): void {
     if (this.currentView === 'commands' && this.shadowRoot) {
       this.renderMinimizedTasks();
     }
@@ -708,13 +648,6 @@ export class CommandPalette {
     // Initialize temp config for editing
     this.tempConfig = JSON.parse(JSON.stringify(this.config));
     this.settingsChanged = false;
-
-    // Load auth state before rendering
-    this.loadAuthState().then(() => {
-      if (this.container && this.currentView === 'settings') {
-        this.renderCurrentView(true, true);
-      }
-    });
 
     // Set view state BEFORE rendering
     this.currentView = 'settings';
@@ -871,53 +804,33 @@ export class CommandPalette {
         panel.innerHTML = this.getMenuSettingsHTML();
         this.bindMenuSettingsEvents();
         break;
-      case 'screenshot':
-        panel.innerHTML = this.getScreenshotViewHTML();
-        this.bindScreenshotViewEvents();
+      case 'plugins':
+        panel.innerHTML = this.getPluginsViewHTML();
+        this.bindPluginsViewEvents();
         break;
-      case 'browseTrail':
-        panel.innerHTML = this.getBrowseTrailViewHTML();
-        this.bindBrowseTrailEvents();
-        requestAnimationFrame(() => {
-          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
-          input?.focus();
-        });
+      case 'plugin-settings': {
+        const pluginId = this.currentPluginSettingsId;
+        const plugin = pluginId ? this.pluginManager?.getPluginById(pluginId) : null;
+        if (plugin && isSettingsContributor(plugin)) {
+          const config = this.tempConfig || this.config;
+          panel.innerHTML = this.getPluginSettingsViewHTML(plugin.name, plugin.getSettingsHTML(config));
+          this.bindPluginSettingsEvents(plugin);
+        }
         break;
-      case 'contextChat':
-        panel.innerHTML = this.getContextChatViewHTML();
-        this.bindContextChatEvents();
-        requestAnimationFrame(() => {
-          // Auto-send pending quick ask question
-          if (this.pendingQuickAskQuestion) {
-            const chatInput = this.shadowRoot?.querySelector('.glass-chat-input') as HTMLInputElement;
-            if (chatInput) {
-              chatInput.value = this.pendingQuickAskQuestion;
-              this.pendingQuickAskQuestion = null;
-              this.sendChatMessage(chatInput);
-              return;
-            }
-            this.pendingQuickAskQuestion = null;
-          }
-          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
-          input?.focus();
-        });
+      }
+      default: {
+        // Delegate to plugin ViewContributor if available
+        const contributor = this.pluginManager?.getViewContributor(this.currentView);
+        if (contributor) {
+          panel.innerHTML = contributor.getViewHTML();
+          contributor.bindEvents(this.shadowRoot!);
+          requestAnimationFrame(() => {
+            const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
+            input?.focus();
+          });
+        }
         break;
-      case 'annotations':
-        panel.innerHTML = this.getAnnotationsViewHTML();
-        this.bindAnnotationsEvents();
-        requestAnimationFrame(() => {
-          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
-          input?.focus();
-        });
-        break;
-      case 'knowledge':
-        panel.innerHTML = this.getKnowledgeViewHTML();
-        this.bindKnowledgeEvents();
-        requestAnimationFrame(() => {
-          const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
-          input?.focus();
-        });
-        break;
+      }
     }
   }
 
@@ -1045,7 +958,12 @@ export class CommandPalette {
     if (this.menuItems.length === 0) {
       try {
         const data = await getStorageData();
-        this.menuItems = (data.globalMenuItems || []).filter(item => item.enabled !== false);
+        const pluginCommands = (this.pluginManager?.getAllCommands() ?? []).map(c => ({ ...c, _fromPlugin: true }));
+        const baseItems = this.filterDisabledPluginItems((data.globalMenuItems || []).filter(item => item.enabled !== false));
+        this.menuItems = [
+          ...baseItems,
+          ...pluginCommands,
+        ];
       } catch {
         this.menuItems = [];
       }
@@ -1059,34 +977,28 @@ export class CommandPalette {
       return;
     }
 
-    // If there's an active chat streaming, minimize it to background
-    if (this.currentView === 'contextChat' && this.isChatStreaming && this.chatSession) {
-      this.saveChatAsMinimized();
-      this.activeCommand = null;
-      this.activeCommandInput = '';
-      this.searchQuery = '';
-      this.currentView = 'commands';
-      this.viewStack = [];
-      await this.ensureMenuItems();
-      this.filteredItems = this.sortByRecent(this.menuItems);
-      this.selectedIndex = 0;
-      this.renderCurrentView(true, true);
-      return;
-    }
-
-    // If there's an active screenshot loading, minimize it to background
-    if (this.currentView === 'screenshot' && this.screenshotData?.isLoading) {
-      this.saveScreenshotAsMinimized();
-      this.activeCommand = null;
-      this.activeCommandInput = '';
-      this.searchQuery = '';
-      this.currentView = 'commands';
-      this.viewStack = [];
-      await this.ensureMenuItems();
-      this.filteredItems = this.sortByRecent(this.menuItems);
-      this.selectedIndex = 0;
-      this.renderCurrentView(true, true);
-      return;
+    // If the current view is owned by a MinimizableContributor plugin, let it minimize
+    if (this.pluginManager && this.currentView !== 'commands' && this.currentView !== 'ai-result') {
+      const contributor = this.pluginManager.getMinimizableContributor(
+        // Try to find a minimizable plugin whose viewType matches current view
+        this.pluginManager.getViewContributor(this.currentView)?.id || ''
+      );
+      if (contributor) {
+        const data = contributor.saveAsMinimized();
+        if (data) {
+          this.createPluginMinimizedTask(data);
+          this.activeCommand = null;
+          this.activeCommandInput = '';
+          this.searchQuery = '';
+          this.currentView = 'commands';
+          this.viewStack = [];
+          await this.ensureMenuItems();
+          this.filteredItems = this.sortByRecent(this.menuItems);
+          this.selectedIndex = 0;
+          this.renderCurrentView(true, true);
+          return;
+        }
+      }
     }
 
     // For completed tasks, just clear the active state
@@ -1152,7 +1064,7 @@ export class CommandPalette {
     }
   }
 
-  private async autoSaveAIResult(data: AIResultData): Promise<void> {
+  public async autoSaveAIResult(data: AIResultData): Promise<void> {
     if (!data.content) return;
     try {
       await saveTask({
@@ -1181,7 +1093,7 @@ export class CommandPalette {
     }
   }
 
-  private addToUnsavedRecent(data: AIResultData): void {
+  public addToUnsavedRecent(data: AIResultData): void {
     // Avoid duplicates by streamKey
     if (data.streamKey && this.unsavedRecentTasks.some(t => t.id === `unsaved-${data.streamKey}`)) {
       return;
@@ -1208,37 +1120,6 @@ export class CommandPalette {
     // Re-render recent tasks if visible
     if (this.shadowRoot && this.currentView === 'commands') {
       this.renderRecentTasks();
-    }
-  }
-
-  private async saveChatToKnowledge(btn: HTMLButtonElement): Promise<void> {
-    if (!this.chatSession) return;
-    const lastAssistantMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'assistant' && m.content);
-    if (!lastAssistantMsg) return;
-
-    // Title: first 20 chars of last user message
-    const lastUserMsg = [...this.chatSession.messages].reverse().find(m => m.role === 'user');
-    const title = lastUserMsg
-      ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
-      : (this.isQuickAsk ? t('chat.quickAsk') : t('menu.contextChat'));
-
-    try {
-      await saveTask({
-        title,
-        content: lastAssistantMsg.content,
-        thinking: lastAssistantMsg.thinking,
-        resultType: 'general',
-        actionType: this.isQuickAsk ? 'quickAsk' : 'contextChat',
-        sourceUrl: window.location.href,
-        sourceTitle: document.title,
-        createdAt: Date.now(),
-      });
-      const maxCount = this.config.history?.maxSaveCount || DEFAULT_HISTORY_CONFIG.maxSaveCount;
-      await enforceMaxCount(maxCount);
-      await this.loadRecentSavedTasks();
-      this.showSaveFeedback(btn);
-    } catch (error) {
-      console.error('Failed to save chat:', error);
     }
   }
 
@@ -1308,7 +1189,13 @@ export class CommandPalette {
     if (!this.aiResultData || !this.aiResultData.content) return;
 
     // Check if logged in
-    if (!this.authState?.isLoggedIn) {
+    try {
+      const authStatus = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_STATUS' });
+      if (!authStatus?.isLoggedIn) {
+        this.showToast(t('settings.loginGoogle'));
+        return;
+      }
+    } catch {
       this.showToast(t('settings.loginGoogle'));
       return;
     }
@@ -1427,6 +1314,14 @@ export class CommandPalette {
       }
       if (saveBtn) {
         saveBtn.style.display = this.aiResultData.content && !this.aiResultData.isLoading ? 'flex' : 'none';
+      }
+
+      // Update token usage display
+      const tokenUsageEl = footer.querySelector('.glass-token-usage') as HTMLElement;
+      if (tokenUsageEl) {
+        const usageText = formatTokenUsage(this.aiResultData.usage);
+        tokenUsageEl.textContent = usageText;
+        tokenUsageEl.style.display = usageText && !this.aiResultData.isLoading ? 'inline' : 'none';
       }
     }
 
@@ -1632,34 +1527,20 @@ export class CommandPalette {
     this.aiResultCallbacks = null;
   }
 
-  private saveChatAsMinimized(): void {
-    if (!this.chatSession) return;
-
-    const task = createChatMinimizedTask(
-      createMinimizedTaskId(++this.minimizedTaskIdCounter),
-      this.chatSession,
-      this.isChatStreaming,
-      this.isQuickAsk,
-      t('chat.conversation')
-    );
+  public createPluginMinimizedTask(data: import('../../plugins/types').MinimizedPluginData): void {
+    const task: MinimizedTask = {
+      id: createMinimizedTaskId(++this.minimizedTaskIdCounter),
+      title: data.title,
+      content: '',
+      resultType: 'general',
+      iconHtml: data.iconHtml,
+      isLoading: data.isLoading,
+      minimizedAt: Date.now(),
+      createdAt: Date.now(),
+      pluginId: data.pluginId,
+      pluginData: data.pluginData,
+    };
     this.minimizedTasks.push(task);
-
-    this.chatSession = null;
-    this.isChatStreaming = false;
-  }
-
-  private saveScreenshotAsMinimized(): void {
-    if (!this.screenshotData) return;
-
-    const task = createScreenshotMinimizedTask(
-      createMinimizedTaskId(++this.minimizedTaskIdCounter),
-      this.screenshotData,
-      t('screenshot.screenshotAnalysis')
-    );
-    this.minimizedTasks.push(task);
-
-    this.screenshotData = null;
-    this.screenshotCallbacks = null;
   }
 
   private minimize(): void {
@@ -1672,6 +1553,21 @@ export class CommandPalette {
    * Sets all relevant properties so the view can be rendered afterward.
    */
   private restoreStateFromTask(task: MinimizedTask): void {
+    // Plugin-based minimized tasks: delegate to the plugin's restoreFromMinimized
+    if (task.pluginId && this.pluginManager) {
+      const contributor = this.pluginManager.getMinimizableContributor(task.pluginId);
+      if (contributor) {
+        contributor.restoreFromMinimized({
+          pluginId: task.pluginId,
+          title: task.title,
+          iconHtml: task.iconHtml,
+          isLoading: task.isLoading,
+          pluginData: task.pluginData,
+        });
+        return;
+      }
+    }
+
     const restoredState = buildRestoredTaskState(task, {
       contextChatLabel: t('chat.contextChatLabel'),
       quickAskLabel: t('chat.quickAskLabel'),
@@ -1681,13 +1577,8 @@ export class CommandPalette {
     this.activeCommand = restoredState.activeCommand;
     this.aiResultData = restoredState.aiResultData;
     this.aiResultCallbacks = restoredState.aiResultCallbacks;
-    this.chatSession = restoredState.chatSession;
     this.currentStreamKey = restoredState.currentStreamKey;
     this.currentView = restoredState.currentView;
-    this.isChatStreaming = restoredState.isChatStreaming;
-    this.isQuickAsk = restoredState.isQuickAsk;
-    this.screenshotData = restoredState.screenshotData;
-    this.screenshotCallbacks = null;
     this.viewStack = [];
   }
 
@@ -1696,11 +1587,18 @@ export class CommandPalette {
     if (!task) return;
 
     this.saveCurrentAsMinimized();
-    if (this.isChatStreaming && this.chatSession) {
-      this.saveChatAsMinimized();
-    }
-    if (this.screenshotData?.isLoading) {
-      this.saveScreenshotAsMinimized();
+    // Save any active plugin minimizable state before restoring
+    if (this.pluginManager) {
+      for (const contributor of this.pluginManager.getMinimizableContributors()) {
+        try {
+          const data = contributor.saveAsMinimized();
+          if (data) {
+            this.createPluginMinimizedTask(data);
+          }
+        } catch (err) {
+          console.error(`[CommandPalette] Error saving minimized state for plugin "${contributor.id}":`, err);
+        }
+      }
     }
 
     this.restoreStateFromTask(task);
@@ -1753,6 +1651,14 @@ export class CommandPalette {
     if (stopBtn) {
       stopBtn.style.display = this.aiResultData.isLoading ? 'flex' : 'none';
     }
+
+    // Update token usage display
+    const tokenUsageEl = this.shadowRoot.querySelector('.glass-token-usage') as HTMLElement;
+    if (tokenUsageEl) {
+      const usageText = formatTokenUsage(this.aiResultData.usage);
+      tokenUsageEl.textContent = usageText;
+      tokenUsageEl.style.display = usageText && !this.aiResultData.isLoading ? 'inline' : 'none';
+    }
   }
 
   private toggleCompareMode(): void {
@@ -1787,11 +1693,44 @@ export class CommandPalette {
   // Settings Views
   private getSettingsViewHTML(): string {
     const config = this.tempConfig || this.config;
+
+    // Collect inline settings from plugins with settingsOrder
+    let inlineSettingsHTML = '';
+    if (this.pluginManager) {
+      const inlineContributors = this.pluginManager.getInlineSettingsContributors();
+      inlineSettingsHTML = inlineContributors.map(c => c.getSettingsHTML(config)).join('');
+    }
+
+    // Generate plugin nav card (replaces old inline plugin list)
+    let pluginListHTML = '';
+    if (this.pluginManager) {
+      const pluginsInfo = this.pluginManager.getPluginsInfo();
+      const enabledCount = pluginsInfo.filter(p => p.enabled).length;
+      const totalCount = pluginsInfo.length;
+      pluginListHTML = `
+        <div class="glass-settings-section">
+          <div class="glass-settings-section-title">${t('settings.plugins')}</div>
+          <div class="glass-plugin-nav" id="plugin-nav-card">
+            <div class="glass-plugin-nav-icon">${icons.puzzle}</div>
+            <div class="glass-plugin-nav-content">
+              <div class="glass-plugin-nav-title">${t('settings.pluginManagement')}</div>
+              <div class="glass-plugin-nav-subtitle">${t('settings.pluginsEnabledCount', { enabled: enabledCount, total: totalCount })}</div>
+            </div>
+            <span class="glass-plugin-nav-arrow">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+      `;
+    }
+
     return getSettingsViewHTMLFromModule(
       config,
-      this.authState,
       icons,
-      () => this.getAccountSettingsHTML()
+      inlineSettingsHTML,
+      pluginListHTML || undefined,
     );
   }
 
@@ -1799,7 +1738,6 @@ export class CommandPalette {
     if (!this.shadowRoot || !this.tempConfig) return;
 
     bindSettingsEventsFromController({
-      authState: this.authState,
       getSettingsMenuItems: () => this.settingsMenuItems,
       getTheme: () => this.theme,
       handleDragStart: this.handleDragStart,
@@ -1810,9 +1748,6 @@ export class CommandPalette {
         this.recentSavedTasks = [];
         this.showToast(t('settings.historyCleared'));
       },
-      onGoogleLogin: () => this.handleGoogleLogin(),
-      onGoogleLogout: () => this.handleGoogleLogout(),
-      onLoadBackupList: () => this.loadBackupList(),
       onLoadStorageUsage: () => this.loadStorageUsage(),
       onPopView: () => this.popView(),
       onRenderCurrentView: () => this.renderCurrentView(true, true),
@@ -1828,15 +1763,209 @@ export class CommandPalette {
       },
       onSaveSettings: () => this.saveSettings(),
       onShowToast: (message) => this.showToast(message),
-      onSyncFromCloud: (btn) => this.handleSyncFromCloud(btn),
-      onSyncToCloud: (btn) => this.handleSyncToCloud(btn),
-      onSyncToggle: (enabled) => this.handleSyncToggle(enabled),
       onUpdateTheme: (theme) => this.updateTheme(theme),
       setSettingsChanged: (changed) => { this.settingsChanged = changed; },
       setSettingsMenuItems: (items) => { this.settingsMenuItems = items; },
       shadowRoot: this.shadowRoot,
       tempConfig: this.tempConfig,
     });
+
+    // Bind inline plugin settings events (e.g. CloudSync)
+    if (this.pluginManager) {
+      const inlineContributors = this.pluginManager.getInlineSettingsContributors();
+      const onChange = () => { this.settingsChanged = true; };
+      for (const contributor of inlineContributors) {
+        try {
+          contributor.bindSettingsEvents(this.shadowRoot, this.tempConfig, onChange);
+        } catch (err) {
+          console.error(`[CommandPalette] Error binding inline settings for plugin "${contributor.id}":`, err);
+        }
+      }
+    }
+
+    // Bind plugin nav card → navigate to plugins management page
+    const pluginNavCard = this.shadowRoot.querySelector('#plugin-nav-card');
+    if (pluginNavCard) {
+      pluginNavCard.addEventListener('click', () => {
+        this.pushView({ type: 'plugins', title: t('settings.pluginManagement') });
+      });
+    }
+  }
+
+  private getPluginSettingsViewHTML(pluginName: string, settingsHTML: string): string {
+    return `
+      <div class="glass-header glass-draggable">
+        <button class="glass-back-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <span class="glass-header-title">${escapeHtml(pluginName)}</span>
+        <div class="glass-header-actions"></div>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-body glass-settings-body">
+        <div class="glass-settings-flat">
+          ${settingsHTML}
+        </div>
+      </div>
+      <div class="glass-footer glass-settings-footer">
+        <div class="glass-settings-footer-actions">
+          <button class="glass-btn glass-btn-cancel">${t('common.cancel')}</button>
+          <button class="glass-btn glass-btn-primary glass-btn-save">${t('common.save')}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  private bindPluginSettingsEvents(plugin: Plugin & SettingsContributor): void {
+    if (!this.shadowRoot || !this.tempConfig) return;
+
+    // Back button
+    const backBtn = this.shadowRoot.querySelector('.glass-back-btn');
+    backBtn?.addEventListener('click', () => this.popView());
+
+    // Cancel button
+    const cancelBtn = this.shadowRoot.querySelector('.glass-btn-cancel');
+    cancelBtn?.addEventListener('click', () => this.popView());
+
+    // Save button
+    const saveBtn = this.shadowRoot.querySelector('.glass-btn-save');
+    saveBtn?.addEventListener('click', async () => {
+      await this.saveSettings();
+    });
+
+    // Bind the plugin's own settings events
+    const onChange = () => { this.settingsChanged = true; };
+    try {
+      plugin.bindSettingsEvents(this.shadowRoot, this.tempConfig, onChange);
+    } catch (err) {
+      console.error(`[CommandPalette] Error binding settings events for plugin "${plugin.id}":`, err);
+    }
+
+    // Escape key → popView
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.shadowRoot?.removeEventListener('keydown', keyHandler);
+        this.popView();
+      }
+    };
+    this.shadowRoot.addEventListener('keydown', keyHandler);
+
+    // Make header draggable
+    const header = this.shadowRoot.querySelector('.glass-draggable') as HTMLElement;
+    if (header) {
+      header.addEventListener('mousedown', this.handleDragStart);
+    }
+  }
+
+  // ---- Plugins Management View ----
+
+  private getPluginsViewHTML(): string {
+    const pluginsInfo = this.pluginManager?.getPluginsInfo() || [];
+    const cards = pluginsInfo.map(p => {
+      const disabledClass = p.enabled ? '' : ' glass-plugin-card-disabled';
+      const clickableClass = p.hasSettings ? ' glass-plugin-card-clickable' : '';
+      const desc = p.description ? t(p.description) : '';
+      return `
+        <div class="glass-plugin-card${disabledClass}${clickableClass}" data-plugin-id="${escapeHtml(p.id)}">
+          <div class="glass-plugin-card-icon">${p.icon || icons.puzzle}</div>
+          <div class="glass-plugin-card-info">
+            <div class="glass-plugin-card-name">${escapeHtml(p.name)}</div>
+            ${desc ? `<div class="glass-plugin-card-desc">${escapeHtml(desc)}</div>` : ''}
+          </div>
+          <label class="glass-toggle glass-toggle-small glass-plugin-toggle-wrap">
+            <input type="checkbox" data-plugin-id="${escapeHtml(p.id)}" class="plugin-toggle" ${p.enabled ? 'checked' : ''}>
+            <span class="glass-toggle-slider"></span>
+          </label>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="glass-header glass-draggable">
+        <button class="glass-back-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <span class="glass-header-title">${t('settings.pluginManagement')}</span>
+        <div class="glass-header-actions"></div>
+      </div>
+      <div class="glass-divider"></div>
+      <div class="glass-body glass-settings-body">
+        <div class="glass-plugin-cards-list">
+          ${cards}
+        </div>
+      </div>
+    `;
+  }
+
+  private bindPluginsViewEvents(): void {
+    if (!this.shadowRoot) return;
+
+    // Back button
+    const backBtn = this.shadowRoot.querySelector('.glass-back-btn');
+    backBtn?.addEventListener('click', () => this.popView());
+
+    // Stop toggle clicks from bubbling to card (prevents navigation)
+    this.shadowRoot.querySelectorAll('.glass-plugin-toggle-wrap').forEach((label) => {
+      label.addEventListener('click', (e) => e.stopPropagation());
+    });
+
+    // Plugin toggle events
+    this.shadowRoot.querySelectorAll('.plugin-toggle').forEach((toggle) => {
+      toggle.addEventListener('change', async () => {
+        const input = toggle as HTMLInputElement;
+        const pluginId = input.dataset.pluginId;
+        if (!pluginId || !this.tempConfig) return;
+        if (!this.tempConfig.pluginStates) {
+          this.tempConfig.pluginStates = {};
+        }
+        this.tempConfig.pluginStates[pluginId] = input.checked;
+
+        // Apply immediately: persist + activate/deactivate
+        this.config.pluginStates = { ...this.tempConfig.pluginStates };
+        await saveConfig(this.config);
+        this.pluginManager?.setPluginStates(this.config.pluginStates);
+        this.refreshMenuItems();
+
+        // Toggle disabled visual state on the card
+        const card = input.closest('.glass-plugin-card');
+        if (card) {
+          card.classList.toggle('glass-plugin-card-disabled', !input.checked);
+        }
+      });
+    });
+
+    // Plugin card click → navigate to plugin settings (only for hasSettings plugins)
+    this.shadowRoot.querySelectorAll('.glass-plugin-card-clickable').forEach((card) => {
+      card.addEventListener('click', () => {
+        const pluginId = (card as HTMLElement).dataset.pluginId;
+        if (!pluginId) return;
+        this.currentPluginSettingsId = pluginId;
+        this.pushView({ type: 'plugin-settings', title: '' });
+      });
+    });
+
+    // Escape key → popView
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.shadowRoot?.removeEventListener('keydown', keyHandler);
+        this.popView();
+      }
+    };
+    this.shadowRoot.addEventListener('keydown', keyHandler);
+
+    // Make header draggable
+    const header = this.shadowRoot.querySelector('.glass-draggable') as HTMLElement;
+    if (header) {
+      header.addEventListener('mousedown', this.handleDragStart);
+    }
   }
 
   private async loadStorageUsage(): Promise<void> {
@@ -1929,6 +2058,12 @@ export class CommandPalette {
     await saveConfig(savedConfig);
     this.config = savedConfig;
 
+    // Immediately sync plugin states so menuItems refresh doesn't wait for storage listener
+    if (savedConfig.pluginStates && this.pluginManager) {
+      this.pluginManager.setPluginStates(savedConfig.pluginStates);
+      this.refreshMenuItems();
+    }
+
     // Apply history settings if changed
     if (savedConfig.history) {
       await enforceMaxCount(savedConfig.history.maxSaveCount);
@@ -1950,298 +2085,6 @@ export class CommandPalette {
         }
       });
     });
-  }
-
-  // Account Settings HTML
-  private getAccountSettingsHTML(): string {
-    const config = this.tempConfig || this.config;
-    return getAccountSettingsHTMLFromModule(this.authState, config);
-  }
-
-  // Load auth state from background
-  private async loadAuthState(): Promise<void> {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_STATUS' });
-      this.authState = response;
-    } catch (error) {
-      console.error('Failed to load auth state:', error);
-      this.authState = { isLoggedIn: false, user: null, syncEnabled: false };
-    }
-  }
-
-  // Handle Google login
-  private async handleGoogleLogin(): Promise<void> {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_LOGIN' });
-      if (response.success) {
-        await this.loadAuthState();
-        this.renderCurrentView(true, true);
-        this.showToast(t('settings.loginSuccess'));
-      } else {
-        this.showToast(response.error || t('settings.loginFailed'));
-      }
-    } catch (error) {
-      console.error('Google login error:', error);
-      this.showToast(t('settings.loginFailed'));
-    }
-  }
-
-  // Handle Google logout
-  private async handleGoogleLogout(): Promise<void> {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GOOGLE_AUTH_LOGOUT' });
-      if (response.success) {
-        this.authState = { isLoggedIn: false, user: null, syncEnabled: false };
-        this.renderCurrentView(true, true);
-        this.showToast(t('settings.logoutSuccess'));
-      } else {
-        this.showToast(response.error || t('settings.logoutFailed'));
-      }
-    } catch (error) {
-      console.error('Google logout error:', error);
-      this.showToast(t('settings.logoutFailed'));
-    }
-  }
-
-  // Handle sync toggle
-  private async handleSyncToggle(enabled: boolean): Promise<void> {
-    try {
-      await chrome.runtime.sendMessage({ type: 'SET_SYNC_ENABLED', payload: enabled });
-      if (this.authState) {
-        this.authState.syncEnabled = enabled;
-      }
-      if (enabled) {
-        // First try to download from cloud (preserve existing cloud data)
-        const syncResult = await chrome.runtime.sendMessage({ type: 'SYNC_FROM_CLOUD' });
-        if (syncResult.success && syncResult.data) {
-          // Cloud had data, applied it locally
-          const { getStorageData } = await import('../../utils/storage');
-          const data = await getStorageData();
-          this.config = data.config;
-          this.tempConfig = JSON.parse(JSON.stringify(this.config));
-          this.renderCurrentView(true, true);
-          this.showToast(t('settings.syncEnabledWithRestore'));
-        } else {
-          // No cloud data, upload current config
-          await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
-          this.showToast(t('settings.syncEnabled'));
-        }
-      } else {
-        this.showToast(t('settings.syncDisabled'));
-      }
-    } catch (error) {
-      console.error('Sync toggle error:', error);
-      this.showToast(t('settings.operationFailed'));
-    }
-  }
-
-  // Manual sync to cloud
-  private async handleSyncToCloud(btn: HTMLButtonElement): Promise<void> {
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<span class="glass-spinner"></span> ' + t('settings.syncing');
-    btn.disabled = true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'SYNC_TO_CLOUD' });
-      if (response.success) {
-        this.showToast(t('settings.uploadSuccess'));
-      } else {
-        this.showToast(response.error || t('settings.uploadFailed'));
-      }
-    } catch (error) {
-      console.error('Sync to cloud error:', error);
-      this.showToast(t('settings.uploadFailed'));
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-    }
-  }
-
-  // Manual sync from cloud
-  private async handleSyncFromCloud(btn: HTMLButtonElement): Promise<void> {
-    const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<span class="glass-spinner"></span> ' + t('settings.syncing');
-    btn.disabled = true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'SYNC_FROM_CLOUD' });
-      if (response.success) {
-        this.showToast(t('settings.downloadSuccess'));
-        // Reload config to reflect changes
-        const { getStorageData } = await import('../../utils/storage');
-        const data = await getStorageData();
-        this.config = data.config;
-        this.tempConfig = JSON.parse(JSON.stringify(this.config));
-        this.renderCurrentView(true, true);
-      } else {
-        this.showToast(response.error || t('settings.restoreFailed'));
-      }
-    } catch (error) {
-      console.error('Sync from cloud error:', error);
-      this.showToast(t('settings.restoreFailed'));
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-    }
-  }
-
-  // Format backup timestamp to MM-DD HH:mm
-  private formatBackupTime(timestamp: number): string {
-    const d = new Date(timestamp);
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const hour = String(d.getHours()).padStart(2, '0');
-    const minute = String(d.getMinutes()).padStart(2, '0');
-    return `${month}-${day} ${hour}:${minute}`;
-  }
-
-  // Load and render backup list
-  private async loadBackupList(): Promise<void> {
-    if (!this.shadowRoot) return;
-    const listEl = this.shadowRoot.querySelector('#backup-list');
-    if (!listEl) return;
-
-    listEl.innerHTML = `<div class="glass-backup-empty">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
-        <circle cx="12" cy="12" r="10"></circle>
-        <polyline points="12 6 12 12 16 14"></polyline>
-      </svg>
-      <span>${t('common.loading')}</span>
-    </div>`;
-
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'LIST_BACKUPS' });
-      if (!response.success) {
-        listEl.innerHTML = `<div class="glass-backup-empty"><span>${response.error || t('settings.loadFailed')}</span></div>`;
-        return;
-      }
-
-      const backups = response.backups || [];
-      if (backups.length === 0) {
-        listEl.innerHTML = `<div class="glass-backup-empty">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.4">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
-          </svg>
-          <span>${t('settings.noBackups')}</span>
-        </div>`;
-        return;
-      }
-
-      listEl.innerHTML = backups.map((b: { id: string; name: string; timestamp: number }, i: number) => `
-        <div class="glass-backup-item${i === 0 ? ' glass-backup-item-latest' : ''}" data-id="${b.id}">
-          <div class="glass-backup-info">
-            <div class="glass-backup-dot"></div>
-            <div class="glass-backup-meta">
-              <span class="glass-backup-time">${this.formatBackupTime(b.timestamp)}</span>
-              <span class="glass-backup-label">${i === 0 ? t('settings.latestBackup') : this.formatRelativeTime(b.timestamp)}</span>
-            </div>
-          </div>
-          <div class="glass-backup-actions">
-            <button class="glass-backup-action-btn glass-btn-restore" data-id="${b.id}" title="${t('settings.restoreBackup')}">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="1 4 1 10 7 10"></polyline>
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-              </svg>
-            </button>
-            <button class="glass-backup-action-btn glass-backup-action-btn-danger glass-btn-delete-backup" data-id="${b.id}" title="${t('settings.deleteBackup')}">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-            </button>
-          </div>
-        </div>
-      `).join('');
-
-      // Bind restore buttons
-      listEl.querySelectorAll('.glass-btn-restore').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const fileId = (btn as HTMLElement).dataset.id!;
-          this.handleRestoreBackup(fileId, btn as HTMLButtonElement);
-        });
-      });
-
-      // Bind delete buttons
-      listEl.querySelectorAll('.glass-btn-delete-backup').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const fileId = (btn as HTMLElement).dataset.id!;
-          this.handleDeleteBackup(fileId, btn as HTMLButtonElement);
-        });
-      });
-    } catch (error) {
-      console.error('Load backup list error:', error);
-      listEl.innerHTML = `<div class="glass-backup-empty"><span>${t('settings.loadFailed')}</span></div>`;
-    }
-  }
-
-  private formatRelativeTime(timestamp: number): string {
-    const diff = Date.now() - timestamp;
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return t('time.justNow');
-    if (minutes < 60) return t('time.minutesAgo', { n: minutes });
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return t('time.hoursAgo', { n: hours });
-    const days = Math.floor(hours / 24);
-    if (days < 30) return t('time.daysAgo', { n: days });
-    return t('time.monthsAgo', { n: Math.floor(days / 30) });
-  }
-
-  private static SPINNER_SVG = '<svg class="glass-backup-spinner" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2a10 10 0 0 1 10 10" /></svg>';
-
-  // Handle restore backup
-  private async handleRestoreBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
-    const originalHTML = btn.innerHTML;
-    const item = btn.closest('.glass-backup-item');
-    btn.innerHTML = CommandPalette.SPINNER_SVG;
-    btn.disabled = true;
-    item?.classList.add('glass-backup-item-loading');
-
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'RESTORE_BACKUP', payload: { fileId } });
-      if (response.success) {
-        this.showToast(t('settings.backupRestored'));
-        const { getStorageData } = await import('../../utils/storage');
-        const data = await getStorageData();
-        this.config = data.config;
-        this.tempConfig = JSON.parse(JSON.stringify(this.config));
-        this.renderCurrentView(true, true);
-      } else {
-        this.showToast(response.error || t('settings.restoreFailed'));
-      }
-    } catch (error) {
-      console.error('Restore backup error:', error);
-      this.showToast(t('settings.restoreFailed'));
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-      item?.classList.remove('glass-backup-item-loading');
-    }
-  }
-
-  // Handle delete backup
-  private async handleDeleteBackup(fileId: string, btn: HTMLButtonElement): Promise<void> {
-    const originalHTML = btn.innerHTML;
-    const item = btn.closest('.glass-backup-item');
-    btn.innerHTML = CommandPalette.SPINNER_SVG;
-    btn.disabled = true;
-    item?.classList.add('glass-backup-item-loading');
-
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'DELETE_BACKUP', payload: { fileId } });
-      if (response.success) {
-        this.showToast(t('settings.backupDeleted'));
-        this.loadBackupList();
-      } else {
-        this.showToast(response.error || t('settings.deleteFailed'));
-      }
-    } catch (error) {
-      console.error('Delete backup error:', error);
-      this.showToast(t('settings.deleteFailed'));
-    } finally {
-      btn.innerHTML = originalHTML;
-      btn.disabled = false;
-      item?.classList.remove('glass-backup-item-loading');
-    }
   }
 
   private showToast(message: string): void {
@@ -2280,88 +2123,6 @@ export class CommandPalette {
       shadowRoot: this.shadowRoot,
     });
   }
-
-  // Screenshot View
-  private getScreenshotViewHTML(): string {
-    return getScreenshotViewHTMLFromController({
-      screenshotData: this.screenshotData,
-    });
-  }
-
-  private bindScreenshotViewEvents(): void {
-    if (!this.shadowRoot) return;
-
-    bindScreenshotViewEventsFromController({
-      handleDragStart: this.handleDragStart,
-      onClose: () => {
-        if (this.screenshotData?.isLoading) {
-          this.saveScreenshotAsMinimized();
-        }
-        this.screenshotData = null;
-        this.screenshotCallbacks?.onClose?.();
-        this.screenshotCallbacks = null;
-        this.activeCommand = null;
-        this.currentView = 'commands';
-        this.renderCurrentView(true, true);
-      },
-      onCopyImage: () => {
-        this.screenshotCallbacks?.onCopy?.();
-      },
-      onCopyResult: (button, text) => {
-        navigator.clipboard.writeText(text);
-        this.showCopyFeedback(button);
-      },
-      onDescribe: () => {
-        if (!this.screenshotData) return;
-        this.screenshotData.currentQuestion = t('screenshot.describeImage');
-        this.screenshotData.result = undefined;
-        this.screenshotData.isLoading = true;
-        this.renderScreenshotContent();
-        this.screenshotCallbacks?.onDescribe?.();
-      },
-      onSave: () => {
-        this.screenshotCallbacks?.onSave?.();
-      },
-      onStop: () => {
-        if (this.screenshotData) {
-          this.screenshotData.isLoading = false;
-        }
-        this.screenshotCallbacks?.onStop?.();
-        this.renderScreenshotContent();
-      },
-      onSubmitQuestion: (question, input) => {
-        if (!this.screenshotData) return;
-        this.screenshotData.currentQuestion = question;
-        this.screenshotData.result = undefined;
-        this.screenshotData.isLoading = true;
-        this.renderScreenshotContent();
-        this.screenshotCallbacks?.onAskAI?.(question);
-        input.value = '';
-      },
-      shadowRoot: this.shadowRoot,
-    });
-
-    // Escape key
-    document.removeEventListener('keydown', this.handleScreenshotKeydown);
-    document.addEventListener('keydown', this.handleScreenshotKeydown);
-  }
-
-  private handleScreenshotKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape' && this.currentView === 'screenshot') {
-      e.preventDefault();
-      document.removeEventListener('keydown', this.handleScreenshotKeydown);
-      // If loading, minimize to background instead of discarding
-      if (this.screenshotData?.isLoading) {
-        this.saveScreenshotAsMinimized();
-      }
-      this.screenshotData = null;
-      this.screenshotCallbacks?.onClose?.();
-      this.screenshotCallbacks = null;
-      this.activeCommand = null;
-      this.currentView = 'commands';
-      this.renderCurrentView(true, true);
-    }
-  };
 
   // Load settings menu items
   public async loadSettingsMenuItems(): Promise<void> {
@@ -2567,24 +2328,27 @@ export class CommandPalette {
   }
 
   private restoreSavedTask(task: SavedTask): void {
-    // Restore quickAsk/contextChat tasks as contextChat view
+    // Restore quickAsk/contextChat tasks via plugin
     if (task.actionType === 'quickAsk' || task.actionType === 'contextChat') {
-      const session = createNewChatSession(task.sourceUrl || window.location.href, task.sourceTitle || document.title);
-      session.messages.push(createChatMessage('user', task.title));
-      session.messages.push(createChatMessage('assistant', task.content, undefined, task.thinking));
-      this.chatSession = session;
-      this.isQuickAsk = task.actionType === 'quickAsk';
-      this.activeCommand = {
-        id: task.actionType,
-        action: 'contextChat',
-        label: task.actionType === 'quickAsk' ? t('chat.quickAskLabel') : t('chat.contextChatLabel'),
-        icon: task.actionType === 'quickAsk' ? icons.messageCircle : icons.contextChat,
-        enabled: true,
-        order: 0,
-      };
-      this.currentView = 'contextChat';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
+      const chatPlugin = this.pluginManager?.getPlugin('contextChat') as {
+        restoreFromMinimized(data: { pluginId: string; title: string; iconHtml?: string; isLoading: boolean; pluginData: unknown }): void;
+      } | undefined;
+      if (chatPlugin) {
+        const session = createNewChatSession(task.sourceUrl || window.location.href, task.sourceTitle || document.title);
+        session.messages.push(createChatMessage('user', task.title));
+        session.messages.push(createChatMessage('assistant', task.content, undefined, task.thinking));
+        chatPlugin.restoreFromMinimized({
+          pluginId: 'contextChat',
+          title: task.title,
+          iconHtml: task.actionType === 'quickAsk' ? icons.messageCircle : icons.contextChat,
+          isLoading: false,
+          pluginData: {
+            chatSession: session,
+            isQuickAsk: task.actionType === 'quickAsk',
+            isChatStreaming: false,
+          },
+        });
+      }
       return;
     }
 
@@ -2658,7 +2422,7 @@ export class CommandPalette {
       const result = await callAI(originalText, systemPrompt, this.config, onChunk);
 
       if (result.success && result.result) {
-        this.updateAIResult(result.result);
+        this.updateAIResult(result.result, undefined, undefined, result.usage);
       } else {
         this.updateAIResult(result.error || t('aiResult.translationFailed'));
       }
@@ -2694,13 +2458,14 @@ export class CommandPalette {
   }
 
   private async executeSelected(): Promise<void> {
-    // If no filtered items but has search query, start quick ask
+    // If no filtered items but has search query, start quick ask via plugin
     if (this.filteredItems.length === 0) {
       // Get the original input value (preserving case)
       const input = this.shadowRoot?.querySelector('.glass-input') as HTMLInputElement;
       const question = input?.value?.trim();
       if (question) {
-        this.startQuickAsk(question);
+        const chatPlugin = this.pluginManager?.getPlugin('contextChat') as { startQuickAsk(q: string): void } | undefined;
+        chatPlugin?.startQuickAsk(question);
       }
       return;
     }
@@ -2718,12 +2483,6 @@ export class CommandPalette {
       this.settingsChanged = false;
       this.currentView = 'settings';
       this.viewStack = [];
-      // Load auth state
-      this.loadAuthState().then(() => {
-        if (this.container && this.currentView === 'settings') {
-          this.renderCurrentView(true, true);
-        }
-      });
       this.renderCurrentView(true, true);
       return;
     }
@@ -2735,27 +2494,15 @@ export class CommandPalette {
       return;
     }
 
+    // Route to plugin CommandContributors (browseTrail, contextChat, annotations, knowledge, etc.)
+    if (this.pluginManager?.handleCommand(item.action, '')) {
+      return;
+    }
+
     // AI actions will call showAIResult() which transitions the view,
     // so we should not hide the palette for these actions
     const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
     if (aiActions.includes(item.action)) {
-      this.callbacks?.onSelect(item);
-      return;
-    }
-
-    // BrowseTrail and ContextChat transition to their own views
-    if (item.action === 'browseTrail') {
-      this.showBrowseTrail();
-      return;
-    }
-    if (item.action === 'contextChat') {
-      this.showContextChat();
-      return;
-    }
-
-    // Annotations and Knowledge transition to their own views
-    // Call onSelect without hiding the panel first
-    if (item.action === 'annotations' || item.action === 'knowledge') {
       this.callbacks?.onSelect(item);
       return;
     }
@@ -2765,671 +2512,11 @@ export class CommandPalette {
   }
 
   // ========================================
-  // Browse Trail View
+  // Knowledge Base — openKnowledgeAIResult kept here
+  // because it manipulates internal CP state (activeCommand, aiResultData, etc.)
   // ========================================
 
-  private async showBrowseTrail(): Promise<void> {
-    this.browseTrailSessions = await loadBrowseTrailSessions();
-    this.browseTrailSearch = '';
-    this.browseTrailDisplayCount = 50;
-    this.activeCommand = {
-      id: 'browseTrail',
-      action: 'browseTrail',
-      label: t('menu.browseTrail'),
-      icon: icons.history,
-      enabled: true,
-      order: 0,
-    };
-    this.currentView = 'browseTrail';
-    this.viewStack = [];
-    this.renderCurrentView(true, true);
-  }
-
-  private getBrowseTrailViewHTML(): string {
-    return getBrowseTrailViewHTMLFromController({
-      displayCount: this.browseTrailDisplayCount,
-      search: this.browseTrailSearch,
-      sessions: this.browseTrailSessions,
-    });
-  }
-
-  private bindBrowseTrailEvents(): void {
-    if (!this.shadowRoot) return;
-
-    const rerenderTrailContent = () => {
-      if (!this.shadowRoot) return;
-      renderBrowseTrailContent(this.shadowRoot, {
-        displayCount: this.browseTrailDisplayCount,
-        search: this.browseTrailSearch,
-        sessions: this.browseTrailSessions,
-      });
-      bindBrowseTrailEventsFromController({
-        handleDragStart: this.handleDragStart,
-        onClearHistory: async () => {
-          if (!confirm(t('confirm.clearBrowseTrail'))) return;
-          await clearTrailHistory();
-          this.browseTrailSessions = [];
-          rerenderTrailContent();
-        },
-        onClose: () => {
-          this.activeCommand = null;
-          this.currentView = 'commands';
-          this.viewStack = [];
-          this.renderCurrentView(true, true);
-        },
-        onDeleteEntry: async (id) => {
-          this.browseTrailSessions = await deleteTrailEntry(id);
-          rerenderTrailContent();
-        },
-        onExport: () => {
-          exportTrailData(this.browseTrailSessions);
-          this.showToast(t('trail.exported'));
-        },
-        onLoadMore: () => {
-          this.browseTrailDisplayCount += 50;
-          rerenderTrailContent();
-        },
-        onOpenEntry: (url) => {
-          window.open(url, '_blank');
-        },
-        onSearch: (query) => {
-          this.browseTrailSearch = query;
-          this.browseTrailDisplayCount = 50;
-          rerenderTrailContent();
-        },
-        shadowRoot: this.shadowRoot,
-      });
-    };
-
-    rerenderTrailContent();
-  }
-
-  // ========================================
-  // Quick Ask (direct AI question from search)
-  // ========================================
-
-  private async startQuickAsk(question: string): Promise<void> {
-    const url = window.location.href;
-    // Create a fresh chat session for quick ask (without page context)
-    this.chatSession = createNewChatSession(url, document.title);
-
-    this.isChatStreaming = false;
-    this.isQuickAsk = true;
-    this.activeCommand = {
-      id: 'quickAsk',
-      action: 'contextChat',
-      label: t('chat.quickAskLabel'),
-      icon: icons.messageCircle,
-      enabled: true,
-      order: 0,
-    };
-    this.currentView = 'contextChat';
-    this.viewStack = [];
-    this.searchQuery = '';
-    this.pendingQuickAskQuestion = question;
-    this.renderCurrentView(true, true);
-  }
-
-  // ========================================
-  // Context Chat View
-  // ========================================
-
-  private async showContextChat(): Promise<void> {
-    const url = window.location.href;
-    const existing = await loadChatSession(url);
-
-    if (existing) {
-      this.chatSession = existing;
-    } else {
-      this.chatSession = createNewChatSession(url, document.title);
-    }
-
-    this.isChatStreaming = false;
-    this.isQuickAsk = false;
-    this.activeCommand = {
-      id: 'contextChat',
-      action: 'contextChat',
-      label: t('chat.contextChatLabel'),
-      icon: icons.contextChat,
-      enabled: true,
-      order: 0,
-    };
-    this.currentView = 'contextChat';
-    this.viewStack = [];
-    this.renderCurrentView(true, true);
-  }
-
-  private getContextChatViewHTML(): string {
-    const label = this.activeCommand?.customLabel || t(this.activeCommand?.label || 'menu.contextChat');
-    return getContextChatViewHTMLFromController({
-      activeLabel: label,
-      chatSession: this.chatSession,
-      isChatStreaming: this.isChatStreaming,
-      isQuickAsk: this.isQuickAsk,
-    });
-  }
-
-  private getContextChatContentHTML(): string {
-    return getContextChatContentHTMLFromController(this.chatSession, this.isQuickAsk);
-  }
-
-  private bindContextChatEvents(): void {
-    if (!this.shadowRoot) return;
-
-    bindContextChatEventsFromController({
-      handleDragStart: this.handleDragStart,
-      isChatStreaming: this.isChatStreaming,
-      onClearChat: async () => {
-        if (!this.chatSession) return;
-        this.chatSession.messages = [];
-        if (!this.isQuickAsk) {
-          await saveChatSession(this.chatSession);
-        }
-        const content = this.shadowRoot?.querySelector('.glass-chat-content');
-        if (content) {
-          content.innerHTML = this.getContextChatContentHTML();
-        }
-        const chatSaveBtn = this.shadowRoot?.querySelector('.glass-btn-chat-save') as HTMLElement;
-        if (chatSaveBtn) chatSaveBtn.style.display = 'none';
-      },
-      onClose: async () => {
-        if (this.isChatStreaming && this.chatSession) {
-          this.saveChatAsMinimized();
-        }
-        this.activeCommand = null;
-        this.chatSession = null;
-        this.currentView = 'commands';
-        this.viewStack = [];
-        await this.ensureMenuItems();
-        this.filteredItems = this.sortByRecent(this.menuItems);
-        this.selectedIndex = 0;
-        this.renderCurrentView(true, true);
-      },
-      onSaveChat: (button) => this.saveChatToKnowledge(button),
-      onScrollToBottom: () => this.scrollChatToBottom(),
-      onSendMessage: (input) => this.sendChatMessage(input),
-      onStop: (input) => {
-        this.isChatStreaming = false;
-        abortAllRequests();
-        if (input) {
-          input.disabled = false;
-          input.placeholder = t('chat.inputPlaceholder');
-        }
-        const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
-        if (chatStopBtn) chatStopBtn.style.display = 'none';
-        const content = this.shadowRoot?.querySelector('.glass-chat-content');
-        if (content && this.chatSession) {
-          content.innerHTML = this.getContextChatContentHTML();
-          bindThinkingSections(content);
-        }
-      },
-      shadowRoot: this.shadowRoot,
-    });
-  }
-
-  private async sendChatMessage(input: HTMLInputElement): Promise<void> {
-    if (!this.chatSession || this.isChatStreaming) return;
-
-    const rawContent = input.value.trim();
-    if (!rawContent) return;
-
-    const { cleanContent, references } = parseReferences(rawContent);
-
-    // Keep a local reference to chatSession so streaming continues even if minimized
-    // (saveChatAsMinimized sets this.chatSession = null, but the object is shared by reference)
-    const session = this.chatSession;
-
-    // Add user message
-    const userMsg = createChatMessage('user', cleanContent, references.length > 0 ? references : undefined);
-    session.messages.push(userMsg);
-
-    // Clear input
-    input.value = '';
-    input.disabled = true;
-    input.placeholder = t('chat.aiReplying');
-
-    // Update display
-    const content = this.shadowRoot?.querySelector('.glass-chat-content');
-    if (content) {
-      content.innerHTML = this.getContextChatContentHTML();
-      bindThinkingSections(content);
-    }
-    this.scrollChatToBottom();
-
-    // Add empty assistant message placeholder
-    const assistantMsg = createChatMessage('assistant', '');
-    session.messages.push(assistantMsg);
-
-    // Render the placeholder
-    if (content) {
-      renderStreamingChatContent(content, session, this.isQuickAsk);
-    }
-    this.scrollChatToBottom();
-
-    this.isChatStreaming = true;
-
-    // Show stop button
-    const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
-    if (chatStopBtn) chatStopBtn.style.display = 'flex';
-
-    // Build prompt - use simple prompt for quick ask, context prompt for context chat
-    const systemPrompt = this.isQuickAsk
-      ? t('chat.quickAskSystemPrompt')
-      : getContextChatSystemPrompt(session);
-    const conversationHistory = buildConversationPrompt(
-      session.messages.slice(0, -1) // Exclude the empty assistant message
-    );
-
-    try {
-      let _chatStreamRAF: number | null = null;
-      // Cache DOM references for streaming to avoid repeated querySelectorAll
-      let _cachedStreamingTextEl: Element | null = null;
-      let _cachedStreamingContainer: Element | null = null;
-
-      const onChunk: OnChunkCallback = (_chunk, fullText, thinking) => {
-        // Update data immediately (cheap)
-        const lastMsg = session.messages[session.messages.length - 1];
-        if (lastMsg.role === 'assistant') {
-          lastMsg.content = fullText;
-          if (thinking) {
-            lastMsg.thinking = thinking;
-          }
-        }
-
-        // Batch DOM updates to next animation frame
-        if (!_chatStreamRAF) {
-          _chatStreamRAF = requestAnimationFrame(() => {
-            _chatStreamRAF = null;
-
-            // Resolve DOM references (use cache when possible)
-            // Invalidate cache if element is detached (panel was destroyed and recreated)
-            if (_cachedStreamingTextEl && !_cachedStreamingTextEl.isConnected) {
-              _cachedStreamingTextEl = null;
-              _cachedStreamingContainer = null;
-            }
-            if (!_cachedStreamingTextEl) {
-              _cachedStreamingTextEl = this.shadowRoot?.querySelector('.glass-chat-streaming .glass-chat-msg-text') as Element | null;
-              _cachedStreamingContainer = this.shadowRoot?.querySelector('.glass-chat-streaming') as Element | null;
-
-              if (!_cachedStreamingTextEl && this.chatSession === session && this.shadowRoot) {
-                const allAssistantTexts = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant .glass-chat-msg-text');
-                _cachedStreamingTextEl = allAssistantTexts[allAssistantTexts.length - 1] || null;
-                const allAssistantMsgs = this.shadowRoot.querySelectorAll('.glass-chat-msg-assistant');
-                _cachedStreamingContainer = allAssistantMsgs[allAssistantMsgs.length - 1] || null;
-              }
-            }
-
-            if (_cachedStreamingTextEl) {
-              _cachedStreamingTextEl.innerHTML = formatAIContent(lastMsg.content);
-            }
-
-            // Update thinking section
-            if (lastMsg.thinking && _cachedStreamingContainer) {
-              let thinkingSection = _cachedStreamingContainer.querySelector('.glass-thinking-section');
-              if (!thinkingSection) {
-                const textEl = _cachedStreamingContainer.querySelector('.glass-chat-msg-text');
-                if (textEl) {
-                  textEl.insertAdjacentHTML('beforebegin', getThinkingSectionHTML(lastMsg.thinking));
-                  thinkingSection = _cachedStreamingContainer.querySelector('.glass-thinking-section');
-                  bindThinkingSections(_cachedStreamingContainer);
-                }
-              } else {
-                const thinkingContent = thinkingSection.querySelector('.glass-thinking-content');
-                if (thinkingContent) {
-                  thinkingContent.innerHTML = formatAIContent(lastMsg.thinking);
-                }
-              }
-            }
-
-            // Auto-scroll if chat is visible
-            if (this.chatSession === session) {
-              this.scrollChatToBottom();
-            }
-          });
-        }
-      };
-
-      const response = await callAI(conversationHistory, systemPrompt, this.config, onChunk);
-
-      if (response.success && response.result) {
-        const lastMsg = session.messages[session.messages.length - 1];
-        if (lastMsg.role === 'assistant') {
-          lastMsg.content = response.result;
-          if (response.thinking) {
-            lastMsg.thinking = response.thinking;
-          }
-        }
-      } else {
-        const lastMsg = session.messages[session.messages.length - 1];
-        if (lastMsg.role === 'assistant') {
-          lastMsg.content = response.error || t('chat.aiRequestFailed');
-        }
-      }
-
-      // Only save chat session for context chat, not quick ask
-      if (!this.isQuickAsk) {
-        await saveChatSession(session);
-      }
-    } catch (error) {
-      const lastMsg = session.messages[session.messages.length - 1];
-      if (lastMsg.role === 'assistant') {
-        lastMsg.content = t('aiResult.error', { error: String(error) });
-      }
-    } finally {
-      this.isChatStreaming = false;
-
-      // Hide stop button
-      const chatStopBtn = this.shadowRoot?.querySelector('.glass-btn-chat-stop') as HTMLElement;
-      if (chatStopBtn) chatStopBtn.style.display = 'none';
-
-      // Show save button if there's assistant content
-      const chatSaveBtn = this.shadowRoot?.querySelector('.glass-btn-chat-save') as HTMLElement;
-      if (chatSaveBtn && session.messages.some(m => m.role === 'assistant' && m.content)) {
-        chatSaveBtn.style.display = 'flex';
-      }
-
-      // If this chat was minimized during streaming, update the minimized task
-      const minimizedTask = this.minimizedTasks.find(
-        t => t.taskType === 'contextChat' && t.chatSession === session
-      );
-      if (minimizedTask) {
-        minimizedTask.isLoading = false;
-        // Update title with last assistant response preview
-        const lastAssistantMsg = session.messages[session.messages.length - 1];
-        if (lastAssistantMsg?.role === 'assistant' && lastAssistantMsg.content) {
-          minimizedTask.content = lastAssistantMsg.content;
-        }
-        this.renderMinimizedTasksIfVisible();
-      }
-    }
-
-    // Save/record chat result (similar to AI result completion in streamComplete)
-    const lastAssistantMsg = session.messages[session.messages.length - 1];
-    if (lastAssistantMsg?.role === 'assistant' && lastAssistantMsg.content && !lastAssistantMsg.content.startsWith(t('aiResult.errorPrefix'))) {
-      const lastUserMsg = [...session.messages].reverse().find(m => m.role === 'user');
-      const chatTitle = lastUserMsg
-        ? lastUserMsg.content.slice(0, 20) + (lastUserMsg.content.length > 20 ? '...' : '')
-        : (this.isQuickAsk ? t('chat.quickAsk') : t('menu.contextChat'));
-      const chatResultData: AIResultData = {
-        title: chatTitle,
-        content: lastAssistantMsg.content,
-        thinking: lastAssistantMsg.thinking,
-        isLoading: false,
-        resultType: 'general',
-        actionType: this.isQuickAsk ? 'quickAsk' : 'contextChat',
-        sourceUrl: window.location.href,
-        sourceTitle: document.title,
-        createdAt: Date.now(),
-      };
-      if (this.config.autoSaveTask) {
-        this.autoSaveAIResult(chatResultData);
-      } else {
-        this.addToUnsavedRecent(chatResultData);
-      }
-    }
-
-    // Re-render full chat content (only if panel is still showing this chat)
-    // Use fresh DOM queries since the panel may have been hidden/restored
-    const currentContent = this.shadowRoot?.querySelector('.glass-chat-content');
-    if (this.chatSession === session && currentContent) {
-      currentContent.innerHTML = this.getContextChatContentHTML();
-      bindThinkingSections(currentContent);
-    }
-
-    // Re-enable input (only if panel is still showing this chat)
-    if (this.chatSession === session && this.shadowRoot) {
-      const currentInput = this.shadowRoot.querySelector('.glass-chat-input') as HTMLInputElement;
-      if (currentInput) {
-        currentInput.disabled = false;
-        currentInput.placeholder = t('chat.inputPlaceholder');
-        currentInput.focus();
-      }
-    }
-  }
-
-  private _scrollRAF: number | null = null;
-  private scrollChatToBottom(): void {
-    if (!this.shadowRoot) return;
-    if (this._scrollRAF) return; // Already scheduled
-    this._scrollRAF = requestAnimationFrame(() => {
-      this._scrollRAF = null;
-      const body = this.shadowRoot?.querySelector('.glass-body');
-      if (body) {
-        body.scrollTop = body.scrollHeight;
-      }
-    });
-  }
-
-  // ========================================
-  // Annotations View Methods
-  // ========================================
-
-  // Callback for scrolling to annotation on current page
-  private onScrollToAnnotation: ((id: string) => boolean) | null = null;
-
-  public async showAnnotations(callbacks?: { onScrollToAnnotation?: (id: string) => boolean }): Promise<void> {
-    this.annotationsList = await getAllAnnotations();
-    this.annotationsSearch = '';
-    this.onScrollToAnnotation = callbacks?.onScrollToAnnotation || null;
-    this.currentView = 'annotations';
-    this.viewStack = [];
-    this.renderCurrentView(true, true);
-  }
-
-  private getAnnotationsViewHTML(): string {
-    return getAnnotationsViewHTMLFromController({
-      annotations: this.annotationsList,
-      currentUrl: window.location.href,
-      filter: this.annotationsFilter,
-      search: this.annotationsSearch,
-    });
-  }
-
-  private getLocalFilteredAnnotations(): Annotation[] {
-    return getLocalFilteredAnnotationsFromController({
-      annotations: this.annotationsList,
-      currentUrl: window.location.href,
-      filter: this.annotationsFilter,
-      search: this.annotationsSearch,
-    });
-  }
-
-  private bindAnnotationsEvents(): void {
-    if (!this.shadowRoot) return;
-
-    const rerenderAnnotations = () => {
-      if (!this.shadowRoot) return;
-      renderAnnotationsContent(this.shadowRoot, {
-        annotations: this.annotationsList,
-        currentUrl: window.location.href,
-        filter: this.annotationsFilter,
-        search: this.annotationsSearch,
-      });
-      bindAnnotationsEventsFromController({
-        handleDragStart: this.handleDragStart,
-        onClose: () => {
-          this.currentView = 'commands';
-          this.viewStack = [];
-          this.renderCurrentView(true, true);
-        },
-        onDeleteAnnotation: async (id) => {
-          if (!confirm(t('confirm.deleteAnnotation'))) return;
-          await deleteAnnotationFromStorage(id);
-          this.annotationsList = this.annotationsList.filter((annotation) => annotation.id !== id);
-          rerenderAnnotations();
-          updateAnnotationsFooterFromController(this.shadowRoot!, {
-            annotations: this.annotationsList,
-            currentUrl: window.location.href,
-            filter: this.annotationsFilter,
-            search: this.annotationsSearch,
-          });
-        },
-        onFilterChange: (filter) => {
-          this.annotationsFilter = filter;
-          rerenderAnnotations();
-          updateAnnotationsFooterFromController(this.shadowRoot!, {
-            annotations: this.annotationsList,
-            currentUrl: window.location.href,
-            filter: this.annotationsFilter,
-            search: this.annotationsSearch,
-          });
-        },
-        onOpenAnnotation: (id, url) => {
-          const currentUrl = normalizeUrlForAnnotation(window.location.href);
-          if (url === currentUrl) {
-            this.hide();
-            if (id && this.onScrollToAnnotation) {
-              setTimeout(() => {
-                this.onScrollToAnnotation?.(id);
-              }, 300);
-            }
-          } else {
-            window.location.href = url;
-          }
-        },
-        onSearch: (query) => {
-          this.annotationsSearch = query;
-          rerenderAnnotations();
-          updateAnnotationsFooterFromController(this.shadowRoot!, {
-            annotations: this.annotationsList,
-            currentUrl: window.location.href,
-            filter: this.annotationsFilter,
-            search: this.annotationsSearch,
-          });
-        },
-        shadowRoot: this.shadowRoot,
-      });
-      updateAnnotationsFooterFromController(this.shadowRoot, {
-        annotations: this.annotationsList,
-        currentUrl: window.location.href,
-        filter: this.annotationsFilter,
-        search: this.annotationsSearch,
-      });
-    };
-
-    rerenderAnnotations();
-  }
-
-  // ========================================
-  // Knowledge Base View Methods
-  // ========================================
-
-  public async showKnowledge(): Promise<void> {
-    try {
-      // Load all data
-      const [annotations, savedTasks] = await Promise.all([
-        getAllAnnotations(),
-        getAllTasks(),
-      ]);
-
-      // Convert to unified format using extracted functions
-      this.knowledgeItems = [
-        ...annotations.map(a => annotationToKnowledgeItem(a)),
-        ...savedTasks.map(t => savedTaskToKnowledgeItem(t)),
-      ];
-
-      // Sort by date (newest first)
-      this.knowledgeItems.sort((a, b) => b.createdAt - a.createdAt);
-
-      this.knowledgeSearch = '';
-      this.knowledgeFilter = 'all';
-      this.currentView = 'knowledge';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    } catch (error) {
-      console.error('The Panel: Failed to load knowledge base', error);
-      // Still show the view with empty content
-      this.knowledgeItems = [];
-      this.knowledgeSearch = '';
-      this.knowledgeFilter = 'all';
-      this.currentView = 'knowledge';
-      this.viewStack = [];
-      this.renderCurrentView(true, true);
-    }
-  }
-
-  private getKnowledgeViewHTML(): string {
-    return getKnowledgeViewHTMLFromController({
-      items: this.knowledgeItems,
-      filter: this.knowledgeFilter,
-      search: this.knowledgeSearch,
-    });
-  }
-
-  private getLocalFilteredKnowledgeItems(): KnowledgeItem[] {
-    return getLocalFilteredKnowledgeItemsFromController({
-      items: this.knowledgeItems,
-      filter: this.knowledgeFilter,
-      search: this.knowledgeSearch,
-    });
-  }
-
-  private bindKnowledgeEvents(): void {
-    if (!this.shadowRoot) return;
-
-    const rerenderKnowledgeContent = () => {
-      if (!this.shadowRoot) return;
-      renderKnowledgeContent(this.shadowRoot, {
-        items: this.knowledgeItems,
-        filter: this.knowledgeFilter,
-        search: this.knowledgeSearch,
-      });
-      bindKnowledgeEventsFromController({
-        handleDragStart: this.handleDragStart,
-        onClose: () => {
-          this.currentView = 'commands';
-          this.viewStack = [];
-          this.renderCurrentView(true, true);
-        },
-        onDeleteItem: async (id) => {
-          if (!confirm(t('confirm.deleteRecord'))) return;
-          if (id.startsWith('ann_')) {
-            await deleteAnnotationFromStorage(id.replace('ann_', ''));
-          } else if (id.startsWith('task_')) {
-            await deleteTask(parseInt(id.replace('task_', '')));
-          }
-          this.knowledgeItems = this.knowledgeItems.filter((item) => item.id !== id);
-          rerenderKnowledgeContent();
-          this.updateKnowledgeFooter();
-        },
-        onExport: () => this.exportKnowledge(),
-        onFilterChange: (filter) => {
-          this.knowledgeFilter = filter;
-          rerenderKnowledgeContent();
-          this.updateKnowledgeFooter();
-        },
-        onOpenAIResult: (id) => {
-          const item = this.knowledgeItems.find((entry) => entry.id === id);
-          if (item) {
-            this.openKnowledgeAIResult(item);
-          }
-        },
-        onOpenUrl: (url) => {
-          window.open(url, '_blank');
-        },
-        onSearch: (query) => {
-          this.knowledgeSearch = query;
-          rerenderKnowledgeContent();
-          this.updateKnowledgeFooter();
-        },
-        shadowRoot: this.shadowRoot,
-      });
-      this.updateKnowledgeFooter();
-    };
-
-    rerenderKnowledgeContent();
-  }
-
-  private updateKnowledgeFooter(): void {
-    if (!this.shadowRoot) return;
-    updateKnowledgeFooterFromController(this.shadowRoot, {
-      items: this.knowledgeItems,
-      filter: this.knowledgeFilter,
-      search: this.knowledgeSearch,
-    });
-  }
-
-  private openKnowledgeAIResult(item: KnowledgeItem): void {
+  public openKnowledgeAIResult(item: KnowledgeItem): void {
     // Create a mock active command to show the command tag
     const actionLabelMap: Record<string, string> = {
       translate: t('action.translate'),
@@ -3482,54 +2569,6 @@ export class CommandPalette {
     this.currentView = 'commands';
     this.viewStack = [];
     this.renderCurrentView(true, true);
-  }
-
-  private exportKnowledge(): void {
-    const items = this.getLocalFilteredKnowledgeItems();
-
-    let markdown = `# ${t('knowledge.exportTitle')}\n\n`;
-    markdown += `${t('knowledge.exportTime')}: ${new Date().toLocaleString()}\n`;
-    markdown += `${t('knowledge.exportTotal', { count: items.length })}\n\n---\n\n`;
-
-    const groups = groupKnowledgeByDate(items);
-
-    for (const [date, groupItems] of Object.entries(groups)) {
-      markdown += `## ${date}\n\n`;
-
-      for (const item of groupItems) {
-        const typeLabel = item.type === 'annotation' ? t('knowledge.annotationType') : getActionTypeLabel(item.actionType);
-        markdown += `### ${typeLabel}\n\n`;
-
-        if (item.pageTitle) {
-          markdown += `**${t('knowledge.source')}**: [${item.pageTitle}](${item.url})\n\n`;
-        }
-
-        if (item.originalText) {
-          markdown += `**${t('knowledge.originalText')}**:\n> ${item.originalText}\n\n`;
-        }
-
-        markdown += `**${t('knowledge.content')}**:\n${item.content}\n\n`;
-
-        if (item.note) {
-          markdown += `**${t('knowledge.note')}**: ${item.note}\n\n`;
-        }
-
-        if (item.aiResult) {
-          markdown += `**AI ${getAIResultTypeLabel(item.aiResult.type)}**:\n${item.aiResult.content}\n\n`;
-        }
-
-        markdown += `---\n\n`;
-      }
-    }
-
-    // Download as file
-    const blob = new Blob([markdown], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `knowledge-export-${new Date().toISOString().split('T')[0]}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   // Styles are now imported from ./styles.ts

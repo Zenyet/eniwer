@@ -9,6 +9,8 @@ export interface MenuItem {
   order: number;
   customIcon?: string;
   customLabel?: string;
+  /** Marker for plugin-contributed commands (used for filtering on plugin disable) */
+  _fromPlugin?: boolean;
 }
 
 export interface CustomMenuItem extends MenuItem {
@@ -88,6 +90,10 @@ export interface MenuConfig {
   uiLanguage?: string;
   youtubeSubtitle?: YouTubeSubtitleConfig;
   youtubeSubtitleTTS?: TTSConfig;
+  pluginStates?: Record<string, boolean>;
+  browseTrailExcludePatterns?: string[];
+  popoverButtons?: { search?: boolean; translate?: boolean; highlight?: boolean; quote?: boolean; quoteAsk?: boolean };
+  popoverSearchEngines?: Record<string, boolean>;
 }
 
 export interface StorageData {
@@ -154,7 +160,7 @@ export const DEFAULT_SELECTION_MENU: MenuItem[] = [
 export const DEFAULT_GLOBAL_MENU: MenuItem[] = [
   { id: 'contextChat', icon: icons.contextChat, label: 'menu.contextChat', action: 'contextChat', enabled: true, order: 0 },
   { id: 'translateInput', icon: icons.translate, label: 'menu.translateInput', action: 'translateInput', enabled: true, order: 1 },
-  { id: 'summarizePage', icon: icons.summarizePage, label: 'menu.summarizePage', action: 'summarizePage', enabled: true, order: 2 },
+  { id: 'summarizePage', icon: icons.summarize, label: 'menu.summarizePage', action: 'summarizePage', enabled: true, order: 2 },
   { id: 'knowledge', icon: icons.library, label: 'menu.knowledge', action: 'knowledge', enabled: true, order: 3 },
   { id: 'annotations', icon: icons.highlighter, label: 'menu.annotations', action: 'annotations', enabled: true, order: 4 },
   { id: 'browseTrail', icon: icons.history, label: 'menu.browseTrail', action: 'browseTrail', enabled: true, order: 5 },

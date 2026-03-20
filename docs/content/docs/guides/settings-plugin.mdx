@@ -1,0 +1,93 @@
+---
+title: Plugin with Settings
+description: Build a plugin that contributes its own settings section
+---
+
+## Overview
+
+Plugins can contribute settings sections via the `SettingsContributor` interface. This lets plugins own their configuration UI within the main settings panel.
+
+## Implementation
+
+```typescript
+import type { Plugin, SettingsContributor, PluginContext } from './plugins/types';
+import type { MenuConfig } from './types';
+
+class TimerPlugin implements Plugin, SettingsContributor {
+  readonly id = 'timer';
+  readonly name = 'Pomodoro Timer';
+  private ctx!: PluginContext;
+
+  activate(ctx: PluginContext): void {
+    this.ctx = ctx;
+    ctx.onConfigChange((config) => {
+      // React to config changes
+      const duration = config.timerDuration ?? 25;
+      this.updateDuration(duration);
+    });
+  }
+
+  deactivate(): void {}
+
+  // SettingsContributor
+  getSettingsHTML(config: MenuConfig): string {
+    const duration = (config as any).timerDuration ?? 25;
+    return `
+      <div class="glass-settings-section">
+        <div class="glass-settings-section-title">Pomodoro Timer</div>
+        <div class="glass-form-group">
+          <label class="glass-form-label">Duration (minutes)</label>
+          <select class="glass-select" id="timer-duration">
+            <option value="15" ${duration === 15 ? 'selected' : ''}>15</option>
+            <option value="25" ${duration === 25 ? 'selected' : ''}>25</option>
+            <option value="45" ${duration === 45 ? 'selected' : ''}>45</option>
+          </select>
+        </div>
+      </div>
+    `;
+  }
+
+  bindSettingsEvents(
+    shadowRoot: ShadowRoot,
+    tempConfig: MenuConfig,
+    onChange: () => void
+  ): void {
+    const select = shadowRoot.querySelector('#timer-duration') as HTMLSelectElement;
+    select?.addEventListener('change', () => {
+      (tempConfig as any).timerDuration = parseInt(select.value, 10);
+      onChange();
+    });
+  }
+
+  private updateDuration(minutes: number): void {
+    // Apply new duration...
+  }
+}
+```
+
+## CSS Classes
+
+Use the built-in glass CSS classes for consistent styling:
+
+| Class | Description |
+|---|---|
+| `glass-settings-section` | Section wrapper |
+| `glass-settings-section-title` | Section heading |
+| `glass-form-group` | Form field container |
+| `glass-form-group glass-form-toggle` | Toggle switch layout |
+| `glass-form-label` | Field label |
+| `glass-select` | Styled select dropdown |
+| `glass-input` | Styled text input |
+| `glass-toggle` | Toggle switch wrapper |
+| `glass-toggle-slider` | Toggle switch track |
+| `glass-form-hint` | Subtle hint text below a field |
+| `glass-form-group-stack` | Stack of form groups (for collapsible sections) |
+
+## How It Works
+
+1. When the settings panel renders, `getSettingsHTML(config)` is called for each enabled `SettingsContributor`
+2. The returned HTML is appended after the built-in settings sections
+3. `bindSettingsEvents(shadowRoot, tempConfig, onChange)` is called to wire up event handlers
+4. When the user changes a value, mutate `tempConfig` and call `onChange()` to enable the Save button
+5. On Save, the full config (including plugin mutations) is persisted to Chrome storage
+6. The `onConfigChange` callback fires with the new config

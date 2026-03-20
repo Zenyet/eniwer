@@ -255,6 +255,9 @@ export const en: Record<keyof typeof zhCN, string> = {
   'settings.groupByDate': 'Group by Date',
   'settings.storage': 'Storage',
   'settings.cannotGetStorageInfo': 'Unable to get storage info',
+  'settings.pluginManagement': 'Plugin Management',
+  'settings.plugins': 'Plugins',
+  'settings.pluginsEnabledCount': '{enabled} / {total} enabled',
   'settings.resetToDefault': 'Reset to Default',
   'settings.confirmReset': 'Are you sure you want to reset all settings?',
   'settings.resetDone': 'Settings reset to defaults',
@@ -264,6 +267,20 @@ export const en: Record<keyof typeof zhCN, string> = {
 
   // === Settings - Storage categories ===
   'storage.aiResults': 'AI Results',
+
+  // === Plugin descriptions ===
+  'plugin.translate.description': 'Translate selected text to target language',
+  'plugin.summarize.description': 'Summarize selected text or entire page',
+  'plugin.screenshot.description': 'Capture screen area and analyze with AI',
+  'plugin.contextChat.description': 'AI chat based on page context',
+  'plugin.browseTrail.description': 'Automatically record browsing history',
+  'plugin.annotations.description': 'Highlight text and add annotation notes',
+  'plugin.knowledge.description': 'Manage saved knowledge and AI results',
+  'plugin.youtube.description': 'YouTube bilingual subtitle translation & TTS',
+  'plugin.selectionPopover.description': 'Show quick action bar on text selection',
+  'plugin.imageSearch.description': 'Right-click images for reverse image search',
+  'plugin.base64.description': 'Base64 encode/decode tool',
+  'plugin.cloudSync.description': 'Google login, cloud sync and backup management',
   'storage.annotations': 'Annotations',
   'storage.browseTrail': 'Browse Trail',
   'storage.chatRecords': 'Chat Records',
@@ -521,4 +538,32 @@ export const en: Record<keyof typeof zhCN, string> = {
   'settings.ttsEdgeVoiceHint': 'e.g. zh-CN-XiaoxiaoNeural, en-US-JennyNeural, zh-CN-YunxiNeural',
   'settings.ttsVoiceLoading': 'Loading voices...',
   'settings.ttsVoiceLoadError': 'Failed to load voices',
+
+  // === Base64 ===
+  'menu.base64': 'Base64 Encode/Decode',
+  'base64.encode': 'Encode',
+  'base64.decode': 'Decode',
+  'base64.encodePlaceholder': 'Enter text, press Enter to encode...',
+  'base64.decodePlaceholder': 'Enter Base64, press Enter to decode...',
+  'base64.toggleMode': 'Toggle encode/decode',
+  'base64.swap': 'Swap input/output',
+  'base64.hint': 'Enter text and press Enter to execute',
+  'base64.encodeError': 'Encode failed',
+  'base64.decodeError': 'Decode failed: input is not a valid Base64 string',
+
+  // === Browse Trail Exclude ===
+  'settings.browseTrailExclude': 'URL Exclusion Rules',
+  'settings.browseTrailExcludeLabel': 'URLs matching these patterns will not be recorded (one per line, regex supported)',
+  'settings.browseTrailExcludeHint': 'Supports regex, e.g. .*\\.internal\\.com',
+  'settings.browseTrailExcludePlaceholder': 'mail\\.google\\.com\nhttps://internal\\.company\\..*',
+
+  // === Selection Popover Quote ===
+  'popover.quote': 'Quote & Ask',
+  'popover.quoteAsk': 'Quick Quote',
+  'settings.popoverButtons': 'Popover Buttons',
+  'settings.popoverBtnSearch': 'Search Engines',
+  'settings.popoverBtnTranslate': 'Translate',
+  'settings.popoverBtnHighlight': 'Highlight',
+  'settings.popoverBtnQuote': 'Quote & Ask',
+  'settings.popoverBtnQuoteAsk': 'Quick Quote',
 };

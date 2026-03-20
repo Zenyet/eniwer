@@ -1,0 +1,119 @@
+---
+title: Capabilities
+description: Mix-in interfaces for command, view, settings, and minimize support
+---
+
+Plugins gain capabilities by implementing additional interfaces alongside `Plugin`.
+
+## CommandContributor
+
+Contribute commands to the command palette:
+
+```typescript
+interface CommandContributor {
+  /** Return the list of commands this plugin provides */
+  getCommands(): MenuItem[];
+  /** Handle a command action. Return true if handled. */
+  handleCommand(action: string, selectedText: string): boolean;
+}
+```
+
+### Example
+
+```typescript
+class MyPlugin implements Plugin, CommandContributor {
+  getCommands(): MenuItem[] {
+    return [{
+      id: 'my-action',
+      action: 'myAction',
+      label: 'My Action',
+      icon: '<svg>...</svg>',
+      enabled: true,
+      order: 100,
+    }];
+  }
+
+  handleCommand(action: string, selectedText: string): boolean {
+    if (action !== 'myAction') return false;
+    // do something with selectedText
+    return true;
+  }
+}
+```
+
+## ViewContributor
+
+Own a custom view inside the command palette:
+
+```typescript
+interface ViewContributor {
+  /** The view type string this plugin owns */
+  readonly viewType: string;
+  /** Return HTML for the view */
+  getViewHTML(): string;
+  /** Bind DOM events after the view HTML is injected */
+  bindEvents(shadowRoot: ShadowRoot): void;
+  /** Called when navigating away from this view (optional cleanup) */
+  onViewLeave?(): void;
+}
+```
+
+Navigate to a plugin view via:
+
+```typescript
+ctx.ui.navigateToView('myViewType');
+```
+
+## SettingsContributor
+
+Contribute a settings section in the extension settings panel:
+
+```typescript
+interface SettingsContributor {
+  /** Return HTML for the settings section */
+  getSettingsHTML(config: MenuConfig): string;
+  /** Bind settings DOM events. onChange signals that tempConfig was mutated. */
+  bindSettingsEvents(
+    shadowRoot: ShadowRoot,
+    tempConfig: MenuConfig,
+    onChange: () => void
+  ): void;
+}
+```
+
+The HTML returned by `getSettingsHTML` is appended to the settings view. Use standard form elements with the `glass-*` CSS classes.
+
+## MinimizableContributor
+
+Support minimize-to-background while streaming:
+
+```typescript
+interface MinimizedPluginData {
+  pluginId: string;
+  title: string;
+  iconHtml?: string;
+  isLoading: boolean;
+  pluginData: unknown;
+}
+
+interface MinimizableContributor {
+  saveAsMinimized(): MinimizedPluginData | null;
+  restoreFromMinimized(data: MinimizedPluginData): void;
+}
+```
+
+When the command palette is hidden while a plugin view is active:
+1. `saveAsMinimized()` is called — plugin returns its state snapshot
+2. A minimized task badge appears in the command palette
+3. When the user clicks the badge, `restoreFromMinimized(data)` is called
+
+## Type Guards
+
+Use these to check capabilities at runtime:
+
+```typescript
+isCommandContributor(plugin)   // has getCommands + handleCommand
+isViewContributor(plugin)       // has viewType + getViewHTML + bindEvents
+isSettingsContributor(plugin)   // has getSettingsHTML + bindSettingsEvents
+isMinimizableContributor(plugin) // has saveAsMinimized + restoreFromMinimized
+```

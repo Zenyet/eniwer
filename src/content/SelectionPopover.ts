@@ -9,6 +9,8 @@ export interface SelectionPopoverCallbacks {
   onNote?: () => void;
   onMore?: () => void;
   onSearch?: (engine: string, text: string) => void;
+  onQuote?: (text: string) => void;
+  onQuoteAsk?: (text: string) => void;
 }
 
 export type PopoverPosition = "above" | "below";
@@ -18,6 +20,10 @@ const noteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
 const moreIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>`;
 // Highlight icon for annotation button
 const highlightIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>`;
+// Quote icon for context ask (blockquote style)
+const quoteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M9.135 9h3L10 14.608H7zm5 0h3L15 14.608h-3z"/></svg>`;
+// Quick quote icon (@ symbol)
+const quoteAskIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0V12a10 10 0 1 0-4 8"/></svg>`;
 
 // Search engine / AI model definitions
 interface SearchEngine {
@@ -27,7 +33,7 @@ interface SearchEngine {
   url: (query: string) => string;
 }
 
-const SEARCH_ENGINES: SearchEngine[] = [
+export const SEARCH_ENGINES: SearchEngine[] = [
   {
     id: 'google',
     label: 'Google',
@@ -60,6 +66,21 @@ const SEARCH_ENGINES: SearchEngine[] = [
   },
 ];
 
+export interface SelectionPopoverOptions {
+  /** Whether to show the search engine buttons (default: true) */
+  showSearch?: boolean;
+  /** Whether to show the highlight/annotation button (default: true) */
+  showHighlight?: boolean;
+  /** Whether to show the translate button (default: true) */
+  showTranslate?: boolean;
+  /** Whether to show the quote (context ask) button (default: false) */
+  showQuote?: boolean;
+  /** Whether to show the quoteAsk (quick ask) button (default: false) */
+  showQuoteAsk?: boolean;
+  /** Which search engine IDs to show (if undefined, show all) */
+  searchEngines?: string[];
+}
+
 export class SelectionPopover {
   private popover: HTMLElement | null = null;
   private callbacks: SelectionPopoverCallbacks | null = null;
@@ -69,6 +90,12 @@ export class SelectionPopover {
   private scrollHandler: (() => void) | null = null;
   private rafId: number | null = null;
   private mode: 'search' | 'colors' = 'search';
+  private showSearch = true;
+  private showHighlight = true;
+  private showTranslate = true;
+  private showQuote = false;
+  private showQuoteAsk = false;
+  private searchEngineIds: string[] | undefined = undefined;
 
   constructor() {}
 
@@ -76,11 +103,18 @@ export class SelectionPopover {
     rect: DOMRect,
     callbacks: SelectionPopoverCallbacks,
     position: PopoverPosition = "above",
+    options?: SelectionPopoverOptions,
   ): void {
     this.hide();
     this.callbacks = callbacks;
     this.preferredPosition = position;
     this.mode = 'search';
+    this.showSearch = options?.showSearch !== false;
+    this.showHighlight = options?.showHighlight !== false;
+    this.showTranslate = options?.showTranslate !== false;
+    this.showQuote = options?.showQuote === true;
+    this.showQuoteAsk = options?.showQuoteAsk === true;
+    this.searchEngineIds = options?.searchEngines;
 
     // 保存当前选区，用于滚动时更新位置
     const selection = window.getSelection();
@@ -118,6 +152,13 @@ export class SelectionPopover {
 
   public isVisible(): boolean {
     return this.popover !== null;
+  }
+
+  /** Check if at least one action button would be shown with the given options */
+  public static hasVisibleButtons(options?: SelectionPopoverOptions): boolean {
+    // Search engines are always shown; translate and highlight are conditional
+    // The "more" button is always shown, so if we have search engines + more, we have visible buttons
+    return true;
   }
 
   private setupScrollListener(): void {
@@ -205,7 +246,10 @@ export class SelectionPopover {
   }
 
   private buildSearchEngineButtons(): string {
-    return SEARCH_ENGINES.map(engine => `
+    const engines = this.searchEngineIds
+      ? SEARCH_ENGINES.filter(e => this.searchEngineIds!.includes(e.id))
+      : SEARCH_ENGINES;
+    return engines.map(engine => `
       <button
         class="thecircle-selection-popover-engine-btn"
         data-action="search"
@@ -247,16 +291,22 @@ export class SelectionPopover {
 
     this.popover.innerHTML = `
       <div class="thecircle-selection-popover-container">
-        <div class="thecircle-selection-popover-colors">
-          ${this.buildSearchEngineButtons()}
+        <div class="thecircle-selection-popover-colors" ${!this.showSearch ? 'style="display:none;"' : ''}>
+          ${this.showSearch ? this.buildSearchEngineButtons() : ''}
         </div>
-        <div class="thecircle-selection-popover-divider"></div>
-        <button class="thecircle-selection-popover-btn thecircle-selection-popover-btn-highlight" data-action="note" title="${t('popover.annotation')}">
+        ${this.showSearch ? '<div class="thecircle-selection-popover-divider"></div>' : ''}
+        ${this.showHighlight ? `<button class="thecircle-selection-popover-btn thecircle-selection-popover-btn-highlight" data-action="note" title="${t('popover.annotation')}">
           ${highlightIcon}
-        </button>
-        <button class="thecircle-selection-popover-btn" data-action="translate" title="${t('popover.translate')}">
+        </button>` : ''}
+        ${this.showTranslate ? `<button class="thecircle-selection-popover-btn" data-action="translate" title="${t('popover.translate')}">
           ${icons.translate}
-        </button>
+        </button>` : ''}
+        ${this.showQuote ? `<button class="thecircle-selection-popover-btn" data-action="quote" title="${t('popover.quote')}">
+          ${quoteIcon}
+        </button>` : ''}
+        ${this.showQuoteAsk ? `<button class="thecircle-selection-popover-btn" data-action="quoteAsk" title="${t('popover.quoteAsk')}">
+          ${quoteAskIcon}
+        </button>` : ''}
         <button class="thecircle-selection-popover-btn" data-action="more" title="${t('popover.more')}">
           ${moreIcon}
         </button>
@@ -277,10 +327,18 @@ export class SelectionPopover {
   private switchToColors(): void {
     if (!this.popover) return;
     this.mode = 'colors';
-    const colorsContainer = this.popover.querySelector('.thecircle-selection-popover-colors');
+    const colorsContainer = this.popover.querySelector('.thecircle-selection-popover-colors') as HTMLElement;
     if (!colorsContainer) return;
 
     colorsContainer.innerHTML = this.buildColorButtons();
+    colorsContainer.style.display = '';
+
+    // Show divider if it was hidden
+    const divider = this.popover.querySelector('.thecircle-selection-popover-divider') as HTMLElement;
+    if (!divider) {
+      // Insert divider if it doesn't exist (search was off)
+      colorsContainer.insertAdjacentHTML('afterend', '<div class="thecircle-selection-popover-divider"></div>');
+    }
 
     // Bind color button events
     const colorBtns = colorsContainer.querySelectorAll('[data-action="highlight"]');
@@ -308,10 +366,19 @@ export class SelectionPopover {
   private switchToSearch(): void {
     if (!this.popover) return;
     this.mode = 'search';
-    const colorsContainer = this.popover.querySelector('.thecircle-selection-popover-colors');
+    const colorsContainer = this.popover.querySelector('.thecircle-selection-popover-colors') as HTMLElement;
     if (!colorsContainer) return;
 
-    colorsContainer.innerHTML = this.buildSearchEngineButtons();
+    if (this.showSearch) {
+      colorsContainer.innerHTML = this.buildSearchEngineButtons();
+      colorsContainer.style.display = '';
+    } else {
+      colorsContainer.innerHTML = '';
+      colorsContainer.style.display = 'none';
+      // Remove divider if search is off
+      const divider = this.popover.querySelector('.thecircle-selection-popover-divider');
+      divider?.remove();
+    }
 
     // Bind search engine events
     const engineBtns = colorsContainer.querySelectorAll('[data-action="search"]');
@@ -379,6 +446,28 @@ export class SelectionPopover {
     moreBtn?.addEventListener("click", (e) => {
       e.stopPropagation();
       this.callbacks?.onMore?.();
+      this.hide();
+    });
+
+    // Quote button (context ask)
+    const quoteBtn = this.popover.querySelector('[data-action="quote"]');
+    quoteBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const text = this.getSelectedText();
+      if (text) {
+        this.callbacks?.onQuote?.(text);
+      }
+      this.hide();
+    });
+
+    // QuoteAsk button (quick ask)
+    const quoteAskBtn = this.popover.querySelector('[data-action="quoteAsk"]');
+    quoteAskBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const text = this.getSelectedText();
+      if (text) {
+        this.callbacks?.onQuoteAsk?.(text);
+      }
       this.hide();
     });
   }

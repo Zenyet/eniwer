@@ -152,7 +152,7 @@ export function getActionIcon(actionType: string): string {
   const iconMap: Record<string, string> = {
     translate: icons.translate,
     summarize: icons.summarize,
-    summarizePage: icons.summarizePage,
+    summarizePage: icons.summarize,
     explain: icons.explain,
     rewrite: icons.rewrite,
     codeExplain: icons.codeExplain,
@@ -286,4 +286,20 @@ export function getSourceInfoHTML(data: AIResultData): string {
       </div>
     </div>
   `;
+}
+
+/**
+ * Format token usage for display in footer
+ * - Only total: "123 tokens"
+ * - Prompt + completion: "↑89 ↓34"
+ */
+export function formatTokenUsage(usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number }): string {
+  if (!usage) return '';
+  if (usage.promptTokens != null && usage.completionTokens != null) {
+    return `↑${usage.promptTokens} ↓${usage.completionTokens}`;
+  }
+  if (usage.totalTokens != null) {
+    return `${usage.totalTokens} tokens`;
+  }
+  return '';
 }

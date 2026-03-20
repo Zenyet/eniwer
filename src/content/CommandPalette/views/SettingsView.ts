@@ -1,10 +1,9 @@
 // Settings View - handles settings configuration
-import { MenuConfig, ScreenshotConfig, MenuItem, AuthState, AnnotationConfig, KnowledgeConfig, DEFAULT_SCREENSHOT_CONFIG, DEFAULT_HISTORY_CONFIG, DEFAULT_ANNOTATION_CONFIG, DEFAULT_KNOWLEDGE_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions, DEFAULT_YOUTUBE_SUBTITLE_CONFIG, DEFAULT_TTS_CONFIG } from '../../../types';
-import { PRESET_COLORS, getAnnotationColorConfig } from '../../../types/annotation';
+import { MenuConfig, MenuItem, AuthState, DEFAULT_HISTORY_CONFIG, DEFAULT_CONFIG, DEFAULT_GLOBAL_MENU, DEFAULT_SYNC_OPTIONS, SyncOptions } from '../../../types';
 import { icons } from '../../../icons';
 import { saveConfig, saveGlobalMenuItems } from '../../../utils/storage';
 import { enforceMaxCount } from '../../../utils/taskStorage';
-import { escapeHtml, getTranslationHint, getAPIKeyHint } from '../utils';
+import { escapeHtml, getAPIKeyHint } from '../utils';
 import { t } from '../../../i18n';
 
 // Model options per provider
@@ -135,7 +134,6 @@ export interface SettingsState {
   settingsChanged: boolean;
   settingsMenuItems: MenuItem[];
   editingItemId: string | null;
-  authState: AuthState | null;
 }
 
 export function createSettingsState(): SettingsState {
@@ -144,20 +142,17 @@ export function createSettingsState(): SettingsState {
     settingsChanged: false,
     settingsMenuItems: [],
     editingItemId: null,
-    authState: null,
   };
 }
 
 export function getSettingsViewHTML(
   config: MenuConfig,
-  authState: AuthState | null,
   icons: Record<string, string>,
-  getAccountSettingsHTML: () => string
+  inlineSettingsHTML: string,
+  pluginListHTML?: string,
 ): string {
   const isCustomProvider = config.apiProvider === 'custom';
-  const screenshotConfig = config.screenshot || DEFAULT_SCREENSHOT_CONFIG;
   const historyConfig = config.history || DEFAULT_HISTORY_CONFIG;
-  const imageSearchConfig = config.imageSearch || { google: true, yandex: true, bing: true, tineye: true };
 
   return `
     <div class="glass-search glass-draggable">
@@ -179,11 +174,8 @@ export function getSettingsViewHTML(
     <div class="glass-divider"></div>
     <div class="glass-body glass-settings-body">
       <div class="glass-settings-flat">
-        <!-- 账号 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.account')}</div>
-          ${getAccountSettingsHTML()}
-        </div>
+        <!-- Inline plugin settings (e.g. account/sync) -->
+        ${inlineSettingsHTML}
 
         <!-- AI 服务 -->
         <div class="glass-settings-section">
@@ -237,193 +229,10 @@ export function getSettingsViewHTML(
             </label>
             <span class="glass-form-hint">${t('settings.thinkingModeHint')}</span>
           </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.aiImageGen')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="enable-image-gen" ${screenshotConfig.enableImageGen ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div id="image-gen-settings"${screenshotConfig.enableImageGen ? '' : ' style="display: none"'}>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.imageGenService')}</label>
-              <select class="glass-select" id="image-gen-provider">
-                <option value="openai"${screenshotConfig.imageGenProvider === 'openai' ? ' selected' : ''}>OpenAI DALL-E</option>
-                <option value="custom"${screenshotConfig.imageGenProvider === 'custom' ? ' selected' : ''}>${t('settings.custom')}</option>
-              </select>
-            </div>
-            <div class="glass-form-group" id="custom-image-gen-url-group"${screenshotConfig.imageGenProvider === 'custom' ? '' : ' style="display: none"'}>
-              <label class="glass-form-label">${t('settings.customImageGenApi')}</label>
-              <input type="text" class="glass-input-field" id="custom-image-gen-url" value="${screenshotConfig.customImageGenUrl || ''}" placeholder="https://api.example.com/v1/images/generations">
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.imageSize')}</label>
-              <select class="glass-select" id="image-size-select">
-                <option value="1024x1024"${screenshotConfig.imageSize === '1024x1024' ? ' selected' : ''}>1024 × 1024</option>
-                <option value="1792x1024"${screenshotConfig.imageSize === '1792x1024' ? ' selected' : ''}>${t('settings.imageSizeLandscape')}</option>
-                <option value="1024x1792"${screenshotConfig.imageSize === '1024x1792' ? ' selected' : ''}>${t('settings.imageSizePortrait')}</option>
-              </select>
-            </div>
-          </div>
         </div>
 
-        <!-- 翻译设置 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.translationService')}</div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.translationEngine')}</label>
-            <select class="glass-select" id="translation-provider-select">
-              <option value="ai"${(config.translation?.provider || 'ai') === 'ai' ? ' selected' : ''}>${t('settings.aiTranslation')}</option>
-              <option value="google"${config.translation?.provider === 'google' ? ' selected' : ''}>${t('settings.googleTranslation')}</option>
-              <option value="microsoft"${config.translation?.provider === 'microsoft' ? ' selected' : ''}>${t('settings.microsoftTranslation')}</option>
-              <option value="deeplx"${config.translation?.provider === 'deeplx' ? ' selected' : ''}>DeepLX</option>
-              <option value="custom"${config.translation?.provider === 'custom' ? ' selected' : ''}>${t('settings.customTranslation')}</option>
-            </select>
-          </div>
-          <div class="glass-form-group" id="translation-deeplx-key-group" style="display: ${config.translation?.provider === 'deeplx' ? 'flex' : 'none'}">
-            <label class="glass-form-label">DeepLX API Key</label>
-            <input type="text" class="glass-input" id="translation-deeplx-key" value="${config.translation?.deeplxApiKey || ''}" placeholder="${t('settings.deeplxApiKeyPlaceholder')}">
-          </div>
-          <div class="glass-form-group" id="translation-custom-url-group" style="display: ${config.translation?.provider === 'custom' ? 'flex' : 'none'}">
-            <label class="glass-form-label">${t('settings.customTranslationUrl')}</label>
-            <input type="text" class="glass-input" id="translation-custom-url" value="${config.translation?.customUrl || ''}" placeholder="http://localhost:1188/translate">
-          </div>
-          <span class="glass-form-hint" id="translation-hint">${getTranslationHint(config.translation?.provider || 'ai')}</span>
-        </div>
-
-        <!-- YouTube 字幕 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.youtubeSubtitleToolsSection')}</div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.youtubeSubtitleEnabled')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="yt-subtitle-enabled" ${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-            <span class="glass-form-hint">${t('settings.youtubeSubtitleHint')}</span>
-          </div>
-          <div class="glass-form-group-stack" id="yt-subtitle-settings"${(config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG).enabled ? '' : ' style="display: none"'}>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.youtubeSubtitleSourceLang')}</label>
-              <select class="glass-select" id="yt-subtitle-source-lang">
-                <option value="auto"${(config.youtubeSubtitle?.sourceLanguage || 'auto') === 'auto' ? ' selected' : ''}>${t('settings.youtubeSubtitleAutoDetect')}</option>
-                <option value="en"${config.youtubeSubtitle?.sourceLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="zh-CN"${config.youtubeSubtitle?.sourceLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${config.youtubeSubtitle?.sourceLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="ja"${config.youtubeSubtitle?.sourceLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-                <option value="ko"${config.youtubeSubtitle?.sourceLanguage === 'ko' ? ' selected' : ''}>한국어</option>
-                <option value="es"${config.youtubeSubtitle?.sourceLanguage === 'es' ? ' selected' : ''}>Español</option>
-                <option value="fr"${config.youtubeSubtitle?.sourceLanguage === 'fr' ? ' selected' : ''}>Français</option>
-                <option value="de"${config.youtubeSubtitle?.sourceLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
-              </select>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.youtubeSubtitleTargetLang')}</label>
-              <select class="glass-select" id="yt-subtitle-target-lang">
-                <option value="zh-CN"${(config.youtubeSubtitle?.targetLanguage || 'zh-CN') === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-                <option value="zh-TW"${config.youtubeSubtitle?.targetLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-                <option value="en"${config.youtubeSubtitle?.targetLanguage === 'en' ? ' selected' : ''}>English</option>
-                <option value="ja"${config.youtubeSubtitle?.targetLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-                <option value="ko"${config.youtubeSubtitle?.targetLanguage === 'ko' ? ' selected' : ''}>한국어</option>
-                <option value="es"${config.youtubeSubtitle?.targetLanguage === 'es' ? ' selected' : ''}>Español</option>
-                <option value="fr"${config.youtubeSubtitle?.targetLanguage === 'fr' ? ' selected' : ''}>Français</option>
-                <option value="de"${config.youtubeSubtitle?.targetLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
-              </select>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.youtubeSubtitleFontSize')}</label>
-              <select class="glass-select" id="yt-subtitle-font-size">
-                <option value="small"${(config.youtubeSubtitle?.fontSize || 'medium') === 'small' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontSmall')}</option>
-                <option value="medium"${(config.youtubeSubtitle?.fontSize || 'medium') === 'medium' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontMedium')}</option>
-                <option value="large"${(config.youtubeSubtitle?.fontSize || 'medium') === 'large' ? ' selected' : ''}>${t('settings.youtubeSubtitleFontLarge')}</option>
-              </select>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.youtubeSubtitleDisplayMode')}</label>
-              <select class="glass-select" id="yt-subtitle-display-mode">
-                <option value="bilingual"${(config.youtubeSubtitle?.displayMode || 'bilingual') === 'bilingual' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeBilingual')}</option>
-                <option value="translated"${config.youtubeSubtitle?.displayMode === 'translated' ? ' selected' : ''}>${t('settings.youtubeSubtitleModeTranslated')}</option>
-              </select>
-            </div>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.ttsEnabled')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="tts-enabled" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-            <span class="glass-form-hint">${t('settings.ttsHint')}</span>
-          </div>
-          <div class="glass-form-group-stack" id="tts-settings"${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).enabled ? '' : ' style="display: none"'}>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.ttsEngine')}</label>
-              <select class="glass-select" id="tts-engine">
-                <option value="native"${(config.youtubeSubtitleTTS?.engine || 'native') === 'native' ? ' selected' : ''}>${t('settings.ttsEngineNative')}</option>
-                <option value="edge"${config.youtubeSubtitleTTS?.engine === 'edge' ? ' selected' : ''}>${t('settings.ttsEngineEdge')}</option>
-                <option value="cloud"${config.youtubeSubtitleTTS?.engine === 'cloud' ? ' selected' : ''}>${t('settings.ttsEngineCloud')}</option>
-              </select>
-            </div>
-            <div id="tts-edge-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'edge' ? 'block' : 'none'}">
-            </div>
-            <div id="tts-cloud-settings" style="display: ${config.youtubeSubtitleTTS?.engine === 'cloud' ? 'block' : 'none'}">
-              <div class="glass-form-group">
-                <label class="glass-form-label">${t('settings.ttsCloudProvider')}</label>
-                <select class="glass-select" id="tts-cloud-provider">
-                  <option value="openai"${(config.youtubeSubtitleTTS?.cloudProvider || 'openai') === 'openai' ? ' selected' : ''}>OpenAI</option>
-                  <option value="custom"${config.youtubeSubtitleTTS?.cloudProvider === 'custom' ? ' selected' : ''}>${t('settings.custom')}</option>
-                </select>
-              </div>
-              <div class="glass-form-group">
-                <label class="glass-form-label">${t('settings.ttsCloudApiKey')}</label>
-                <input type="text" class="glass-input" id="tts-cloud-api-key" value="${config.youtubeSubtitleTTS?.cloudApiKey || ''}" placeholder="${t('settings.ttsCloudApiKeyPlaceholder')}">
-              </div>
-              <div class="glass-form-group" id="tts-custom-url-group" style="display: ${config.youtubeSubtitleTTS?.cloudProvider === 'custom' ? 'flex' : 'none'}">
-                <label class="glass-form-label">${t('settings.ttsCloudApiUrl')}</label>
-                <input type="text" class="glass-input" id="tts-cloud-api-url" value="${config.youtubeSubtitleTTS?.cloudApiUrl || ''}" placeholder="${t('settings.ttsCloudApiUrlPlaceholder')}">
-              </div>
-              <div class="glass-form-group">
-                <label class="glass-form-label">${t('settings.ttsCloudModel')}</label>
-                <input type="text" class="glass-input" id="tts-cloud-model" value="${config.youtubeSubtitleTTS?.cloudModel || 'tts-1'}" placeholder="tts-1">
-              </div>
-            </div>
-            <div class="glass-form-group" id="tts-voice-group">
-              <label class="glass-form-label">${t('settings.ttsVoice')}</label>
-              <div id="tts-voice-container">
-                ${(config.youtubeSubtitleTTS?.engine === 'edge')
-                  ? `<select class="glass-select" id="tts-voice"><option value="${config.youtubeSubtitleTTS?.voice || ''}">${config.youtubeSubtitleTTS?.voice || t('settings.ttsVoiceLoading')}</option></select>`
-                  : `<input type="text" class="glass-input" id="tts-voice" value="${config.youtubeSubtitleTTS?.voice || ''}" placeholder="${t('settings.ttsVoicePlaceholder')}">`
-                }
-              </div>
-            </div>
-            <div class="glass-form-group">
-              <label class="glass-form-label">${t('settings.ttsRate')}</label>
-              <select class="glass-select" id="tts-rate">
-                <option value="0.5"${(config.youtubeSubtitleTTS?.rate || 1) === 0.5 ? ' selected' : ''}>0.5x</option>
-                <option value="0.75"${(config.youtubeSubtitleTTS?.rate || 1) === 0.75 ? ' selected' : ''}>0.75x</option>
-                <option value="1"${(config.youtubeSubtitleTTS?.rate || 1) === 1 ? ' selected' : ''}>1.0x</option>
-                <option value="1.25"${(config.youtubeSubtitleTTS?.rate || 1) === 1.25 ? ' selected' : ''}>1.25x</option>
-                <option value="1.5"${(config.youtubeSubtitleTTS?.rate || 1) === 1.5 ? ' selected' : ''}>1.5x</option>
-                <option value="2"${(config.youtubeSubtitleTTS?.rate || 1) === 2 ? ' selected' : ''}>2.0x</option>
-              </select>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">${t('settings.ttsAutoPlay')}</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="tts-auto-play" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).autoPlay ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-              <span class="glass-form-hint">${t('settings.ttsAutoPlayHint')}</span>
-            </div>
-            <div class="glass-form-group glass-form-toggle">
-              <label class="glass-form-label">${t('settings.ttsMuteOriginal')}</label>
-              <label class="glass-toggle">
-                <input type="checkbox" id="tts-mute-original" ${(config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG).muteOriginal ? 'checked' : ''}>
-                <span class="glass-toggle-slider"></span>
-              </label>
-              <span class="glass-form-hint">${t('settings.ttsMuteOriginalHint')}</span>
-            </div>
-          </div>
-        </div>
+        <!-- 插件 -->
+        ${pluginListHTML || ''}
 
         <!-- 外观 -->
         <div class="glass-settings-section">
@@ -434,20 +243,6 @@ export function getSettingsViewHTML(
               <option value="system"${config.theme === 'system' ? ' selected' : ''}>${t('settings.themeSystem')}</option>
               <option value="dark"${config.theme === 'dark' ? ' selected' : ''}>${t('settings.themeDark')}</option>
               <option value="light"${config.theme === 'light' ? ' selected' : ''}>${t('settings.themeLight')}</option>
-            </select>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.selectionPopover')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="show-popover-toggle" ${config.showSelectionPopover !== false ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group" id="popover-position-group"${config.showSelectionPopover === false ? ' style="display: none"' : ''}>
-            <label class="glass-form-label">${t('settings.popoverPosition')}</label>
-            <select class="glass-select" id="popover-position-select">
-              <option value="above"${config.popoverPosition === 'above' ? ' selected' : ''}>${t('settings.popoverAbove')}</option>
-              <option value="below"${config.popoverPosition === 'below' ? ' selected' : ''}>${t('settings.popoverBelow')}</option>
             </select>
           </div>
         </div>
@@ -462,97 +257,6 @@ export function getSettingsViewHTML(
               <option value="en"${(config as any).uiLanguage === 'en' ? ' selected' : ''}>English</option>
             </select>
           </div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.translateTargetLanguage')}</label>
-            <select class="glass-select" id="translate-lang-select">
-              <option value="zh-CN"${config.preferredLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-              <option value="zh-TW"${config.preferredLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-              <option value="en"${config.preferredLanguage === 'en' ? ' selected' : ''}>English</option>
-              <option value="ja"${config.preferredLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-              <option value="ko"${config.preferredLanguage === 'ko' ? ' selected' : ''}>한국어</option>
-              <option value="es"${config.preferredLanguage === 'es' ? ' selected' : ''}>Español</option>
-              <option value="fr"${config.preferredLanguage === 'fr' ? ' selected' : ''}>Français</option>
-              <option value="de"${config.preferredLanguage === 'de' ? ' selected' : ''}>Deutsch</option>
-            </select>
-          </div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.summaryOutputLanguage')}</label>
-            <select class="glass-select" id="summary-lang-select">
-              <option value="auto"${config.summaryLanguage === 'auto' ? ' selected' : ''}>${t('settings.summaryAutoDetect')}</option>
-              <option value="zh-CN"${config.summaryLanguage === 'zh-CN' ? ' selected' : ''}>简体中文</option>
-              <option value="zh-TW"${config.summaryLanguage === 'zh-TW' ? ' selected' : ''}>繁体中文</option>
-              <option value="en"${config.summaryLanguage === 'en' ? ' selected' : ''}>English</option>
-              <option value="ja"${config.summaryLanguage === 'ja' ? ' selected' : ''}>日本語</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- 截图 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.screenshotSection')}</div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.saveToFile')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="save-to-file" ${screenshotConfig.saveToFile ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.copyToClipboard')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="copy-to-clipboard" ${screenshotConfig.copyToClipboard ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.aiAnalysis')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="enable-ai" ${screenshotConfig.enableAI ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.defaultAIAction')}</label>
-            <select class="glass-select" id="default-ai-action">
-              <option value="none"${screenshotConfig.defaultAIAction === 'none' ? ' selected' : ''}>${t('settings.actionNone')}</option>
-              <option value="ask"${screenshotConfig.defaultAIAction === 'ask' ? ' selected' : ''}>${t('settings.actionAsk')}</option>
-              <option value="describe"${screenshotConfig.defaultAIAction === 'describe' ? ' selected' : ''}>${t('settings.actionDescribe')}</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- 右键搜图 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.imageSearch')}</div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.googleImageSearch')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="image-search-google" ${imageSearchConfig.google ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.yandexImageSearch')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="image-search-yandex" ${imageSearchConfig.yandex ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.bingImageSearch')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="image-search-bing" ${imageSearchConfig.bing ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.tineyeImageSearch')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="image-search-tineye" ${imageSearchConfig.tineye ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-          <span class="glass-form-hint">${t('settings.imageSearchHint')}</span>
         </div>
 
         <!-- 历史记录 -->
@@ -588,74 +292,6 @@ export function getSettingsViewHTML(
               <span class="glass-toggle-slider"></span>
             </label>
             <span class="glass-form-hint">${t('settings.autoSaveHint')}</span>
-          </div>
-        </div>
-
-        <!-- 批注 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.annotationSection')}</div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.defaultHighlightColor')}</label>
-            <div class="glass-color-picker" id="annotation-color-picker">
-              <button class="glass-color-option ${(config.annotation?.defaultColor || 'yellow') === 'yellow' ? 'active' : ''}" data-color="yellow" style="--color: #fef08a; --color-border: #fbbf24;"></button>
-              <button class="glass-color-option ${config.annotation?.defaultColor === 'green' ? 'active' : ''}" data-color="green" style="--color: #bbf7d0; --color-border: #4ade80;"></button>
-              <button class="glass-color-option ${config.annotation?.defaultColor === 'blue' ? 'active' : ''}" data-color="blue" style="--color: #bfdbfe; --color-border: #60a5fa;"></button>
-              <button class="glass-color-option ${config.annotation?.defaultColor === 'pink' ? 'active' : ''}" data-color="pink" style="--color: #fbcfe8; --color-border: #f472b6;"></button>
-              <button class="glass-color-option ${config.annotation?.defaultColor === 'purple' ? 'active' : ''}" data-color="purple" style="--color: #ddd6fe; --color-border: #a78bfa;"></button>
-              ${(() => {
-                const dc = config.annotation?.defaultColor || 'yellow';
-                const isCustom = !['yellow', 'green', 'blue', 'pink', 'purple'].includes(dc);
-                const customValue = isCustom ? dc : '#ff6600';
-                const customConfig = isCustom ? getAnnotationColorConfig(dc) : null;
-                return `<div class="glass-color-option glass-color-option-custom ${isCustom ? 'active' : ''}" title="${t('settings.customColor')}" style="${isCustom ? `--color: ${customConfig!.bg}; --color-border: ${customConfig!.border};` : ''}">
-                  <input type="color" id="annotation-custom-color" value="${customValue}">
-                </div>`;
-              })()}
-            </div>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.autoSaveAIResult')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="annotation-auto-save" ${config.annotation?.autoSaveAIResult ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-            <span class="glass-form-hint">${t('settings.autoSaveAIHint')}</span>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.defaultShowCurrentPage')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="annotation-page-filter" ${config.annotation?.showPageFilter ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 知识库 -->
-        <div class="glass-settings-section">
-          <div class="glass-settings-section-title">${t('settings.knowledgeSection')}</div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.defaultFilter')}</label>
-            <select class="glass-select" id="knowledge-filter-select">
-              <option value="all" ${(config.knowledge?.defaultFilter || 'all') === 'all' ? 'selected' : ''}>${t('settings.filterAll')}</option>
-              <option value="annotations" ${config.knowledge?.defaultFilter === 'annotations' ? 'selected' : ''}>${t('settings.filterAnnotationsOnly')}</option>
-              <option value="ai-results" ${config.knowledge?.defaultFilter === 'ai-results' ? 'selected' : ''}>${t('settings.filterAIResultsOnly')}</option>
-            </select>
-          </div>
-          <div class="glass-form-group">
-            <label class="glass-form-label">${t('settings.maxDisplayPerGroup')}</label>
-            <select class="glass-select" id="knowledge-max-display">
-              <option value="20" ${(config.knowledge?.maxDisplayCount || 50) === 20 ? 'selected' : ''}>${t('settings.historyCountSuffix', { n: 20 })}</option>
-              <option value="50" ${config.knowledge?.maxDisplayCount === 50 ? 'selected' : ''}>${t('settings.historyCountSuffix', { n: 50 })}</option>
-              <option value="100" ${config.knowledge?.maxDisplayCount === 100 ? 'selected' : ''}>${t('settings.historyCountSuffix', { n: 100 })}</option>
-              <option value="200" ${config.knowledge?.maxDisplayCount === 200 ? 'selected' : ''}>${t('settings.historyCountSuffix', { n: 200 })}</option>
-            </select>
-          </div>
-          <div class="glass-form-group glass-form-toggle">
-            <label class="glass-form-label">${t('settings.groupByDate')}</label>
-            <label class="glass-toggle">
-              <input type="checkbox" id="knowledge-group-date" ${config.knowledge?.groupByDate !== false ? 'checked' : ''}>
-              <span class="glass-toggle-slider"></span>
-            </label>
           </div>
         </div>
 

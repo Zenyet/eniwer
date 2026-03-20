@@ -1,7 +1,7 @@
 import { ChatSession } from '../../../types';
 import { icons } from '../../../icons';
 import { t } from '../../../i18n';
-import { escapeHtml, formatAIContent, getLoadingHTML, getThinkingSectionHTML } from '../utils';
+import { escapeHtml, formatAIContent, formatTokenUsage, getLoadingHTML, getThinkingSectionHTML } from '../utils';
 
 export interface ContextChatRenderModel {
   activeLabel: string;
@@ -63,6 +63,7 @@ export function getContextChatViewHTML(model: ContextChatRenderModel): string {
               <polyline points="7 3 7 8 15 8"></polyline>
             </svg>
           </button>
+        <span class="glass-token-usage glass-chat-token-usage" style="display: none"></span>
       </div>
       <div class="glass-brand">
         <span class="glass-logo">${icons.logo}</span>

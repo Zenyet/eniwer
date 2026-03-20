@@ -1,15 +1,21 @@
 import { CommandPalette } from './CommandPalette';
 import { MenuActions } from './MenuActions';
-import { SelectionPopover, PopoverPosition } from './SelectionPopover';
 import { TrailRecorder } from './BrowseTrailPanel';
 import { AnnotationSystem } from './annotation';
-import { YouTubeSubtitleManager } from './youtube';
 import { AnnotationColor, AnnotationAIResult, AIResultType } from '../types/annotation';
 import { MenuItem, DEFAULT_CONFIG, DEFAULT_SELECTION_MENU, DEFAULT_GLOBAL_MENU, MenuConfig } from '../types';
 import { getStorageData } from '../utils/storage';
-import { abortAllRequests } from '../utils/ai';
+import { abortAllRequests, callAI } from '../utils/ai';
 import { initI18n, setLocale, t } from '../i18n';
 import { getShadowRoot, loadStyles, appendToShadow, removeFromShadow, getShadowHost } from './ShadowHost';
+import { PluginManager } from '../plugins';
+import type { PluginContext } from '../plugins';
+import {
+  BrowseTrailPlugin, AnnotationsPlugin, KnowledgePlugin, ScreenshotPlugin,
+  ContextChatPlugin, YouTubePlugin, TranslatePlugin, SummarizePlugin, SelectionPopoverPlugin, ImageSearchPlugin,
+  Base64Plugin, CloudSyncPlugin,
+} from '../plugins/builtin';
+import type { KnowledgeItem } from './CommandPalette/views';
 import './styles.css';
 
 interface ToastItem {
@@ -20,10 +26,9 @@ interface ToastItem {
 class TheCircle {
   private commandPalette: CommandPalette;
   private menuActions: MenuActions;
-  private selectionPopover: SelectionPopover;
   private trailRecorder: TrailRecorder;
   private annotationSystem: AnnotationSystem;
-  private youtubeSubtitleManager: YouTubeSubtitleManager;
+  private pluginManager: PluginManager;
   private selectionMenuItems: MenuItem[] = DEFAULT_SELECTION_MENU;
   private globalMenuItems: MenuItem[] = DEFAULT_GLOBAL_MENU;
   private config: MenuConfig = DEFAULT_CONFIG;
@@ -37,10 +42,27 @@ class TheCircle {
   constructor() {
     this.commandPalette = new CommandPalette(DEFAULT_CONFIG);
     this.menuActions = new MenuActions(DEFAULT_CONFIG);
-    this.selectionPopover = new SelectionPopover();
     this.trailRecorder = new TrailRecorder();
     this.annotationSystem = new AnnotationSystem();
-    this.youtubeSubtitleManager = new YouTubeSubtitleManager(DEFAULT_CONFIG);
+    this.pluginManager = new PluginManager();
+
+    // Register built-in plugins
+    this.pluginManager.register(new BrowseTrailPlugin());
+    this.pluginManager.register(new AnnotationsPlugin());
+    this.pluginManager.register(new KnowledgePlugin());
+    this.pluginManager.register(new ScreenshotPlugin());
+    this.pluginManager.register(new ContextChatPlugin());
+    this.pluginManager.register(new YouTubePlugin(DEFAULT_CONFIG));
+    this.pluginManager.register(new TranslatePlugin());
+    this.pluginManager.register(new SummarizePlugin());
+    this.pluginManager.register(new SelectionPopoverPlugin());
+    this.pluginManager.register(new ImageSearchPlugin());
+    this.pluginManager.register(new Base64Plugin());
+    this.pluginManager.register(new CloudSyncPlugin());
+
+    // Wire plugin manager into command palette
+    this.commandPalette.setPluginManager(this.pluginManager);
+
     // Set up flow callbacks for screenshot and other async operations
     this.menuActions.setFlowCallbacks({
       onToast: (message) => this.showToast(message),
@@ -70,17 +92,86 @@ class TheCircle {
 
     await this.loadConfig();
     await initI18n(this.config.uiLanguage);
+
+    // Apply browse trail exclude patterns from config
+    if (this.config.browseTrailExcludePatterns) {
+      this.trailRecorder.setExcludePatterns(this.config.browseTrailExcludePatterns);
+    }
     this.setupKeyboardShortcut();
     this.setupMessageListener();
     this.setupStorageListener();
-    this.setupSelectionListener();
+
+    // Register external plugins that were added before init
+    if (window.__thePanelPlugins) {
+      for (const plugin of window.__thePanelPlugins) {
+        this.pluginManager.register(plugin);
+      }
+    }
+
+    // Activate all registered plugins
+    this.pluginManager.activateAll((pluginId) => this.createPluginContext(pluginId));
+
+    // Sync plugin states from config
+    if (this.config.pluginStates) {
+      this.pluginManager.setPluginStates(this.config.pluginStates);
+    }
+
+    // Expose late-registration API for external plugins
+    window.__thePanelRegisterPlugin = (plugin) => {
+      this.pluginManager.register(plugin);
+      try {
+        plugin.activate(this.createPluginContext(plugin.id));
+      } catch (err) {
+        console.error(`[TheCircle] Failed to activate external plugin "${plugin.id}":`, err);
+      }
+      if (this.config.pluginStates) {
+        this.pluginManager.setPluginStates(this.config.pluginStates);
+      }
+    };
+
+    // Wire annotation scroll callback into the annotations plugin
+    const annotationsPlugin = this.pluginManager.getPlugin<AnnotationsPlugin>('annotations');
+    if (annotationsPlugin) {
+      annotationsPlugin.setScrollToAnnotationCallback((id) => this.annotationSystem.scrollToAnnotation(id));
+    }
+
+    // Bridge annotation events from plugins to the annotation system
+    this.pluginManager.on('annotation:highlight', (data) => {
+      const { color } = data as { color: AnnotationColor };
+      void this.annotationSystem.createHighlight(color);
+    });
+    this.pluginManager.on('annotation:note', (data) => {
+      const { defaultColor } = data as { defaultColor?: AnnotationColor };
+      void this.annotationSystem.createHighlightWithNote(defaultColor);
+    });
+
+    // Bridge quote events from popover to ContextChatPlugin
+    const contextChatPlugin = this.pluginManager.getPlugin<ContextChatPlugin>('contextChat');
+    if (contextChatPlugin) {
+      this.pluginManager.on('contextChat:quote', (data) => {
+        const { text } = data as { text: string };
+        if (!this.commandPalette.isVisible()) {
+          this.showMenu();
+        }
+        contextChatPlugin.startWithQuote(text);
+      });
+      this.pluginManager.on('contextChat:quoteAsk', (data) => {
+        const { text } = data as { text: string };
+        if (!this.commandPalette.isVisible()) {
+          this.showMenu();
+        }
+        contextChatPlugin.startQuickAskWithQuote(text);
+      });
+    }
+    this.pluginManager.on('annotation:saveFromAI', (data) => {
+      const { originalText, content, thinking, actionType } = data as {
+        originalText: string; content: string; thinking?: string; actionType?: string;
+      };
+      void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
+    });
 
     // Initialize annotation system (restore highlights)
     await this.annotationSystem.init();
-
-    // Initialize YouTube subtitle manager if on YouTube
-    this.youtubeSubtitleManager.updateConfig(this.config);
-    this.youtubeSubtitleManager.init();
 
   }
 
@@ -113,7 +204,15 @@ class TheCircle {
           this.menuActions.setConfig(this.config);
           this.commandPalette.setConfig(this.config);
           this.applyTheme(this.config.theme);
-          this.youtubeSubtitleManager.updateConfig(this.config);
+          this.pluginManager.notifyConfigChange(this.config);
+          // Update browse trail exclude patterns
+          if (this.config.browseTrailExcludePatterns) {
+            this.trailRecorder.setExcludePatterns(this.config.browseTrailExcludePatterns);
+          }
+          // Sync plugin states
+          if (this.config.pluginStates) {
+            this.pluginManager.setPluginStates(this.config.pluginStates);
+          }
         }
       }
       // Listen for saved tasks changes to enable cross-tab sync
@@ -162,94 +261,6 @@ class TheCircle {
       // Listen for changes
       darkModeQuery.onchange = updateSystemTheme;
     }
-  }
-
-  private setupSelectionListener(): void {
-    let selectionTimeout: number | null = null;
-
-    document.addEventListener('mouseup', (e) => {
-      // Ignore if clicking on our UI elements
-      const path = e.composedPath() as HTMLElement[];
-      for (const el of path) {
-        if (el instanceof HTMLElement) {
-          if (el.classList?.contains('thecircle-selection-popover') ||
-              el.classList?.contains('thecircle-result-panel') ||
-              el.classList?.contains('thecircle-palette') ||
-              el.classList?.contains('thecircle-toast') ||
-              el.classList?.contains('thecircle-note-popup') ||
-              el.classList?.contains('thecircle-highlight')) {
-            return;
-          }
-        }
-      }
-
-      // Clear any pending timeout
-      if (selectionTimeout) {
-        clearTimeout(selectionTimeout);
-      }
-
-      // Small delay to let selection finalize
-      selectionTimeout = window.setTimeout(() => {
-        const selection = window.getSelection();
-        const selectedText = selection?.toString().trim() || '';
-
-        if (selectedText && selection && selection.rangeCount > 0) {
-          // Store selected text for later use
-          this.currentSelectedText = selectedText;
-
-          // Check if popover is enabled (default: true)
-          if (this.config.showSelectionPopover === false) return;
-
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-
-          // Get popover position from config (default to 'above')
-          const position: PopoverPosition = this.config.popoverPosition || 'above';
-
-          // Show the selection popover with annotation callbacks
-          this.selectionPopover.show(rect, {
-            onTranslate: () => this.handleSelectionTranslate(),
-            onHighlight: (color: AnnotationColor) => this.handleSelectionHighlight(color),
-            onNote: () => this.handleSelectionNote(),
-            onMore: () => this.handleSelectionMore(),
-          }, position);
-        } else {
-          // No selection, hide popover
-          this.selectionPopover.hide();
-          this.currentSelectedText = '';
-        }
-      }, 10);
-    });
-
-    // Hide popover when clicking elsewhere (but not on our UI elements)
-    document.addEventListener('mousedown', (e) => {
-      const path = e.composedPath() as HTMLElement[];
-      for (const el of path) {
-        if (el instanceof HTMLElement) {
-          if (el.classList?.contains('thecircle-selection-popover') ||
-              el.classList?.contains('thecircle-result-panel') ||
-              el.classList?.contains('thecircle-palette') ||
-              el.classList?.contains('thecircle-toast') ||
-              el.classList?.contains('thecircle-note-popup') ||
-              el.classList?.contains('thecircle-highlight')) {
-            return;
-          }
-        }
-      }
-
-      // Only hide if there's no ongoing selection
-      if (!window.getSelection()?.toString().trim()) {
-        this.selectionPopover.hide();
-      }
-    });
-  }
-
-  private async handleSelectionHighlight(color: AnnotationColor): Promise<void> {
-    await this.annotationSystem.createHighlight(color);
-  }
-
-  private async handleSelectionNote(): Promise<void> {
-    await this.annotationSystem.createHighlightWithNote(this.config.annotation?.defaultColor);
   }
 
   private async handleSaveToAnnotation(
@@ -312,136 +323,6 @@ class TheCircle {
       }
     }
     return false;
-  }
-
-  private handleSelectionMore(): void {
-    // Show the command palette with selection menu items
-    this.showMenu();
-  }
-
-  private async handleSelectionTranslate(): Promise<void> {
-    if (!this.currentSelectedText) return;
-
-    // Find the translate menu item from selection menu
-    const translateItem = this.selectionMenuItems.find(item => item.action === 'translate');
-    if (!translateItem) {
-      this.showToast(t('content.translateNotConfigured'));
-      return;
-    }
-
-    // Hide the selection popover immediately
-    this.selectionPopover.hide();
-
-    // Set the selected text for menu actions
-    this.menuActions.setSelectedText(this.currentSelectedText);
-
-    const originalText = this.currentSelectedText;
-    let translateRunId = 0;
-
-    // Set active command and show AI result in command palette FIRST to get stream key
-    this.commandPalette.setActiveCommand(translateItem);
-    this.commandPalette.showAIResult(translateItem.label, {
-      onStop: () => abortAllRequests(),
-      onTranslateLanguageChange: (targetLang) => {
-        void runTranslate(targetLang);
-      },
-      onSaveToAnnotation: (originalText, content, thinking, actionType) => {
-        void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
-      },
-    }, {
-      originalText,
-      resultType: 'translate',
-      translateTargetLanguage: this.config.preferredLanguage || 'zh-CN',
-      iconHtml: translateItem.icon,
-      actionType: 'translate',
-    });
-
-    // Capture stream key AFTER showAIResult so it routes updates to this specific task
-    const streamKey = this.commandPalette.getCurrentStreamKey();
-
-    const runTranslate = async (targetLang: string) => {
-      const runId = ++translateRunId;
-      this.menuActions.setSelectedText(originalText);
-
-      const onChunk = this.config.useStreaming
-        ? (chunk: string, fullText: string, thinking?: string) => {
-            if (runId !== translateRunId) return;
-            this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
-          }
-        : undefined;
-
-      const result = await this.menuActions.execute(translateItem, onChunk, {
-        translateTargetLanguage: targetLang,
-      });
-
-      if (runId !== translateRunId) return;
-
-      if (result.type === 'error') {
-        this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
-      } else if (result.type === 'ai') {
-        this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
-      }
-    };
-
-    await runTranslate(this.config.preferredLanguage || 'zh-CN');
-  }
-
-  private async handleTranslateInput(text: string): Promise<void> {
-    const translateItem = this.globalMenuItems.find(item => item.action === 'translateInput')
-      || { id: 'translateInput', icon: '', label: 'menu.translateInput', action: 'translate', enabled: true, order: 0 };
-
-    // Reuse the translate menu item but with the typed text as selectedText
-    const translateActionItem = this.selectionMenuItems.find(item => item.action === 'translate')
-      || { ...translateItem, action: 'translate' };
-
-    this.menuActions.setSelectedText(text);
-
-    let translateRunId = 0;
-
-    this.commandPalette.setActiveCommand(translateItem);
-    this.commandPalette.showAIResult(translateItem.label, {
-      onStop: () => abortAllRequests(),
-      onTranslateLanguageChange: (targetLang) => {
-        void runTranslate(targetLang);
-      },
-      onSaveToAnnotation: (originalText, content, thinking, actionType) => {
-        void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
-      },
-    }, {
-      originalText: text,
-      resultType: 'translate',
-      translateTargetLanguage: this.config.preferredLanguage || 'zh-CN',
-      iconHtml: translateItem.icon,
-      actionType: 'translate',
-    });
-
-    const streamKey = this.commandPalette.getCurrentStreamKey();
-
-    const runTranslate = async (targetLang: string) => {
-      const runId = ++translateRunId;
-      this.menuActions.setSelectedText(text);
-
-      const onChunk = this.config.useStreaming
-        ? (chunk: string, fullText: string, thinking?: string) => {
-            if (runId !== translateRunId) return;
-            this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
-          }
-        : undefined;
-
-      const result = await this.menuActions.execute(translateActionItem, onChunk, {
-        translateTargetLanguage: targetLang,
-      });
-
-      if (runId !== translateRunId) return;
-
-      if (result.type === 'error') {
-        this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
-      } else if (result.type === 'ai') {
-        this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
-      }
-    };
-
-    await runTranslate(this.config.preferredLanguage || 'zh-CN');
   }
 
   private setupKeyboardShortcut(): void {
@@ -528,9 +409,6 @@ class TheCircle {
   }
 
   private openSettings(): void {
-    // Hide selection popover when opening settings
-    this.selectionPopover.hide();
-
     // Show command palette and navigate to settings
     if (!this.commandPalette.isVisible()) {
       this.commandPalette.show(this.globalMenuItems, {
@@ -541,7 +419,7 @@ class TheCircle {
           // Cleanup if needed
         },
         onTranslateInput: (text) => {
-          void this.handleTranslateInput(text);
+          this.pluginManager.handleCommand('translateInput', text);
         },
       });
     }
@@ -552,9 +430,6 @@ class TheCircle {
   }
 
   private showMenu(): void {
-    // Hide selection popover when opening command palette
-    this.selectionPopover.hide();
-
     // If already visible, hide it (toggle behavior)
     if (this.commandPalette.isVisible()) {
       this.commandPalette.hide();
@@ -570,12 +445,17 @@ class TheCircle {
         // Cleanup if needed
       },
       onTranslateInput: (text) => {
-        void this.handleTranslateInput(text);
+        this.pluginManager.handleCommand('translateInput', text);
       },
     });
   }
 
   private async handleMenuAction(item: MenuItem): Promise<void> {
+    // Let plugins handle the action first
+    if (this.pluginManager.handleCommand(item.action, this.currentSelectedText)) {
+      return;
+    }
+
     // Handle settings action specially - show settings in command palette
     if (item.action === 'settings') {
       await this.commandPalette.loadSettingsMenuItems();
@@ -583,151 +463,46 @@ class TheCircle {
       return;
     }
 
-    // Handle annotations action - show annotations view in command palette
-    if (item.action === 'annotations') {
-      await this.commandPalette.showAnnotations({
-        onScrollToAnnotation: (id) => this.annotationSystem.scrollToAnnotation(id),
-      });
-      return;
-    }
-
-    // Handle knowledge action - show knowledge base view in command palette
-    if (item.action === 'knowledge') {
-      await this.commandPalette.showKnowledge();
-      return;
-    }
-
-    // Show loading for AI actions
-    const aiActions = ['translate', 'summarize', 'explain', 'rewrite', 'codeExplain', 'summarizePage'];
+    // Show loading for AI actions (translate/summarize/summarizePage handled by plugins above)
+    const aiActions = ['explain', 'rewrite', 'codeExplain'];
 
     if (aiActions.includes(item.action)) {
       const originalText = this.currentSelectedText || window.getSelection()?.toString() || '';
+      this.menuActions.setSelectedText(originalText);
 
-      if (item.action === 'translate') {
-        let translateRunId = 0;
+      const actionType = item.action;
 
-        // Set active command and show AI result in command palette FIRST to get stream key
-        this.commandPalette.setActiveCommand(item);
-        this.commandPalette.showAIResult(item.label, {
-          onStop: () => abortAllRequests(),
-          onTranslateLanguageChange: (targetLang) => {
-            void runTranslate(targetLang);
-          },
-          onSaveToAnnotation: (originalText, content, thinking, actionType) => {
-            void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
-          },
-        }, {
-          originalText,
-          resultType: 'translate',
-          translateTargetLanguage: this.config.preferredLanguage || 'zh-CN',
-          iconHtml: item.icon,
-          actionType: 'translate',
-        });
+      // Set active command and show AI result in command palette
+      this.commandPalette.setActiveCommand(item);
+      const restored = this.commandPalette.showAIResult(item.label, {
+        onStop: () => abortAllRequests(),
+        onSaveToAnnotation: (originalText, content, thinking, actionType) => {
+          void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
+        },
+      }, {
+        originalText,
+        resultType: 'general',
+        iconHtml: item.icon,
+        actionType,
+        sourceUrl: window.location.href,
+        sourceTitle: document.title,
+      });
 
-        // Capture stream key AFTER showAIResult so it routes updates to this specific task
-        const streamKey = this.commandPalette.getCurrentStreamKey();
+      const streamKey = this.commandPalette.getCurrentStreamKey();
+      if (restored) return;
 
-        const runTranslate = async (targetLang: string) => {
-          const runId = ++translateRunId;
-          this.menuActions.setSelectedText(originalText);
-
-          const onChunk = this.config.useStreaming
-            ? (chunk: string, fullText: string, thinking?: string) => {
-                if (runId !== translateRunId) return;
-                this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
-              }
-            : undefined;
-
-          const result = await this.menuActions.execute(item, onChunk, {
-            translateTargetLanguage: targetLang,
-          });
-
-          if (runId !== translateRunId) return;
-
-          if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
-          } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
+      const onChunk = this.config.useStreaming
+        ? (chunk: string, fullText: string, thinking?: string) => {
+            this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
           }
-        };
+        : undefined;
 
-        await runTranslate(this.config.preferredLanguage || 'zh-CN');
-      } else {
-        this.menuActions.setSelectedText(originalText);
+      const result = await this.menuActions.execute(item, onChunk);
 
-        // Determine action type for metadata
-        const actionType = item.action;
-
-        // Create refresh handler for page actions
-        const onRefresh = actionType === 'summarizePage' ? async () => {
-          // Reset content and start new request
-          this.commandPalette.setActiveCommand(item);
-          this.commandPalette.showAIResult(item.label, {
-            onStop: () => abortAllRequests(),
-            onRefresh,
-          }, {
-            originalText,
-            resultType: 'general',
-            iconHtml: item.icon,
-            actionType,
-            sourceUrl: window.location.href,
-            sourceTitle: document.title,
-          });
-
-          // Capture new stream key for refresh operation
-          const refreshStreamKey = this.commandPalette.getCurrentStreamKey();
-
-          const onChunk = this.config.useStreaming
-            ? (chunk: string, fullText: string, thinking?: string) => {
-                this.commandPalette.streamUpdate(chunk, fullText, thinking, refreshStreamKey || undefined);
-              }
-            : undefined;
-
-          const result = await this.menuActions.execute(item, onChunk);
-
-          if (result.type === 'error') {
-            this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, refreshStreamKey || undefined);
-          } else if (result.type === 'ai') {
-            this.commandPalette.updateAIResult(result.result || '', result.thinking, refreshStreamKey || undefined);
-          }
-        } : undefined;
-
-        // Set active command and show AI result in command palette
-        this.commandPalette.setActiveCommand(item);
-        const restored = this.commandPalette.showAIResult(item.label, {
-          onStop: () => abortAllRequests(),
-          onRefresh,
-          onSaveToAnnotation: (originalText, content, thinking, actionType) => {
-            void this.handleSaveToAnnotation(originalText, content, thinking, actionType);
-          },
-        }, {
-          originalText,
-          resultType: 'general',
-          iconHtml: item.icon,
-          actionType,
-          sourceUrl: window.location.href,
-          sourceTitle: document.title,
-        });
-
-        // Capture stream key AFTER showAIResult so it routes updates to this specific task
-        const streamKey = this.commandPalette.getCurrentStreamKey();
-
-        // If restored existing task, don't start new request
-        if (restored) return;
-
-        const onChunk = this.config.useStreaming
-          ? (chunk: string, fullText: string, thinking?: string) => {
-              this.commandPalette.streamUpdate(chunk, fullText, thinking, streamKey || undefined);
-            }
-          : undefined;
-
-        const result = await this.menuActions.execute(item, onChunk);
-
-        if (result.type === 'error') {
-          this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
-        } else if (result.type === 'ai') {
-          this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined);
-        }
+      if (result.type === 'error') {
+        this.commandPalette.updateAIResult(result.result || t('content.unknownError'), undefined, streamKey || undefined);
+      } else if (result.type === 'ai') {
+        this.commandPalette.updateAIResult(result.result || '', result.thinking, streamKey || undefined, result.usage);
       }
     } else {
       // Hide command palette for screenshot to allow area selection
@@ -746,6 +521,86 @@ class TheCircle {
       }
       // 'silent' and 'redirect' types don't show toast
     }
+  }
+
+  private createPluginContext(pluginId: string): PluginContext {
+    return {
+      getConfig: () => this.config,
+      onConfigChange: (cb) => this.pluginManager.addConfigListener(cb),
+      showToast: (msg) => this.showToast(msg),
+      ui: {
+        show: () => {
+          if (!this.commandPalette.isVisible()) {
+            this.showMenu();
+          }
+        },
+        hide: () => this.commandPalette.hide(),
+        navigateToView: (viewType) => this.commandPalette.navigateToView(viewType),
+        pushView: (view) => this.commandPalette.pushView(view),
+        popView: () => this.commandPalette.popView(),
+        setActiveCommand: (item) => this.commandPalette.setActiveCommand(item),
+        renderCurrentView: (animate?, keepPosition?) =>
+          (this.commandPalette as unknown as { renderCurrentView(a?: boolean, k?: boolean): void }).renderCurrentView(animate, keepPosition),
+        showSavedAIResult: (data) => {
+          this.commandPalette.openKnowledgeAIResult({
+            id: `plugin_${Date.now()}`,
+            type: 'ai-result',
+            title: data.title,
+            content: data.content,
+            thinking: data.thinking,
+            originalText: data.originalText,
+            actionType: data.actionType,
+            url: data.sourceUrl || '',
+            pageTitle: data.sourceTitle || '',
+            createdAt: data.createdAt || Date.now(),
+          } as KnowledgeItem);
+        },
+      },
+      ai: {
+        call: (prompt, systemPrompt, onChunk) => callAI(prompt, systemPrompt, this.config, onChunk),
+        abort: () => abortAllRequests(),
+      },
+      minimizedTasks: {
+        findAndUpdate: (pid, predicate, updater) => {
+          const cp = this.commandPalette as unknown as { minimizedTasks: Array<{ pluginId?: string; pluginData?: unknown; title: string; content: string; isLoading: boolean }>; renderMinimizedTasksIfVisible(): void };
+          const task = cp.minimizedTasks?.find(t => t.pluginId === pid && predicate(t.pluginData));
+          if (task) {
+            updater(task);
+            cp.renderMinimizedTasksIfVisible();
+          }
+        },
+        rerenderBadges: () => {
+          (this.commandPalette as unknown as { renderMinimizedTasksIfVisible(): void }).renderMinimizedTasksIfVisible();
+        },
+      },
+      tasks: {
+        autoSave: (data) => (this.commandPalette as unknown as { autoSaveAIResult(d: unknown): Promise<void> }).autoSaveAIResult(data),
+        addToUnsavedRecent: (data) => (this.commandPalette as unknown as { addToUnsavedRecent(d: unknown): void }).addToUnsavedRecent(data),
+      },
+      storage: {
+        get: async <T>(key: string): Promise<T | undefined> => {
+          const storageKey = `plugin_${pluginId}_${key}`;
+          const result = await chrome.storage.local.get(storageKey);
+          return result[storageKey] as T | undefined;
+        },
+        set: async <T>(key: string, value: T): Promise<void> => {
+          const storageKey = `plugin_${pluginId}_${key}`;
+          await chrome.storage.local.set({ [storageKey]: value });
+        },
+      },
+      sendMessage: (message) => chrome.runtime.sendMessage(message),
+      getSelectedText: () => this.currentSelectedText || window.getSelection()?.toString() || '',
+      getShadowRoot: () => (this.commandPalette as unknown as { shadowRoot: ShadowRoot | null }).shadowRoot,
+      getHandleDragStart: () => (this.commandPalette as unknown as { handleDragStart: (e: MouseEvent) => void }).handleDragStart,
+      getCommandPalette: () => this.commandPalette,
+      events: {
+        on: (event, handler) => this.pluginManager.on(event, handler as (data: unknown) => void),
+      },
+      plugins: {
+        isEnabled: (id: string) => this.pluginManager.isPluginEnabled(id),
+        handleCommand: (action: string, selectedText: string) => this.pluginManager.handleCommand(action, selectedText),
+      },
+    };
   }
 
   private showToast(message: string): void {

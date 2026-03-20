@@ -1,0 +1,45 @@
+---
+title: Events
+description: Cross-plugin communication via the event system
+---
+
+## Event System
+
+Plugins can communicate via typed events through `ctx.events`.
+
+## Available Events
+
+```typescript
+type PluginEventMap = {
+  'command:before': { action: string; selectedText: string };
+  'command:after': { action: string; handled: boolean };
+  'view:change': { from: string; to: string };
+};
+```
+
+## Subscribing
+
+```typescript
+activate(ctx: PluginContext): void {
+  // Subscribe and get an unsubscribe function
+  const unsubscribe = ctx.events.on('command:after', (data) => {
+    if (data.action === 'translate' && data.handled) {
+      console.log('Translation was handled');
+    }
+  });
+
+  // Store unsubscribe for cleanup
+  this._unsubscribe = unsubscribe;
+}
+
+deactivate(): void {
+  this._unsubscribe?.();
+}
+```
+
+## Event Flow
+
+1. **`command:before`** — fired before any plugin handles a command
+2. Plugin's `handleCommand()` is called
+3. **`command:after`** — fired after command handling, with `handled: true/false`
+4. **`view:change`** — fired when the active view changes (including navigation between plugin views)

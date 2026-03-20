@@ -2,11 +2,18 @@
 // All requests are routed through background script for security
 import { MenuConfig, ScreenshotConfig, Message } from '../types';
 
+interface TokenUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 interface AIResponse {
   success: boolean;
   result?: string;
   thinking?: string;
   error?: string;
+  usage?: TokenUsage;
 }
 
 export type OnChunkCallback = (chunk: string, fullText: string, thinking?: string) => void;
@@ -147,7 +154,7 @@ async function callStreamingAI(
       }
     };
 
-    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string } }) => {
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string; usage?: TokenUsage } }) => {
       if (message.payload?.requestId !== requestId) return;
 
       if (message.type === 'AI_STREAM_CHUNK') {
@@ -160,6 +167,7 @@ async function callStreamingAI(
           result: message.payload.result,
           thinking: message.payload.thinking,
           error: message.payload.error,
+          usage: message.payload.usage,
           requestId,
         });
       } else if (message.type === 'AI_STREAM_ERROR') {
@@ -218,7 +226,7 @@ async function callStreamingVisionAI(
       }
     };
 
-    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string } }) => {
+    const messageHandler = (message: { type: string; payload: { requestId: string; chunk?: string; fullText?: string; thinking?: string; success?: boolean; result?: string; error?: string; usage?: TokenUsage } }) => {
       if (message.payload?.requestId !== requestId) return;
 
       if (message.type === 'AI_STREAM_CHUNK') {
@@ -231,6 +239,7 @@ async function callStreamingVisionAI(
           result: message.payload.result,
           thinking: message.payload.thinking,
           error: message.payload.error,
+          usage: message.payload.usage,
           requestId,
         });
       } else if (message.type === 'AI_STREAM_ERROR') {

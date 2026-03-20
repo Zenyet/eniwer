@@ -3,12 +3,9 @@ import {
   callAI,
   callVisionAI,
   generateImage,
-  getTranslatePrompt,
-  getSummarizePrompt,
   getExplainPrompt,
   getRewritePrompt,
   getCodeExplainPrompt,
-  getSummarizePagePrompt,
   getDescribeImagePrompt,
   getAskImagePrompt,
   OnChunkCallback,
@@ -17,6 +14,7 @@ import {
 import { ScreenshotSelector, SelectionArea } from './ScreenshotSelector';
 import type { CommandPalette } from './CommandPalette';
 import { t } from '../i18n';
+import { extractPageContent } from '../utils/pageContent';
 
 export interface ScreenshotFlowCallbacks {
   onToast: (message: string) => void;
@@ -61,12 +59,8 @@ export class MenuActions {
     item: MenuItem,
     onChunk?: OnChunkCallback,
     options: ExecuteAIOptions = {}
-  ): Promise<{ type: string; result?: string; url?: string; thinking?: string }> {
+  ): Promise<{ type: string; result?: string; url?: string; thinking?: string; usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } }> {
     switch (item.action) {
-      case 'translate':
-        return this.handleTranslate(onChunk, options);
-      case 'summarize':
-        return this.handleSummarize(onChunk, options);
       case 'explain':
         return this.handleExplain(onChunk);
       case 'rewrite':
@@ -81,8 +75,6 @@ export class MenuActions {
         return this.handleSendToAI();
       case 'aiChat':
         return this.handleAIChat();
-      case 'summarizePage':
-        return this.handleSummarizePage(onChunk, options);
       case 'contextChat':
         return this.handleContextChat();
       case 'browseTrail':
@@ -94,22 +86,6 @@ export class MenuActions {
       default:
         return { type: 'error', result: 'Unknown action' };
     }
-  }
-
-  private async handleTranslate(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
-    if (!this.selectedText) {
-      return { type: 'error', result: t('validate.selectTextToTranslate') };
-    }
-
-    return this.callAIAction('translate', this.selectedText, onChunk, options);
-  }
-
-  private async handleSummarize(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
-    if (!this.selectedText) {
-      return { type: 'error', result: t('validate.selectTextToSummarize') };
-    }
-
-    return this.callAIAction('summarize', this.selectedText, onChunk, options);
   }
 
   private async handleExplain(onChunk?: OnChunkCallback): Promise<{ type: string; result?: string; thinking?: string }> {
@@ -136,16 +112,12 @@ export class MenuActions {
     return this.callAIAction('codeExplain', this.selectedText, onChunk);
   }
 
-  private async handleSummarizePage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string; thinking?: string }> {
-    return this.callAIAction('summarizePage', document.body.innerText.slice(0, 10000), onChunk, options);
-  }
-
   private async handleAskPage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
     const question = options.pageQuestion?.trim() || '';
     if (!question) {
       return { type: 'error', result: t('validate.enterQuestion') };
     }
-    const pageContent = document.body.innerText.slice(0, 10000);
+    const pageContent = extractPageContent();
     const prompt = `Webpage content:\n${pageContent}\n\nUser question:\n${question}`;
     return this.callAIAction('askPage', prompt, onChunk, options);
   }
@@ -160,7 +132,7 @@ export class MenuActions {
     const selectionText = useSelection ? this.selectedText.trim() : '';
     const hasSelection = !!selectionText;
 
-    const pageContent = document.body.innerText.trim().slice(0, 10000);
+    const pageContent = extractPageContent();
     const content = hasSelection ? selectionText.slice(0, 10000) : pageContent;
 
     if (!content) {
@@ -187,7 +159,7 @@ export class MenuActions {
   }
 
   private async handleNotesPage(onChunk?: OnChunkCallback, options: ExecuteAIOptions = {}): Promise<{ type: string; result?: string }> {
-    const pageContent = document.body.innerText.slice(0, 10000);
+    const pageContent = extractPageContent();
     return this.callAIAction('notesPage', pageContent, onChunk, options);
   }
 
@@ -196,66 +168,7 @@ export class MenuActions {
     text: string,
     onChunk?: OnChunkCallback,
     options: ExecuteAIOptions = {}
-  ): Promise<{ type: string; result?: string; thinking?: string }> {
-    // For translate action, check if we should use non-AI translation
-    if (action === 'translate') {
-      const translationProvider = this.config.translation?.provider || 'ai';
-
-      // Use non-AI translation provider
-      if (translationProvider !== 'ai') {
-        try {
-          const targetLang = options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN';
-          const customValue = translationProvider === 'deeplx'
-            ? this.config.translation?.deeplxApiKey
-            : this.config.translation?.customUrl;
-          const response = await chrome.runtime.sendMessage({
-            type: 'FREE_TRANSLATE',
-            payload: {
-              text,
-              targetLang,
-              provider: translationProvider,
-              customUrl: customValue,
-            },
-          });
-
-          if (response.success && response.result) {
-            if (onChunk) {
-              onChunk(response.result, response.result);
-            }
-            return { type: 'ai', result: response.result };
-          } else {
-            return { type: 'error', result: response.error || t('validate.translationFailed') };
-          }
-        } catch (error) {
-          return { type: 'error', result: t('validate.translationFailedWithError', { error: String(error) }) };
-        }
-      }
-
-      // Legacy fallback: no API key and fallback not disabled
-      const fallbackEnabled = this.config.translationFallback?.enabled;
-      const hasApiKey = !!this.config.apiKey;
-      if (!hasApiKey && fallbackEnabled !== false) {
-        try {
-          const targetLang = options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN';
-          const response = await chrome.runtime.sendMessage({
-            type: 'FREE_TRANSLATE',
-            payload: { text, targetLang },
-          });
-
-          if (response.success && response.result) {
-            if (onChunk) {
-              onChunk(response.result, response.result);
-            }
-            return { type: 'ai', result: response.result };
-          } else {
-            return { type: 'error', result: response.error || t('validate.translationFailed') };
-          }
-        } catch (error) {
-          return { type: 'error', result: t('validate.translationFailedWithError', { error: String(error) }) };
-        }
-      }
-    }
-
+  ): Promise<{ type: string; result?: string; thinking?: string; usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number } }> {
     const validationError = this.validateAIConfig();
     if (validationError) {
       return { type: 'error', result: validationError };
@@ -264,12 +177,6 @@ export class MenuActions {
     let systemPrompt: string;
 
     switch (action) {
-      case 'translate':
-        systemPrompt = getTranslatePrompt(options.translateTargetLanguage || this.config.preferredLanguage || 'zh-CN');
-        break;
-      case 'summarize':
-        systemPrompt = getSummarizePrompt(this.config.summaryLanguage || 'auto');
-        break;
       case 'explain':
         systemPrompt = getExplainPrompt();
         break;
@@ -278,9 +185,6 @@ export class MenuActions {
         break;
       case 'codeExplain':
         systemPrompt = getCodeExplainPrompt();
-        break;
-      case 'summarizePage':
-        systemPrompt = getSummarizePagePrompt(this.config.summaryLanguage || 'auto');
         break;
       case 'askPage':
         systemPrompt = `You are a web reading assistant. Answer the user's question using only the provided webpage content. If the answer is not present, say you cannot find it in the content. Be concise. When helpful, include short exact quotes from the content as evidence.`;
@@ -296,7 +200,7 @@ export class MenuActions {
       const response = await callAI(text, systemPrompt, this.config, onChunk);
 
       if (response.success) {
-        return { type: 'ai', result: response.result, thinking: response.thinking };
+        return { type: 'ai', result: response.result, thinking: response.thinking, usage: response.usage };
       } else {
         return { type: 'error', result: response.error || t('validate.aiRequestFailed') };
       }

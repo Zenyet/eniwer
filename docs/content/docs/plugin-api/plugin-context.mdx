@@ -1,0 +1,147 @@
+---
+title: PluginContext
+description: Services available to plugins
+---
+
+## Overview
+
+`PluginContext` is the interface passed to `activate()`. It provides access to configuration, UI, AI, storage, and more.
+
+## Configuration
+
+```typescript
+/** Read the current extension config */
+getConfig(): MenuConfig;
+
+/** Register a callback that fires whenever config changes */
+onConfigChange(cb: (config: MenuConfig) => void): void;
+```
+
+## UI Helpers
+
+```typescript
+ui: {
+  show(): void;
+  hide(): void;
+  /** Navigate to a view (replaces current view, resets stack) */
+  navigateToView(viewType: string): void;
+  /** Push a view onto the navigation stack */
+  pushView(view: { type: string; title: string; data?: unknown }): void;
+  /** Pop the top view from the navigation stack */
+  popView(): void;
+  /** Set active command tag shown in the search bar */
+  setActiveCommand(item: MenuItem): void;
+  /** Render current view (optionally with animation) */
+  renderCurrentView(animate?: boolean, keepPosition?: boolean): void;
+  /** Display a saved AI result in the commands view */
+  showSavedAIResult(data: { title: string; content: string; ... }): void;
+};
+```
+
+## AI Service
+
+```typescript
+ai: {
+  /** Call AI with a prompt and system prompt, optionally streaming via onChunk */
+  call(
+    prompt: string,
+    systemPrompt: string,
+    onChunk?: (chunk: string, fullText: string, thinking?: string) => void
+  ): Promise<{ success: boolean; result?: string; thinking?: string; error?: string }>;
+
+  /** Abort all active AI requests */
+  abort(): void;
+};
+```
+
+### Usage Example
+
+```typescript
+const response = await ctx.ai.call(
+  'Translate this to English: こんにちは',
+  'You are a translator.',
+  (chunk, fullText) => {
+    // Update UI with streaming text
+    element.textContent = fullText;
+  }
+);
+
+if (response.success) {
+  console.log(response.result);
+}
+```
+
+## Namespaced Storage
+
+Each plugin gets isolated storage scoped by its `id`:
+
+```typescript
+storage: {
+  get<T>(key: string): Promise<T | undefined>;
+  set<T>(key: string, value: T): Promise<void>;
+};
+```
+
+## Task Persistence
+
+```typescript
+tasks: {
+  /** Auto-save an AI result to IndexedDB */
+  autoSave(data: {
+    title: string;
+    content: string;
+    thinking?: string;
+    originalText?: string;
+    resultType: 'translate' | 'general';
+    actionType?: string;
+    sourceUrl?: string;
+    sourceTitle?: string;
+    createdAt?: number;
+  }): Promise<void>;
+
+  /** Add an AI result to the unsaved recent list (in-memory only) */
+  addToUnsavedRecent(data: { ... }): void;
+};
+```
+
+## Minimized Tasks
+
+For plugins that support minimize/restore (background streaming):
+
+```typescript
+minimizedTasks: {
+  /** Find a minimized task by pluginId and predicate, then update it */
+  findAndUpdate(
+    pluginId: string,
+    predicate: (data: unknown) => boolean,
+    updater: (task: { title: string; content: string; isLoading: boolean }) => void
+  ): void;
+
+  /** Re-render minimized task badges if visible */
+  rerenderBadges(): void;
+};
+```
+
+## Other Utilities
+
+```typescript
+/** Send a message to background script */
+sendMessage(message: unknown): Promise<unknown>;
+
+/** Get currently selected text on the page */
+getSelectedText(): string;
+
+/** Get the shadow root of the command palette */
+getShadowRoot(): ShadowRoot | null;
+
+/** Get the drag start handler for draggable views */
+getHandleDragStart(): (e: MouseEvent) => void;
+
+/** Event system for cross-plugin communication */
+events: {
+  on<E extends PluginEventName>(
+    event: E,
+    handler: (data: PluginEventMap[E]) => void
+  ): () => void;
+};
+```

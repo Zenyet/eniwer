@@ -5,9 +5,9 @@ description: Cross-plugin communication via the event system
 
 ## Event System
 
-Plugins can communicate via typed events through `ctx.events`.
+Plugins can communicate via typed events through `ctx.events`. The PluginManager also supports custom (untyped) events via its internal `emit()` method, used for bridging between plugins.
 
-## Available Events
+## Typed Events
 
 ```typescript
 type PluginEventMap = {
@@ -16,6 +16,18 @@ type PluginEventMap = {
   'view:change': { from: string; to: string };
 };
 ```
+
+## Custom Events
+
+Beyond the typed events above, the built-in plugins use custom events for cross-plugin communication. These are emitted via the PluginManager's event bus and can be subscribed to via `ctx.events.on()`:
+
+| Event | Payload | Description |
+|---|---|---|
+| `annotation:highlight` | `{ color: string }` | Request to create a highlight annotation |
+| `annotation:note` | `{ defaultColor?: string }` | Request to create a highlight with note |
+| `annotation:saveFromAI` | `{ originalText, content, thinking?, actionType? }` | Save AI result as annotation |
+| `contextChat:quote` | `{ text: string }` | Quote text into context chat |
+| `contextChat:quoteAsk` | `{ text: string }` | Quote text and start quick ask |
 
 ## Subscribing
 
@@ -40,6 +52,6 @@ deactivate(): void {
 ## Event Flow
 
 1. **`command:before`** — fired before any plugin handles a command
-2. Plugin's `handleCommand()` is called
+2. Plugin's `handleCommand()` is called (first match wins)
 3. **`command:after`** — fired after command handling, with `handled: true/false`
 4. **`view:change`** — fired when the active view changes (including navigation between plugin views)

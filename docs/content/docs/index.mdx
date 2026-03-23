@@ -13,6 +13,7 @@ Starting from v1.2, Eniwer features a **plugin architecture** that makes every m
 
 - **Modular features**: Each feature (chat, screenshot, annotations, YouTube subtitles, etc.) is an independent plugin
 - **Settings isolation**: Plugins own their settings UI via `SettingsContributor`
+- **Inline settings**: Plugins can render settings directly on the main settings page via `settingsOrder`
 - **Enable/disable**: Users can toggle plugins on/off from the settings panel
 - **External plugins**: Third-party developers can create and register plugins via the global API
 
@@ -20,12 +21,18 @@ Starting from v1.2, Eniwer features a **plugin architecture** that makes every m
 
 | Plugin | ID | Capabilities |
 |---|---|---|
-| Browse Trail | `browseTrail` | Commands, View |
+| Cloud Sync | `cloudSync` | Settings (inline) |
+| Translate | `translate` | Commands, Settings |
+| Summarize | `summarize` | Commands, Settings |
+| Browse Trail | `browseTrail` | Commands, View, Settings |
 | Annotations | `annotations` | Commands, View, Settings |
 | Knowledge Base | `knowledge` | Commands, View, Settings |
-| Screenshot | `screenshot` | View, Minimizable |
+| Screenshot | `screenshot` | View, Settings, Minimizable |
 | Context Chat | `contextChat` | Commands, View, Minimizable |
 | YouTube Subtitles | `youtube` | Settings |
+| Selection Popover | `selectionPopover` | Settings |
+| Image Search | `imageSearch` | Commands |
+| Base64 | `base64` | Commands |
 
 ## Quick Start
 

@@ -5,7 +5,7 @@ description: Services available to plugins
 
 ## Overview
 
-`PluginContext` is the interface passed to `activate()`. It provides access to configuration, UI, AI, storage, and more.
+`PluginContext` is the interface passed to `activate()`. It provides access to configuration, UI, AI, storage, messaging, events, and plugin interop.
 
 ## Configuration
 
@@ -34,7 +34,16 @@ ui: {
   /** Render current view (optionally with animation) */
   renderCurrentView(animate?: boolean, keepPosition?: boolean): void;
   /** Display a saved AI result in the commands view */
-  showSavedAIResult(data: { title: string; content: string; ... }): void;
+  showSavedAIResult(data: {
+    title: string;
+    content: string;
+    thinking?: string;
+    originalText?: string;
+    actionType?: string;
+    sourceUrl?: string;
+    sourceTitle?: string;
+    createdAt?: number;
+  }): void;
 };
 ```
 
@@ -47,7 +56,13 @@ ai: {
     prompt: string,
     systemPrompt: string,
     onChunk?: (chunk: string, fullText: string, thinking?: string) => void
-  ): Promise<{ success: boolean; result?: string; thinking?: string; error?: string }>;
+  ): Promise<{
+    success: boolean;
+    result?: string;
+    thinking?: string;
+    error?: string;
+    usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  }>;
 
   /** Abort all active AI requests */
   abort(): void;
@@ -68,12 +83,13 @@ const response = await ctx.ai.call(
 
 if (response.success) {
   console.log(response.result);
+  console.log(response.usage); // { promptTokens, completionTokens, totalTokens }
 }
 ```
 
 ## Namespaced Storage
 
-Each plugin gets isolated storage scoped by its `id`:
+Each plugin gets isolated storage scoped by its `id` (stored as `plugin_{id}_{key}` in `chrome.storage.local`):
 
 ```typescript
 storage: {
@@ -96,11 +112,12 @@ tasks: {
     actionType?: string;
     sourceUrl?: string;
     sourceTitle?: string;
+    translateTargetLanguage?: string;
     createdAt?: number;
   }): Promise<void>;
 
   /** Add an AI result to the unsaved recent list (in-memory only) */
-  addToUnsavedRecent(data: { ... }): void;
+  addToUnsavedRecent(data: { ...same fields, streamKey?: string }): void;
 };
 ```
 
@@ -122,12 +139,18 @@ minimizedTasks: {
 };
 ```
 
-## Other Utilities
+## Background Messaging
 
 ```typescript
-/** Send a message to background script */
+/** Send a message to the background service worker */
 sendMessage(message: unknown): Promise<unknown>;
+```
 
+This wraps `chrome.runtime.sendMessage`. Useful for features that require background script capabilities (e.g. auth, network requests with special permissions).
+
+## DOM Access
+
+```typescript
 /** Get currently selected text on the page */
 getSelectedText(): string;
 
@@ -137,11 +160,44 @@ getShadowRoot(): ShadowRoot | null;
 /** Get the drag start handler for draggable views */
 getHandleDragStart(): (e: MouseEvent) => void;
 
-/** Event system for cross-plugin communication */
+/** Get the CommandPalette instance (for advanced plugin integrations) */
+getCommandPalette(): unknown;
+```
+
+## Event System
+
+Cross-plugin communication via typed events:
+
+```typescript
 events: {
+  /** Subscribe to a plugin event. Returns an unsubscribe function. */
   on<E extends PluginEventName>(
     event: E,
     handler: (data: PluginEventMap[E]) => void
   ): () => void;
 };
+```
+
+See the [Events](/docs/plugin-api/events) page for available event types.
+
+## Plugin Interop
+
+Query and interact with other plugins:
+
+```typescript
+plugins: {
+  /** Check if a plugin is enabled */
+  isEnabled(id: string): boolean;
+  /** Route a command to other plugins. Returns true if handled. */
+  handleCommand(action: string, selectedText: string): boolean;
+};
+```
+
+### Usage Example
+
+```typescript
+// Check if another plugin is available before using its features
+if (ctx.plugins.isEnabled('contextChat')) {
+  ctx.plugins.handleCommand('contextChat', selectedText);
+}
 ```

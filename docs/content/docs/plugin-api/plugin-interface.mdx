@@ -13,6 +13,12 @@ interface Plugin {
   readonly id: string;
   /** Display name */
   readonly name: string;
+  /** Description (i18n key, shown in plugin management UI) */
+  readonly description?: string;
+  /** Icon SVG string or emoji */
+  readonly icon?: string;
+  /** Additional menu-item IDs this plugin owns (besides its own id) */
+  readonly menuItemIds?: readonly string[];
   /** Called when the plugin is activated; receives the context */
   activate(ctx: PluginContext): void;
   /** Called when the plugin is deactivated */
@@ -20,12 +26,22 @@ interface Plugin {
 }
 ```
 
+### Optional Fields
+
+| Field | Purpose |
+|---|---|
+| `description` | i18n key displayed in the plugin management page (e.g. `'plugin.myPlugin.description'`) |
+| `icon` | SVG string shown next to the plugin name in the management page |
+| `menuItemIds` | If the plugin owns menu items with IDs different from the plugin `id`, list them here so they are hidden when the plugin is disabled |
+
 ## Lifecycle
 
 1. **Registration** — plugin instance is registered with `PluginManager.register(plugin)`
 2. **Activation** — `activate(ctx)` is called with a `PluginContext` providing all available services
 3. **Runtime** — the plugin responds to commands, renders views, contributes settings
-4. **Deactivation** — `deactivate()` is called for cleanup
+4. **Deactivation** — `deactivate()` is called for cleanup (also called when user disables the plugin at runtime)
+
+Plugins are activated in registration order. If `pluginStates` in the config marks a plugin as disabled, `activate()` is skipped.
 
 ## Minimal Example
 
@@ -35,6 +51,7 @@ import type { Plugin, PluginContext } from './plugins/types';
 class HelloPlugin implements Plugin {
   readonly id = 'hello';
   readonly name = 'Hello World';
+  readonly description = 'plugin.hello.description';
 
   activate(ctx: PluginContext): void {
     ctx.showToast('Hello from plugin!');
@@ -60,3 +77,5 @@ window.__thePanelPlugins.push(new HelloPlugin());
 ```javascript
 window.__thePanelRegisterPlugin?.(new HelloPlugin());
 ```
+
+Late-registered plugins are immediately activated and receive the current `pluginStates` configuration.

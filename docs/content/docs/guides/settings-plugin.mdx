@@ -5,9 +5,11 @@ description: Build a plugin that contributes its own settings section
 
 ## Overview
 
-Plugins can contribute settings sections via the `SettingsContributor` interface. This lets plugins own their configuration UI within the main settings panel.
+Plugins can contribute settings sections via the `SettingsContributor` interface. This lets plugins own their configuration UI within the settings panel.
 
-## Implementation
+## Sub-page Settings (Default)
+
+By default, a plugin's settings are shown on a **dedicated sub-page**, accessible via the plugin management panel.
 
 ```typescript
 import type { Plugin, SettingsContributor, PluginContext } from './plugins/types';
@@ -16,6 +18,7 @@ import type { MenuConfig } from './types';
 class TimerPlugin implements Plugin, SettingsContributor {
   readonly id = 'timer';
   readonly name = 'Pomodoro Timer';
+  readonly description = 'plugin.timer.description';
   private ctx!: PluginContext;
 
   activate(ctx: PluginContext): void {
@@ -65,6 +68,42 @@ class TimerPlugin implements Plugin, SettingsContributor {
 }
 ```
 
+## Inline Settings
+
+Set `settingsOrder` to render settings **inline on the main settings page** instead of a sub-page. Lower values appear higher:
+
+```typescript
+class AccountPlugin implements Plugin, SettingsContributor {
+  readonly id = 'account';
+  readonly name = 'Account';
+  readonly settingsOrder = -100; // Appears at the very top
+
+  getSettingsHTML(config: MenuConfig): string {
+    return `
+      <div class="glass-settings-section">
+        <div class="glass-settings-section-title">Account</div>
+        <div class="glass-form-group">
+          <label class="glass-form-label">Username</label>
+          <input class="glass-input-field" id="username" value="${config.username || ''}">
+        </div>
+      </div>
+    `;
+  }
+
+  bindSettingsEvents(shadowRoot: ShadowRoot, tempConfig: MenuConfig, onChange: () => void): void {
+    const input = shadowRoot.querySelector('#username') as HTMLInputElement;
+    input?.addEventListener('input', () => {
+      (tempConfig as any).username = input.value;
+      onChange();
+    });
+  }
+
+  // ...
+}
+```
+
+The built-in `CloudSyncPlugin` uses `settingsOrder = -100` to render the Google account / sync section at the top of the main settings page.
+
 ## CSS Classes
 
 Use the built-in glass CSS classes for consistent styling:
@@ -77,17 +116,23 @@ Use the built-in glass CSS classes for consistent styling:
 | `glass-form-group glass-form-toggle` | Toggle switch layout |
 | `glass-form-label` | Field label |
 | `glass-select` | Styled select dropdown |
-| `glass-input` | Styled text input |
+| `glass-input-field` | Styled text input |
 | `glass-toggle` | Toggle switch wrapper |
 | `glass-toggle-slider` | Toggle switch track |
 | `glass-form-hint` | Subtle hint text below a field |
-| `glass-form-group-stack` | Stack of form groups (for collapsible sections) |
+| `glass-btn` | Base button class |
+| `glass-btn-primary` | Primary action button |
+| `glass-btn-secondary` | Secondary action button |
+| `glass-btn-danger` | Destructive action button |
+| `glass-sync-chips` | Chip group container |
+| `glass-sync-chip` | Individual selectable chip |
 
 ## How It Works
 
 1. When the settings panel renders, `getSettingsHTML(config)` is called for each enabled `SettingsContributor`
-2. The returned HTML is appended after the built-in settings sections
-3. `bindSettingsEvents(shadowRoot, tempConfig, onChange)` is called to wire up event handlers
-4. When the user changes a value, mutate `tempConfig` and call `onChange()` to enable the Save button
-5. On Save, the full config (including plugin mutations) is persisted to Chrome storage
-6. The `onConfigChange` callback fires with the new config
+2. For **inline** contributors (with `settingsOrder`): HTML is inserted at the top of the main settings page, sorted ascending
+3. For **sub-page** contributors (without `settingsOrder`): HTML is rendered on a dedicated page accessible from the plugin management panel
+4. `bindSettingsEvents(shadowRoot, tempConfig, onChange)` is called to wire up event handlers
+5. When the user changes a value, mutate `tempConfig` and call `onChange()` to enable the Save button
+6. On Save, the full config (including plugin mutations) is persisted to Chrome storage
+7. The `onConfigChange` callback fires with the new config across all plugins

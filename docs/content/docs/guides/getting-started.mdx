@@ -19,6 +19,8 @@ Create a JavaScript file that defines and registers your plugin:
   const plugin = {
     id: 'word-counter',
     name: 'Word Counter',
+    description: 'plugin.wordCounter.description',
+    icon: '#',
 
     activate(ctx) {
       this.ctx = ctx;
@@ -113,4 +115,56 @@ Users can enable/disable plugins from the settings panel. Plugin states are pers
 }
 ```
 
-When a plugin is disabled, its commands are hidden and its settings section is not rendered.
+When a plugin is disabled:
+- Its commands are hidden from the palette
+- Its settings section is not rendered
+- Its views are inaccessible
+- `deactivate()` is called immediately
+
+When re-enabled, `activate()` is called again with a fresh `PluginContext`.
+
+## Using PluginContext
+
+The `ctx` object provides rich capabilities. Here are common patterns:
+
+### Show a Toast
+
+```javascript
+ctx.showToast('Operation completed!');
+```
+
+### Call AI
+
+```javascript
+const result = await ctx.ai.call(
+  'Summarize: ' + selectedText,
+  'You are a helpful summarizer.'
+);
+if (result.success) {
+  ctx.showToast(result.result);
+}
+```
+
+### Persist Data
+
+```javascript
+// Scoped to your plugin automatically
+await ctx.storage.set('lastRun', Date.now());
+const lastRun = await ctx.storage.get('lastRun');
+```
+
+### Send Background Messages
+
+```javascript
+const response = await ctx.sendMessage({ type: 'MY_CUSTOM_ACTION', payload: data });
+```
+
+### Check Other Plugins
+
+```javascript
+if (ctx.plugins.isEnabled('contextChat')) {
+  ctx.plugins.handleCommand('contextChat', 'Hello');
+}
+```
+
+For full API reference, see [PluginContext](/docs/plugin-api/plugin-context).

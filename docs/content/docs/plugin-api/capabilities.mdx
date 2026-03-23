@@ -18,10 +18,17 @@ interface CommandContributor {
 }
 ```
 
+Commands returned by `getCommands()` are merged into the palette. When the user selects a command, `PluginManager` routes it to the first plugin whose `handleCommand()` returns `true`.
+
+If a plugin owns menu-item IDs beyond its own `id`, declare them via `menuItemIds` on the Plugin interface so they are properly hidden when the plugin is disabled.
+
 ### Example
 
 ```typescript
 class MyPlugin implements Plugin, CommandContributor {
+  readonly id = 'myPlugin';
+  readonly menuItemIds = ['myAction', 'myOtherAction'];
+
   getCommands(): MenuItem[] {
     return [{
       id: 'my-action',
@@ -62,6 +69,8 @@ Navigate to a plugin view via:
 
 ```typescript
 ctx.ui.navigateToView('myViewType');
+// or push onto the stack (enables back navigation)
+ctx.ui.pushView({ type: 'myViewType', title: 'My View' });
 ```
 
 ## SettingsContributor
@@ -78,10 +87,19 @@ interface SettingsContributor {
     tempConfig: MenuConfig,
     onChange: () => void
   ): void;
+  /**
+   * When set, settings are rendered inline on the main settings page
+   * (sorted ascending). Without this, settings appear on a sub-page.
+   */
+  settingsOrder?: number;
 }
 ```
 
-The HTML returned by `getSettingsHTML` is appended to the settings view. Use standard form elements with the `glass-*` CSS classes.
+### Sub-page vs Inline Settings
+
+By default, a `SettingsContributor`'s HTML is rendered on a **dedicated sub-page** (accessed via the plugin management panel → click on a plugin with settings).
+
+If `settingsOrder` is set, the settings HTML is rendered **inline on the main settings page**, sorted by ascending order alongside other inline contributors. This is useful for settings that should always be visible (e.g. the Cloud Sync account section uses `settingsOrder = -100` to appear at the top).
 
 ## MinimizableContributor
 
@@ -93,7 +111,7 @@ interface MinimizedPluginData {
   title: string;
   iconHtml?: string;
   isLoading: boolean;
-  pluginData: unknown;
+  pluginData: unknown; // Plugin-specific state snapshot
 }
 
 interface MinimizableContributor {
@@ -107,12 +125,25 @@ When the command palette is hidden while a plugin view is active:
 2. A minimized task badge appears in the command palette
 3. When the user clicks the badge, `restoreFromMinimized(data)` is called
 
+While minimized, plugins can update the badge via `ctx.minimizedTasks.findAndUpdate()`:
+
+```typescript
+ctx.minimizedTasks.findAndUpdate(
+  this.id,
+  (data) => true, // predicate to find the right task
+  (task) => {
+    task.content = 'Updated content...';
+    task.isLoading = false;
+  }
+);
+```
+
 ## Type Guards
 
 Use these to check capabilities at runtime:
 
 ```typescript
-isCommandContributor(plugin)   // has getCommands + handleCommand
+isCommandContributor(plugin)    // has getCommands + handleCommand
 isViewContributor(plugin)       // has viewType + getViewHTML + bindEvents
 isSettingsContributor(plugin)   // has getSettingsHTML + bindSettingsEvents
 isMinimizableContributor(plugin) // has saveAsMinimized + restoreFromMinimized

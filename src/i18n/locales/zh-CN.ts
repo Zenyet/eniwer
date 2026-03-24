@@ -278,6 +278,8 @@ export const zhCN: Record<string, string> = {
   'plugin.selectionPopover.description': '选中文本时显示快捷操作栏',
   'plugin.imageSearch.description': '右键图片进行以图搜图',
   'plugin.base64.description': 'Base64 编码/解码工具',
+  'plugin.chatTOC.description': 'AI 对话时间线目录侧栏',
+  'plugin.chatTOC.enabled': '启用对话目录',
   'plugin.cloudSync.description': 'Google 登录、云同步与备份管理',
   'storage.annotations': '批注',
   'storage.browseTrail': '浏览轨迹',

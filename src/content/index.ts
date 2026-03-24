@@ -13,7 +13,7 @@ import type { PluginContext } from '../plugins';
 import {
   BrowseTrailPlugin, AnnotationsPlugin, KnowledgePlugin, ScreenshotPlugin,
   ContextChatPlugin, YouTubePlugin, TranslatePlugin, SummarizePlugin, SelectionPopoverPlugin, ImageSearchPlugin,
-  Base64Plugin, CloudSyncPlugin,
+  Base64Plugin, CloudSyncPlugin, ChatTOCPlugin,
 } from '../plugins/builtin';
 import type { KnowledgeItem } from './CommandPalette/views';
 import './styles.css';
@@ -59,6 +59,7 @@ class TheCircle {
     this.pluginManager.register(new ImageSearchPlugin());
     this.pluginManager.register(new Base64Plugin());
     this.pluginManager.register(new CloudSyncPlugin());
+    this.pluginManager.register(new ChatTOCPlugin());
 
     // Wire plugin manager into command palette
     this.commandPalette.setPluginManager(this.pluginManager);

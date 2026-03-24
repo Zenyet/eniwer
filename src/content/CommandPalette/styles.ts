@@ -102,7 +102,7 @@ export function getStyles(): string {
         -webkit-backdrop-filter: blur(var(--blur-panel)) saturate(180%);
 
         border: 0.5px solid var(--glass-border-strong);
-        border-radius: 18px;
+        border-radius: 24px;
         box-shadow: var(--shadow-panel);
 
         display: flex;
@@ -214,10 +214,10 @@ export function getStyles(): string {
         align-items: center;
         gap: 6px;
         height: 26px;
-        padding: 0 8px 0 6px;
+        padding: 0 4px 0 6px;
         background: var(--glass-bg-selected);
         border: 0.5px solid var(--glass-border-strong);
-        border-radius: 8px;
+        border-radius: 12px;
         flex-shrink: 0;
         cursor: default;
         box-sizing: border-box;
@@ -252,7 +252,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 4px;
+        border-radius: 10px;
         font-size: 14px;
         line-height: 1;
         margin-left: 2px;
@@ -292,7 +292,7 @@ export function getStyles(): string {
         border: 0.5px solid var(--glass-border);
         height: 26px;
         padding: 0 7px;
-        border-radius: 5px;
+        border-radius: 8px;
         font-family: "SF Mono", ui-monospace, monospace;
         display: flex;
         align-items: center;
@@ -318,7 +318,7 @@ export function getStyles(): string {
       .glass-ai-content-area .glass-ai-content code {
         background: var(--glass-bg-hover);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-family: "SF Mono", ui-monospace, monospace;
         font-size: 13px;
       }
@@ -347,7 +347,7 @@ export function getStyles(): string {
         padding: 0;
         border: 0.5px solid var(--glass-border);
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -410,7 +410,7 @@ export function getStyles(): string {
         align-items: center;
         gap: 12px;
         padding: 10px 12px;
-        border-radius: 10px;
+        border-radius: 14px;
         cursor: pointer;
         transition:
           background var(--duration-fast) var(--ease-out),
@@ -436,7 +436,7 @@ export function getStyles(): string {
         justify-content: center;
         background: var(--glass-bg-elevated);
         border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         flex-shrink: 0;
         transition: all var(--duration-fast) var(--ease-out);
@@ -472,7 +472,7 @@ export function getStyles(): string {
         color: var(--text-tertiary);
         background: var(--glass-bg-hover);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 10px;
       }
 
       .glass-item-key {
@@ -482,7 +482,7 @@ export function getStyles(): string {
         background: var(--glass-bg-hover);
         border: 0.5px solid var(--glass-border);
         padding: 2px 6px;
-        border-radius: 5px;
+        border-radius: 8px;
         font-family: "SF Mono", ui-monospace, monospace;
         min-width: 20px;
         text-align: center;
@@ -535,7 +535,7 @@ export function getStyles(): string {
         align-items: flex-start;
         gap: 10px;
         padding: 10px 12px;
-        border-radius: 10px;
+        border-radius: 14px;
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
       }
@@ -552,7 +552,7 @@ export function getStyles(): string {
         justify-content: center;
         background: var(--glass-bg-elevated);
         border: 0.5px solid var(--glass-border);
-        border-radius: 7px;
+        border-radius: 10px;
         color: var(--text-secondary);
         flex-shrink: 0;
       }
@@ -647,7 +647,7 @@ export function getStyles(): string {
         background: var(--glass-bg-hover);
         border: 0.5px solid var(--glass-border);
         padding: 2px 5px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-family: "SF Mono", ui-monospace, monospace;
         display: inline-flex;
         align-items: center;
@@ -708,7 +708,7 @@ export function getStyles(): string {
           top: 12%;
           width: calc(100vw - 24px);
           max-height: 75vh;
-          border-radius: 14px;
+          border-radius: 20px;
         }
 
         .glass-hints {
@@ -763,7 +763,7 @@ export function getStyles(): string {
         height: 28px;
         border: none;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -794,7 +794,7 @@ export function getStyles(): string {
         height: 28px;
         border: none;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -836,7 +836,7 @@ export function getStyles(): string {
         height: 28px;
         border: none;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -933,7 +933,7 @@ export function getStyles(): string {
         padding: 6px 12px;
         background: var(--glass-bg-elevated);
         border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         font-size: 12px;
         font-weight: 500;
         color: var(--text-primary);
@@ -971,7 +971,7 @@ export function getStyles(): string {
         gap: 12px;
         padding: 10px 12px;
         cursor: pointer;
-        border-radius: 10px;
+        border-radius: 14px;
         margin: 0 8px 4px;
         transition: background var(--duration-fast) var(--ease-out);
       }
@@ -988,7 +988,7 @@ export function getStyles(): string {
         justify-content: center;
         background: var(--glass-bg-elevated);
         border: 0.5px solid var(--glass-border);
-        border-radius: 10px;
+        border-radius: 14px;
         color: var(--text-primary);
         flex-shrink: 0;
       }
@@ -1041,7 +1041,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 4px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1073,7 +1073,7 @@ export function getStyles(): string {
         gap: 12px;
         padding: 10px 12px;
         cursor: pointer;
-        border-radius: 10px;
+        border-radius: 14px;
         margin: 0 8px 4px;
         transition: background var(--duration-fast) var(--ease-out);
       }
@@ -1089,7 +1089,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 4px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1176,7 +1176,7 @@ export function getStyles(): string {
       .glass-ai-content code {
         background: var(--glass-bg-hover);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-family: "SF Mono", ui-monospace, monospace;
         font-size: 13px;
       }
@@ -1221,7 +1221,7 @@ export function getStyles(): string {
         padding: 8px 14px;
         border: 0.5px solid var(--glass-border);
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         font-size: 13px;
         font-weight: 500;
@@ -1298,7 +1298,7 @@ export function getStyles(): string {
       .glass-thinking-section {
         margin-bottom: 12px;
         border: 1px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         overflow: hidden;
       }
 
@@ -1357,7 +1357,7 @@ export function getStyles(): string {
       .glass-thinking-content code {
         background: var(--glass-bg-hover);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
         font-size: 12px;
       }
@@ -1377,7 +1377,7 @@ export function getStyles(): string {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 8px center;
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         font-size: 13px;
         cursor: pointer;
@@ -1429,7 +1429,7 @@ export function getStyles(): string {
         align-items: center;
         gap: 12px;
         padding: 12px;
-        border-radius: 10px;
+        border-radius: 14px;
         cursor: pointer;
         transition: background var(--duration-fast) var(--ease-out);
       }
@@ -1446,7 +1446,7 @@ export function getStyles(): string {
         justify-content: center;
         background: var(--glass-bg-elevated);
         border: 0.5px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         flex-shrink: 0;
       }
@@ -1499,6 +1499,12 @@ export function getStyles(): string {
         margin-top: 10px;
       }
 
+      .glass-form-group-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
       .glass-form-group.glass-form-toggle {
         flex-direction: row;
         align-items: center;
@@ -1534,7 +1540,7 @@ export function getStyles(): string {
         justify-content: space-between;
         padding: 6px 10px;
         margin-bottom: 12px;
-        border-radius: 6px;
+        border-radius: 10px;
         background: rgba(234, 67, 53, 0.08);
         border: 1px solid rgba(234, 67, 53, 0.2);
         font-size: 12px;
@@ -1548,7 +1554,7 @@ export function getStyles(): string {
         font-size: 12px;
         cursor: pointer;
         padding: 2px 8px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-weight: 500;
       }
 
@@ -1619,7 +1625,7 @@ export function getStyles(): string {
         padding: 10px 16px;
         background: var(--glass-bg-elevated);
         border: 1px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-primary);
         font-size: 14px;
         font-weight: 500;
@@ -1640,7 +1646,7 @@ export function getStyles(): string {
         padding: 8px;
         background: transparent;
         border: 1px solid var(--glass-border);
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--text-secondary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -1756,7 +1762,7 @@ export function getStyles(): string {
         justify-content: center;
         width: 24px;
         height: 24px;
-        border-radius: 6px;
+        border-radius: 10px;
         border: none;
         background: transparent;
         color: var(--text-tertiary);
@@ -1792,7 +1798,7 @@ export function getStyles(): string {
         justify-content: space-between;
         align-items: center;
         padding: 8px 10px;
-        border-radius: 8px;
+        border-radius: 12px;
         background: transparent;
         transition: background var(--duration-fast) var(--ease-out);
       }
@@ -1863,7 +1869,7 @@ export function getStyles(): string {
         justify-content: center;
         width: 26px;
         height: 26px;
-        border-radius: 6px;
+        border-radius: 10px;
         border: none;
         background: transparent;
         color: var(--text-secondary);
@@ -1907,7 +1913,7 @@ export function getStyles(): string {
         padding: 8px 12px;
         background: var(--glass-bg-elevated);
         border: 1px solid var(--glass-border);
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--text-primary);
         font-size: 12px;
         cursor: pointer;
@@ -1947,7 +1953,7 @@ export function getStyles(): string {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-position: right 10px center;
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--text-primary);
         font-size: 13px;
         cursor: pointer;
@@ -1970,7 +1976,7 @@ export function getStyles(): string {
         padding: 8px 10px;
         border: 1px solid var(--glass-border);
         background: var(--glass-bg-hover);
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--text-primary);
         font-size: 13px;
         outline: none;
@@ -2063,7 +2069,7 @@ export function getStyles(): string {
         padding: 10px 12px;
         background: var(--glass-bg-hover);
         border: 0.5px solid var(--glass-border);
-        border-radius: 10px;
+        border-radius: 14px;
         transition: all var(--duration-fast) var(--ease-out);
       }
 
@@ -2115,7 +2121,7 @@ export function getStyles(): string {
         height: 28px;
         border: none;
         background: transparent;
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--text-tertiary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -2145,7 +2151,7 @@ export function getStyles(): string {
         padding: 10px 16px;
         background: rgba(239, 68, 68, 0.1);
         border: 1px solid rgba(239, 68, 68, 0.3);
-        border-radius: 8px;
+        border-radius: 12px;
         color: rgb(239, 68, 68);
         font-size: 14px;
         font-weight: 500;
@@ -2167,7 +2173,7 @@ export function getStyles(): string {
         padding: 10px 16px;
         background: var(--glass-bg-hover);
         border: 1px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         font-size: 14px;
         font-weight: 500;
@@ -2209,7 +2215,7 @@ export function getStyles(): string {
         align-items: center;
         justify-content: center;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         flex-shrink: 0;
       }
 
@@ -2284,7 +2290,7 @@ export function getStyles(): string {
         align-items: center;
         justify-content: center;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         flex-shrink: 0;
       }
 
@@ -2331,7 +2337,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 4px;
+        border-radius: 10px;
         transition: all var(--duration-fast) var(--ease-out);
       }
 
@@ -2416,7 +2422,7 @@ export function getStyles(): string {
         padding: 6px 16px;
         background: var(--glass-bg-hover);
         border: 1px solid var(--glass-border);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         font-size: 13px;
         cursor: pointer;
@@ -2432,7 +2438,7 @@ export function getStyles(): string {
         padding: 6px 16px;
         background: var(--text-primary);
         border: 1px solid transparent;
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--glass-bg);
         font-size: 13px;
         font-weight: 500;
@@ -2452,7 +2458,7 @@ export function getStyles(): string {
         padding: 10px 16px;
         background: rgba(59, 130, 246, 0.1);
         border: 1px solid rgba(59, 130, 246, 0.3);
-        border-radius: 8px;
+        border-radius: 12px;
         color: rgb(59, 130, 246);
         font-size: 14px;
         font-weight: 500;
@@ -2481,13 +2487,13 @@ export function getStyles(): string {
         display: flex;
         justify-content: center;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
       }
 
       .glass-screenshot-preview img {
         max-width: 100%;
         max-height: 200px;
-        border-radius: 6px;
+        border-radius: 10px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
@@ -2550,7 +2556,7 @@ export function getStyles(): string {
         white-space: pre-wrap;
         padding: 12px;
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
       }
 
       .glass-screenshot-qa {
@@ -2582,7 +2588,7 @@ export function getStyles(): string {
 
       .glass-screenshot-generated-img {
         max-width: 100%;
-        border-radius: 8px;
+        border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
@@ -2704,7 +2710,7 @@ export function getStyles(): string {
         display: flex;
         align-items: center;
         padding: 10px 12px;
-        border-radius: 10px;
+        border-radius: 14px;
         cursor: pointer;
         transition: background var(--duration-fast) var(--ease-out);
       }
@@ -2752,7 +2758,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 6px;
+        border-radius: 10px;
         font-size: 16px;
         opacity: 0;
         transition: all var(--duration-fast) var(--ease-out);
@@ -2779,7 +2785,7 @@ export function getStyles(): string {
         border: 0.5px solid var(--glass-border);
         color: var(--text-secondary);
         padding: 6px 16px;
-        border-radius: 8px;
+        border-radius: 12px;
         font-size: 12px;
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -2865,7 +2871,7 @@ export function getStyles(): string {
       .glass-chat-msg-text code {
         background: var(--glass-bg-hover);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 10px;
         font-family: "SF Mono", ui-monospace, monospace;
         font-size: 13px;
       }
@@ -2896,7 +2902,7 @@ export function getStyles(): string {
         color: var(--text-secondary);
         background: var(--glass-bg-hover);
         padding: 6px 10px;
-        border-radius: 6px;
+        border-radius: 10px;
         border-left: 3px solid var(--glass-border-strong);
         font-style: italic;
       }
@@ -3089,7 +3095,7 @@ export function getStyles(): string {
         font-size: 10px;
         font-weight: 600;
         padding: 3px 8px;
-        border-radius: 6px;
+        border-radius: 10px;
         background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
         color: #60a5fa;
         margin-bottom: 6px;
@@ -3345,7 +3351,7 @@ export function getStyles(): string {
         font-size: 10px;
         font-weight: 600;
         padding: 3px 8px;
-        border-radius: 6px;
+        border-radius: 10px;
         background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
         color: #60a5fa;
         flex-shrink: 0;
@@ -3428,7 +3434,7 @@ export function getStyles(): string {
         padding: 0;
         border: 0.5px solid var(--glass-border);
         background: var(--glass-bg-hover);
-        border-radius: 8px;
+        border-radius: 12px;
         color: var(--text-secondary);
         cursor: pointer;
         transition: all var(--duration-fast) var(--ease-out);
@@ -3701,7 +3707,7 @@ export function getStyles(): string {
         font-size: 10px;
         font-weight: 600;
         padding: 3px 8px;
-        border-radius: 6px;
+        border-radius: 10px;
         background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
         color: #60a5fa;
         flex-shrink: 0;
@@ -3758,7 +3764,7 @@ export function getStyles(): string {
         background: transparent;
         color: var(--text-tertiary);
         cursor: pointer;
-        border-radius: 6px;
+        border-radius: 10px;
         font-size: 16px;
         opacity: 0;
         transition: all var(--duration-fast) var(--ease-out);

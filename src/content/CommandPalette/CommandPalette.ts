@@ -1713,7 +1713,6 @@ export class CommandPalette {
           <div class="glass-plugin-nav" id="plugin-nav-card">
             <div class="glass-plugin-nav-icon">${icons.puzzle}</div>
             <div class="glass-plugin-nav-content">
-              <div class="glass-plugin-nav-title">${t('settings.pluginManagement')}</div>
               <div class="glass-plugin-nav-subtitle">${t('settings.pluginsEnabledCount', { enabled: enabledCount, total: totalCount })}</div>
             </div>
             <span class="glass-plugin-nav-arrow">

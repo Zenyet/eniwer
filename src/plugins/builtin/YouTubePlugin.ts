@@ -7,6 +7,73 @@ import { YouTubeSubtitleManager } from '../../content/youtube';
 import { t } from '../../i18n';
 import { icons } from '../../icons';
 
+// Common Edge TTS voices (local definition, no network fetch needed)
+const EDGE_TTS_VOICES: { ShortName: string; Locale: string; Gender: string }[] = [
+  // zh-CN
+  { ShortName: 'zh-CN-XiaoxiaoNeural', Locale: 'zh-CN', Gender: 'Female' },
+  { ShortName: 'zh-CN-XiaoyiNeural', Locale: 'zh-CN', Gender: 'Female' },
+  { ShortName: 'zh-CN-YunjianNeural', Locale: 'zh-CN', Gender: 'Male' },
+  { ShortName: 'zh-CN-YunxiNeural', Locale: 'zh-CN', Gender: 'Male' },
+  { ShortName: 'zh-CN-YunxiaNeural', Locale: 'zh-CN', Gender: 'Male' },
+  { ShortName: 'zh-CN-YunyangNeural', Locale: 'zh-CN', Gender: 'Male' },
+  { ShortName: 'zh-CN-liaoning-XiaobeiNeural', Locale: 'zh-CN', Gender: 'Female' },
+  { ShortName: 'zh-CN-shaanxi-XiaoniNeural', Locale: 'zh-CN', Gender: 'Female' },
+  // en-US
+  { ShortName: 'en-US-AriaNeural', Locale: 'en-US', Gender: 'Female' },
+  { ShortName: 'en-US-AnaNeural', Locale: 'en-US', Gender: 'Female' },
+  { ShortName: 'en-US-ChristopherNeural', Locale: 'en-US', Gender: 'Male' },
+  { ShortName: 'en-US-EricNeural', Locale: 'en-US', Gender: 'Male' },
+  { ShortName: 'en-US-GuyNeural', Locale: 'en-US', Gender: 'Male' },
+  { ShortName: 'en-US-JennyNeural', Locale: 'en-US', Gender: 'Female' },
+  { ShortName: 'en-US-MichelleNeural', Locale: 'en-US', Gender: 'Female' },
+  { ShortName: 'en-US-RogerNeural', Locale: 'en-US', Gender: 'Male' },
+  { ShortName: 'en-US-SteffanNeural', Locale: 'en-US', Gender: 'Male' },
+  // ja-JP
+  { ShortName: 'ja-JP-NanamiNeural', Locale: 'ja-JP', Gender: 'Female' },
+  { ShortName: 'ja-JP-KeitaNeural', Locale: 'ja-JP', Gender: 'Male' },
+  // ko-KR
+  { ShortName: 'ko-KR-SunHiNeural', Locale: 'ko-KR', Gender: 'Female' },
+  { ShortName: 'ko-KR-InJoonNeural', Locale: 'ko-KR', Gender: 'Male' },
+  // zh-TW
+  { ShortName: 'zh-TW-HsiaoChenNeural', Locale: 'zh-TW', Gender: 'Female' },
+  { ShortName: 'zh-TW-YunJheNeural', Locale: 'zh-TW', Gender: 'Male' },
+  { ShortName: 'zh-TW-HsiaoYuNeural', Locale: 'zh-TW', Gender: 'Female' },
+  // en-GB
+  { ShortName: 'en-GB-SoniaNeural', Locale: 'en-GB', Gender: 'Female' },
+  { ShortName: 'en-GB-RyanNeural', Locale: 'en-GB', Gender: 'Male' },
+  { ShortName: 'en-GB-LibbyNeural', Locale: 'en-GB', Gender: 'Female' },
+  // fr-FR
+  { ShortName: 'fr-FR-DeniseNeural', Locale: 'fr-FR', Gender: 'Female' },
+  { ShortName: 'fr-FR-HenriNeural', Locale: 'fr-FR', Gender: 'Male' },
+  // de-DE
+  { ShortName: 'de-DE-KatjaNeural', Locale: 'de-DE', Gender: 'Female' },
+  { ShortName: 'de-DE-ConradNeural', Locale: 'de-DE', Gender: 'Male' },
+  // es-ES
+  { ShortName: 'es-ES-ElviraNeural', Locale: 'es-ES', Gender: 'Female' },
+  { ShortName: 'es-ES-AlvaroNeural', Locale: 'es-ES', Gender: 'Male' },
+  // pt-BR
+  { ShortName: 'pt-BR-FranciscaNeural', Locale: 'pt-BR', Gender: 'Female' },
+  { ShortName: 'pt-BR-AntonioNeural', Locale: 'pt-BR', Gender: 'Male' },
+  // ru-RU
+  { ShortName: 'ru-RU-SvetlanaNeural', Locale: 'ru-RU', Gender: 'Female' },
+  { ShortName: 'ru-RU-DmitryNeural', Locale: 'ru-RU', Gender: 'Male' },
+  // ar-SA
+  { ShortName: 'ar-SA-ZariyahNeural', Locale: 'ar-SA', Gender: 'Female' },
+  { ShortName: 'ar-SA-HamedNeural', Locale: 'ar-SA', Gender: 'Male' },
+  // hi-IN
+  { ShortName: 'hi-IN-SwaraNeural', Locale: 'hi-IN', Gender: 'Female' },
+  { ShortName: 'hi-IN-MadhurNeural', Locale: 'hi-IN', Gender: 'Male' },
+  // vi-VN
+  { ShortName: 'vi-VN-HoaiMyNeural', Locale: 'vi-VN', Gender: 'Female' },
+  { ShortName: 'vi-VN-NamMinhNeural', Locale: 'vi-VN', Gender: 'Male' },
+  // th-TH
+  { ShortName: 'th-TH-PremwadeeNeural', Locale: 'th-TH', Gender: 'Female' },
+  { ShortName: 'th-TH-NiwatNeural', Locale: 'th-TH', Gender: 'Male' },
+  // id-ID
+  { ShortName: 'id-ID-GadisNeural', Locale: 'id-ID', Gender: 'Female' },
+  { ShortName: 'id-ID-ArdiNeural', Locale: 'id-ID', Gender: 'Male' },
+];
+
 export class YouTubePlugin implements Plugin, SettingsContributor {
   readonly id = 'youtube';
   readonly name = 'YouTube Subtitles';
@@ -136,7 +203,7 @@ export class YouTubePlugin implements Plugin, SettingsContributor {
                 <input type="text" class="glass-input" id="tts-cloud-model" value="${config.youtubeSubtitleTTS?.cloudModel || 'tts-1'}" placeholder="tts-1">
               </div>
             </div>
-            <div class="glass-form-group" id="tts-voice-group">
+            <div class="glass-form-group" id="tts-voice-group" style="margin-top: 10px;">
               <label class="glass-form-label">${t('settings.ttsVoice')}</label>
               <div id="tts-voice-container">
                 ${(config.youtubeSubtitleTTS?.engine === 'edge')
@@ -238,53 +305,43 @@ export class YouTubePlugin implements Plugin, SettingsContributor {
       });
     };
 
-    const loadEdgeVoices = async () => {
+    const loadEdgeVoices = () => {
       if (!ttsVoiceContainer) return;
-      ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoading')}</option></select>`;
-      try {
-        const resp = await chrome.runtime.sendMessage({ type: 'EDGE_VOICE_LIST' });
-        if (resp.success && Array.isArray(resp.voices)) {
-          const voices = resp.voices as { ShortName: string; Locale: string; Gender: string }[];
-          const priority = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'zh-TW', 'en-GB', 'fr-FR', 'de-DE', 'es-ES'];
-          const grouped = new Map<string, typeof voices>();
-          for (const voice of voices) {
-            const locale = voice.Locale || voice.ShortName.split('-').slice(0, 2).join('-');
-            if (!grouped.has(locale)) grouped.set(locale, []);
-            grouped.get(locale)!.push(voice);
-          }
-          const sortedLocales = [...grouped.keys()].sort((a, b) => {
-            const ai = priority.indexOf(a);
-            const bi = priority.indexOf(b);
-            if (ai >= 0 && bi >= 0) return ai - bi;
-            if (ai >= 0) return -1;
-            if (bi >= 0) return 1;
-            return a.localeCompare(b);
-          });
-
-          let html = '<select class="glass-select" id="tts-voice">';
-          for (const locale of sortedLocales) {
-            html += `<optgroup label="${locale}">`;
-            for (const voice of grouped.get(locale) || []) {
-              const selected = voice.ShortName === ttsConfig.voice ? ' selected' : '';
-              html += `<option value="${voice.ShortName}"${selected}>${voice.ShortName} (${voice.Gender})</option>`;
-            }
-            html += '</optgroup>';
-          }
-          html += '</select>';
-          ttsVoiceContainer.innerHTML = html;
-
-          const newSelect = ttsVoiceContainer.querySelector('#tts-voice') as HTMLSelectElement | null;
-          newSelect?.addEventListener('change', () => {
-            ttsConfig.voice = newSelect.value;
-            tempConfig.youtubeSubtitleTTS = ttsConfig;
-            changed();
-          });
-        } else {
-          ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
-        }
-      } catch {
-        ttsVoiceContainer.innerHTML = `<select class="glass-select" id="tts-voice"><option value="">${t('settings.ttsVoiceLoadError')}</option></select>`;
+      const voices = EDGE_TTS_VOICES;
+      const priority = ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'zh-TW', 'en-GB', 'fr-FR', 'de-DE', 'es-ES'];
+      const grouped = new Map<string, typeof voices>();
+      for (const voice of voices) {
+        const locale = voice.Locale;
+        if (!grouped.has(locale)) grouped.set(locale, []);
+        grouped.get(locale)!.push(voice);
       }
+      const sortedLocales = [...grouped.keys()].sort((a, b) => {
+        const ai = priority.indexOf(a);
+        const bi = priority.indexOf(b);
+        if (ai >= 0 && bi >= 0) return ai - bi;
+        if (ai >= 0) return -1;
+        if (bi >= 0) return 1;
+        return a.localeCompare(b);
+      });
+
+      let html = '<select class="glass-select" id="tts-voice">';
+      for (const locale of sortedLocales) {
+        html += `<optgroup label="${locale}">`;
+        for (const voice of grouped.get(locale) || []) {
+          const selected = voice.ShortName === ttsConfig.voice ? ' selected' : '';
+          html += `<option value="${voice.ShortName}"${selected}>${voice.ShortName} (${voice.Gender})</option>`;
+        }
+        html += '</optgroup>';
+      }
+      html += '</select>';
+      ttsVoiceContainer.innerHTML = html;
+
+      const newSelect = ttsVoiceContainer.querySelector('#tts-voice') as HTMLSelectElement | null;
+      newSelect?.addEventListener('change', () => {
+        ttsConfig.voice = newSelect.value;
+        tempConfig.youtubeSubtitleTTS = ttsConfig;
+        changed();
+      });
     };
 
     bindToggle(shadowRoot, '#tts-enabled', (input) => {

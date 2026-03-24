@@ -295,6 +295,7 @@ export class SelectionPopover {
           ${this.showSearch ? this.buildSearchEngineButtons() : ''}
         </div>
         ${this.showSearch ? '<div class="thecircle-selection-popover-divider"></div>' : ''}
+        <div class="thecircle-selection-popover-actions">
         ${this.showHighlight ? `<button class="thecircle-selection-popover-btn thecircle-selection-popover-btn-highlight" data-action="note" title="${t('popover.annotation')}">
           ${highlightIcon}
         </button>` : ''}
@@ -310,6 +311,7 @@ export class SelectionPopover {
         <button class="thecircle-selection-popover-btn" data-action="more" title="${t('popover.more')}">
           ${moreIcon}
         </button>
+        </div>
       </div>
     `;
 

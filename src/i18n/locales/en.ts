@@ -280,6 +280,8 @@ export const en: Record<keyof typeof zhCN, string> = {
   'plugin.selectionPopover.description': 'Show quick action bar on text selection',
   'plugin.imageSearch.description': 'Right-click images for reverse image search',
   'plugin.base64.description': 'Base64 encode/decode tool',
+  'plugin.chatTOC.description': 'Chat TOC sidebar for AI conversation sites',
+  'plugin.chatTOC.enabled': 'Enable Chat TOC',
   'plugin.cloudSync.description': 'Google login, cloud sync and backup management',
   'storage.annotations': 'Annotations',
   'storage.browseTrail': 'Browse Trail',

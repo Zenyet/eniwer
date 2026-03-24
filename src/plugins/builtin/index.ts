@@ -11,3 +11,4 @@ export { SelectionPopoverPlugin } from './SelectionPopoverPlugin';
 export { ImageSearchPlugin } from './ImageSearchPlugin';
 export { Base64Plugin } from './Base64Plugin';
 export { CloudSyncPlugin } from './CloudSyncPlugin';
+export { ChatTOCPlugin } from './ChatTOCPlugin';

@@ -509,6 +509,8 @@ export const zhCN: Record<string, string> = {
   'settings.youtubeSubtitleModeTranslated': '仅译文',
   'settings.youtubeSubtitleHint': '在 YouTube 视频上叠加显示翻译字幕',
   'youtube.noSubtitlesAvailable': '无可用字幕',
+  'youtube.loadingSubtitles': '字幕加载中...',
+  'youtube.adPlaying': '广告播放中，请稍候...',
   'youtube.translating': '翻译字幕中...',
   'youtube.subtitleError': '字幕加载失败',
   'youtube.toggleSubtitle': '双语字幕',

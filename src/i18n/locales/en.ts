@@ -511,6 +511,8 @@ export const en: Record<keyof typeof zhCN, string> = {
   'settings.youtubeSubtitleModeTranslated': 'Translated Only',
   'settings.youtubeSubtitleHint': 'Overlay translated subtitles on YouTube videos',
   'youtube.noSubtitlesAvailable': 'No subtitles available',
+  'youtube.loadingSubtitles': 'Loading subtitles...',
+  'youtube.adPlaying': 'Ad playing, please wait...',
   'youtube.translating': 'Translating subtitles...',
   'youtube.subtitleError': 'Failed to load subtitles',
   'youtube.toggleSubtitle': 'Bilingual Subtitles',

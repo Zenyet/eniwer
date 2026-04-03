@@ -14,6 +14,8 @@ const TTS_INITIAL_PREFETCH = 5; // prefetch first N groups before resuming video
 const FIRST_CHUNK_READY_COUNT = 20; // match translator's FIRST_CHUNK_SIZE
 const SENTENCE_END_RE = /[.!?。！？]$/;
 const GROUP_GAP_THRESHOLD_MS = 500;
+const AD_CHECK_INTERVAL_MS = 1000;
+const AD_CHECK_TIMEOUT_MS = 120_000; // max wait 2 minutes for ad to finish
 
 interface TTSGroup {
   startIdx: number;    // first segment index (inclusive)
@@ -37,6 +39,8 @@ export class YouTubeSubtitleManager {
   private lastSpokenGroupIdx = -1;
   /** Segments fetched but waiting for user to activate */
   private pendingSegments: SubtitleSegment[] | null = null;
+  /** Promise that resolves when prefetch completes (so activation can wait for it) */
+  private prefetchPromise: Promise<void> | null = null;
   /** Timer for proactive TTS scheduling */
   private ttsScheduleTimer: ReturnType<typeof setTimeout> | null = null;
   private pauseHandler: (() => void) | null = null;
@@ -49,14 +53,20 @@ export class YouTubeSubtitleManager {
   private seekPending = false;
   /** Counter to prevent overlapping seek handlers */
   private seekId = 0;
+  /** MutationObserver for detecting ad-end to re-trigger */
+  private adObserver: MutationObserver | null = null;
 
   constructor(config: MenuConfig) {
-    this.subtitleConfig = config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
+    this.subtitleConfig = config.youtubeSubtitle
+      ? { ...DEFAULT_YOUTUBE_SUBTITLE_CONFIG, ...config.youtubeSubtitle }
+      : DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
     this.extractor = new YouTubeSubtitleExtractor();
     this.translator = new YouTubeSubtitleTranslator(config);
     this.overlay = new YouTubeSubtitleOverlay(this.subtitleConfig);
     this.tts = new YouTubeTTS(
-      config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG,
+      config.youtubeSubtitleTTS
+        ? { ...DEFAULT_TTS_CONFIG, ...config.youtubeSubtitleTTS }
+        : DEFAULT_TTS_CONFIG,
       config,
     );
   }
@@ -94,11 +104,13 @@ export class YouTubeSubtitleManager {
     this.ttsEnabled = false;
     this.lastSpokenGroupIdx = -1;
     this.pendingSegments = null;
+    this.prefetchPromise = null;
     this.ttsGroups = [];
     this.segToGroupIdx = [];
     this.seekPending = false;
     this.seekId = 0;
     this.clearTTSSchedule();
+    this.stopAdObserver();
     this.removeVideoListeners();
     this.overlay.unmount();
     this.currentVideoId = null;
@@ -106,12 +118,16 @@ export class YouTubeSubtitleManager {
 
   updateConfig(config: MenuConfig): void {
     const oldEnabled = this.subtitleConfig.enabled;
-    this.subtitleConfig = config.youtubeSubtitle || DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
+    this.subtitleConfig = config.youtubeSubtitle
+      ? { ...DEFAULT_YOUTUBE_SUBTITLE_CONFIG, ...config.youtubeSubtitle }
+      : DEFAULT_YOUTUBE_SUBTITLE_CONFIG;
 
     this.translator.updateConfig(config);
     this.overlay.updateConfig(this.subtitleConfig);
     this.tts.updateConfig(
-      config.youtubeSubtitleTTS || DEFAULT_TTS_CONFIG,
+      config.youtubeSubtitleTTS
+        ? { ...DEFAULT_TTS_CONFIG, ...config.youtubeSubtitleTTS }
+        : DEFAULT_TTS_CONFIG,
       config,
     );
 
@@ -139,6 +155,7 @@ export class YouTubeSubtitleManager {
   /**
    * handleVideoChange: mount overlay + logo button, fetch subtitles,
    * but do NOT translate or play TTS until user clicks the logo.
+   * Waits for ads to finish before mounting overlay.
    */
   private async handleVideoChange(videoId: string): Promise<void> {
     const changeId = ++this.activeVideoChangeId;
@@ -149,10 +166,12 @@ export class YouTubeSubtitleManager {
     this.ttsEnabled = false;
     this.lastSpokenGroupIdx = -1;
     this.pendingSegments = null;
+    this.prefetchPromise = null;
     this.ttsGroups = [];
     this.segToGroupIdx = [];
     this.overlay.unmount();
     this.overlay.setSegments([]);
+    this.stopAdObserver();
 
     console.log(LOG, '=== 开始处理视频 ===', videoId);
 
@@ -160,11 +179,22 @@ export class YouTubeSubtitleManager {
     if (changeId !== this.activeVideoChangeId) return;
     if (!playerReady) { console.warn(LOG, '播放器超时'); return; }
 
+    // Wait for ad to finish before mounting overlay
+    if (this.isAdPlaying()) {
+      console.log(LOG, '检测到广告正在播放, 等待广告结束...');
+      const adFinished = await this.waitForAdEnd(changeId);
+      if (!adFinished || changeId !== this.activeVideoChangeId) return;
+      console.log(LOG, '广告结束, 继续处理视频');
+    }
+
     if (!this.overlay.mount()) {
       await new Promise(r => setTimeout(r, 1500));
       if (changeId !== this.activeVideoChangeId) return;
       if (!this.overlay.mount()) return;
     }
+
+    // Watch for mid-roll ads: if an ad starts later, re-trigger after it ends
+    this.startAdObserver(changeId);
 
     // Set up the logo-click callback — this triggers translation + TTS
     this.overlay.setActivateCallback((active) => {
@@ -186,7 +216,8 @@ export class YouTubeSubtitleManager {
     });
 
     // Pre-fetch subtitle tracks (fast, just metadata) so activation is instant
-    await this.prefetchSubtitles(changeId);
+    this.prefetchPromise = this.prefetchSubtitles(changeId);
+    await this.prefetchPromise;
   }
 
   /** Fetch subtitle segments in advance so they're ready when user clicks. */
@@ -277,6 +308,29 @@ export class YouTubeSubtitleManager {
   private async startSubtitleAndTTS(changeId: number): Promise<void> {
     const videoId = this.currentVideoId;
     if (!videoId) return;
+
+    // Block activation during ads
+    if (this.isAdPlaying()) {
+      this.overlay.setStatus(t('youtube.adPlaying'));
+      this.overlay.setActive(false);
+      return;
+    }
+
+    // Wait for prefetch to complete if it's still running
+    if (this.prefetchPromise) {
+      this.overlay.setStatus(t('youtube.loadingSubtitles'));
+      await this.prefetchPromise;
+      if (changeId !== this.activeVideoChangeId) return;
+    }
+
+    // Retry once if prefetch failed (InnerTube API can be flaky)
+    if (!this.pendingSegments || this.pendingSegments.length === 0) {
+      console.log(LOG, '字幕预取为空, 重试一次...');
+      this.overlay.setStatus(t('youtube.loadingSubtitles'));
+      this.prefetchPromise = this.prefetchSubtitles(changeId);
+      await this.prefetchPromise;
+      if (changeId !== this.activeVideoChangeId) return;
+    }
 
     const segments = this.pendingSegments;
     if (!segments || segments.length === 0) {
@@ -682,6 +736,66 @@ export class YouTubeSubtitleManager {
       return segments;
     } catch {
       return [];
+    }
+  }
+
+  /** Detect if YouTube is currently playing an ad. */
+  private isAdPlaying(): boolean {
+    const player = document.querySelector('.html5-video-player');
+    if (!player) return false;
+    // YouTube adds .ad-showing when an ad is active
+    return player.classList.contains('ad-showing');
+  }
+
+  /** Wait for ad to finish (polls for .ad-showing removal). */
+  private waitForAdEnd(changeId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const check = () => {
+        if (changeId !== this.activeVideoChangeId) { resolve(false); return; }
+        if (!this.isAdPlaying()) { resolve(true); return; }
+        if (Date.now() - start > AD_CHECK_TIMEOUT_MS) {
+          console.warn(LOG, '等待广告超时');
+          resolve(false);
+          return;
+        }
+        setTimeout(check, AD_CHECK_INTERVAL_MS);
+      };
+      check();
+    });
+  }
+
+  /**
+   * Watch for mid-roll ads via MutationObserver on the player element.
+   * When ad starts → unmount overlay. When ad ends → re-trigger handleVideoChange.
+   */
+  private startAdObserver(changeId: number): void {
+    this.stopAdObserver();
+    const player = document.querySelector('.html5-video-player');
+    if (!player) return;
+
+    this.adObserver = new MutationObserver(() => {
+      if (changeId !== this.activeVideoChangeId) {
+        this.stopAdObserver();
+        return;
+      }
+      if (this.isAdPlaying()) {
+        console.log(LOG, '检测到广告开始 (mid-roll), 暂停字幕');
+        this.tts.stop();
+        this.clearTTSSchedule();
+        this.overlay.setActive(false);
+        this.overlay.setStatus('');
+        this.overlay.setSegments([]);
+      }
+    });
+
+    this.adObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  private stopAdObserver(): void {
+    if (this.adObserver) {
+      this.adObserver.disconnect();
+      this.adObserver = null;
     }
   }
 

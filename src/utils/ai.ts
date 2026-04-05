@@ -1,6 +1,7 @@
 // AI API wrapper for content scripts
 // All requests are routed through background script for security
 import { MenuConfig, ScreenshotConfig, Message } from '../types';
+import { formatLocaleForPrompt, getBrowserPreferredLocale } from './browserLocale';
 
 interface TokenUsage {
   promptTokens?: number;
@@ -300,9 +301,10 @@ export function resolveLanguageName(lang: string): string {
   return map[normalized] || normalized;
 }
 
-export function getSummarizePrompt(outputLang: string = 'auto'): string {
+export function getSummarizePrompt(outputLang: string = 'auto', browserLocale?: string): string {
   if (outputLang === 'auto') {
-    return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in the same language as the input.`;
+    const preferred = formatLocaleForPrompt(browserLocale ?? getBrowserPreferredLocale());
+    return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. The user's browser preferred language is ${preferred}. Use this language for your output by default. If the input is overwhelmingly in one other clear language, you may use that language instead; do not use unrelated or incorrect languages.`;
   }
   const langName = resolveLanguageName(outputLang);
   return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in ${langName}.`;
@@ -320,9 +322,10 @@ export function getCodeExplainPrompt(): string {
   return `You are a senior software engineer. Explain the following code in detail, including what it does, how it works, and any important concepts. Output in the same language as the input text (if any) or in English.`;
 }
 
-export function getSummarizePagePrompt(outputLang: string = 'auto'): string {
+export function getSummarizePagePrompt(outputLang: string = 'auto', browserLocale?: string): string {
   if (outputLang === 'auto') {
-    return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in the same language as the content.`;
+    const preferred = formatLocaleForPrompt(browserLocale ?? getBrowserPreferredLocale());
+    return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. The user's browser preferred language is ${preferred}. Use this language for your output by default when the page language is ambiguous, mixed, or unclear; if the main body is clearly in one other language, you may use that language instead; do not use unrelated or incorrect languages.`;
   }
   const langName = resolveLanguageName(outputLang);
   return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in ${langName}.`;

@@ -212,7 +212,7 @@ export const zhCN: Record<string, string> = {
   'settings.language': '语言',
   'settings.translateTargetLanguage': '翻译目标语言',
   'settings.summaryOutputLanguage': '总结输出语言',
-  'settings.summaryAutoDetect': '自动检测',
+  'settings.summaryAutoDetect': '自动（默认跟随浏览器语言）',
   'settings.screenshotSection': '截图',
   'settings.saveToFile': '保存到文件',
   'settings.copyToClipboard': '复制到剪贴板',

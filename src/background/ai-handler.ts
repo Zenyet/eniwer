@@ -1,6 +1,7 @@
 // AI API handler - runs in background script only
 import { MenuConfig, ScreenshotConfig } from '../types';
 import { t } from '../i18n';
+import { formatLocaleForPrompt, getBrowserPreferredLocale } from '../utils/browserLocale';
 
 // Provider configurations
 interface ProviderConfig {
@@ -58,6 +59,21 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     visionModel: 'glm-4.6v',
   },
 };
+
+/** 自定义服务商若只填基础地址（无路径），补全 OpenAI 兼容的 chat completions 路径。 */
+function normalizeCustomOpenAIApiUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const pathOnly = u.pathname.replace(/\/+$/, '');
+    if (pathOnly === '') {
+      u.pathname = '/v1/chat/completions';
+      return u.toString();
+    }
+  } catch {
+    /* 非法 URL 保持原样，由 fetch 报错 */
+  }
+  return raw;
+}
 
 export interface TokenUsage {
   promptTokens?: number;
@@ -133,7 +149,7 @@ async function callOpenAICompatibleAPI(
   const useThinking = config.useThinkingModel && (provider === 'openai' || (PROVIDER_CONFIGS[provider]?.thinkingModel !== undefined));
 
   if (provider === 'custom') {
-    apiUrl = config.customApiUrl!;
+    apiUrl = normalizeCustomOpenAIApiUrl(config.customApiUrl!);
     model = config.customModel!;
   } else {
     const providerConfig = PROVIDER_CONFIGS[provider];
@@ -734,7 +750,7 @@ async function callOpenAIVisionAPI(
   const apiKey = config.apiKey;
 
   if (provider === 'custom') {
-    apiUrl = config.customApiUrl!;
+    apiUrl = normalizeCustomOpenAIApiUrl(config.customApiUrl!);
     model = config.customModel!;
   } else {
     const providerConfig = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
@@ -1074,9 +1090,10 @@ function resolveLanguageName(lang: string): string {
   return map[normalized] || normalized;
 }
 
-export function getSummarizePrompt(outputLang: string = 'auto'): string {
+export function getSummarizePrompt(outputLang: string = 'auto', browserLocale?: string): string {
   if (outputLang === 'auto') {
-    return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in the same language as the input.`;
+    const preferred = formatLocaleForPrompt(browserLocale ?? getBrowserPreferredLocale());
+    return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. The user's browser preferred language is ${preferred}. Use this language for your output by default. If the input is overwhelmingly in one other clear language, you may use that language instead; do not use unrelated or incorrect languages.`;
   }
   const langName = resolveLanguageName(outputLang);
   return `You are a summarization expert. Summarize the following text in a concise manner, keeping the key points. Use bullet points if appropriate. Output in ${langName}.`;
@@ -1094,9 +1111,10 @@ export function getCodeExplainPrompt(): string {
   return `You are a senior software engineer. Explain the following code in detail, including what it does, how it works, and any important concepts. Output in the same language as the input text (if any) or in English.`;
 }
 
-export function getSummarizePagePrompt(outputLang: string = 'auto'): string {
+export function getSummarizePagePrompt(outputLang: string = 'auto', browserLocale?: string): string {
   if (outputLang === 'auto') {
-    return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in the same language as the content.`;
+    const preferred = formatLocaleForPrompt(browserLocale ?? getBrowserPreferredLocale());
+    return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. The user's browser preferred language is ${preferred}. Use this language for your output by default when the page language is ambiguous, mixed, or unclear; if the main body is clearly in one other language, you may use that language instead; do not use unrelated or incorrect languages.`;
   }
   const langName = resolveLanguageName(outputLang);
   return `You are a summarization expert. Summarize the following webpage content in a comprehensive but concise manner. Include the main topic, key points, and any important details. Use bullet points for clarity. Output in ${langName}.`;

@@ -214,7 +214,7 @@ export const en: Record<keyof typeof zhCN, string> = {
   'settings.language': 'Language',
   'settings.translateTargetLanguage': 'Translation Target Language',
   'settings.summaryOutputLanguage': 'Summary Output Language',
-  'settings.summaryAutoDetect': 'Auto Detect',
+  'settings.summaryAutoDetect': 'Auto (browser language default)',
   'settings.screenshotSection': 'Screenshot',
   'settings.saveToFile': 'Save to File',
   'settings.copyToClipboard': 'Copy to Clipboard',
